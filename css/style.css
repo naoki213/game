@@ -197,6 +197,67 @@ html, body {
 
 #water-overlay.active { opacity: 1; }
 
+/* ---- touch controls ---- */
+#touch-ui.hidden { display: none; }
+
+#joystick {
+  position: absolute;
+  left: 26px;
+  bottom: 110px;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  touch-action: none;
+}
+
+#joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+#touch-buttons {
+  position: absolute;
+  right: 22px;
+  bottom: 110px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.touch-btn {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 26px;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-btn:active { background: rgba(255, 255, 255, 0.3); }
+.touch-btn.hidden { display: none; }
+
+#btn-pause {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+}
+
 /* ---- inventory ---- */
 #inventory {
   position: absolute;
@@ -267,6 +328,17 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   max-width: 60px;
+}
+
+/* ---- 小さい画面向け ---- */
+@media (max-width: 760px) {
+  .slot { width: 40px; height: 40px; }
+  .slot canvas { width: 28px; height: 28px; }
+  #hotbar { gap: 3px; padding: 4px; }
+  #hearts, #bubbles { font-size: 14px; }
+  #overlay-inner h1 { font-size: 32px; }
+  .controls { display: none; }  /* タッチでは操作表を隠す */
+  #inventory-grid { grid-template-columns: repeat(4, 56px); }
 }
 
 /* ---- start / pause overlay ---- */

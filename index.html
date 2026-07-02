@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MineCraft.js — ボクセルサンドボックス</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -20,6 +20,18 @@
 </div>
 
 <div id="hurt-overlay"></div>
+
+<div id="touch-ui" class="hidden">
+  <div id="joystick">
+    <div id="joystick-knob"></div>
+  </div>
+  <div id="touch-buttons">
+    <button id="btn-fly" class="touch-btn">✈</button>
+    <button id="btn-down" class="touch-btn hidden">⬇</button>
+    <button id="btn-jump" class="touch-btn">⬆</button>
+  </div>
+  <button id="btn-pause" class="touch-btn">⏸</button>
+</div>
 
 <div id="death-overlay" class="hidden">
   <div>

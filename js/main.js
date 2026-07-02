@@ -184,17 +184,26 @@
   const heldButtons = new Set();
   let actionCooldown = 0;
 
+  // タッチデバイス判定 (タッチ操作 UI を出すか)
+  const isTouch = window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+  const virt = { fwd: 0, strafe: 0, jump: false, sneak: false };
+
   function lockPointer() {
     canvas.requestPointerLock();
   }
 
   document.getElementById("play-btn").addEventListener("click", () => {
     sound.ensure();
-    lockPointer();
+    if (isTouch) {
+      paused = false;
+      overlay.classList.add("hidden");
+    } else {
+      lockPointer();
+    }
   });
 
   canvas.addEventListener("click", () => {
-    if (paused) lockPointer();
+    if (paused && !isTouch) lockPointer();
   });
 
   document.addEventListener("pointerlockchange", () => {
@@ -398,6 +407,146 @@
     }
   }
 
+  // ---------------- タッチ操作 ----------------
+
+  if (isTouch) {
+    const touchUI = document.getElementById("touch-ui");
+    touchUI.classList.remove("hidden");
+    canvas.style.touchAction = "none";
+
+    // --- ポーズボタン ---
+    document.getElementById("btn-pause").addEventListener("click", () => {
+      paused = true;
+      overlay.classList.remove("hidden");
+      keys.clear();
+      heldButtons.clear();
+    });
+
+    // --- ジャンプ / 飛行 / 下降ボタン ---
+    const btnJump = document.getElementById("btn-jump");
+    const btnFly = document.getElementById("btn-fly");
+    const btnDown = document.getElementById("btn-down");
+
+    btnJump.addEventListener("touchstart", (e) => { e.preventDefault(); virt.jump = true; });
+    btnJump.addEventListener("touchend", () => { virt.jump = false; });
+    btnDown.addEventListener("touchstart", (e) => { e.preventDefault(); virt.sneak = true; });
+    btnDown.addEventListener("touchend", () => { virt.sneak = false; });
+    btnFly.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      player.flying = !player.flying;
+      player.vel[1] = 0;
+      btnDown.classList.toggle("hidden", !player.flying);
+    });
+
+    // --- バーチャルジョイスティック ---
+    const joy = document.getElementById("joystick");
+    const knob = document.getElementById("joystick-knob");
+    let joyId = null;
+
+    const updateJoy = (t) => {
+      const rect = joy.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = (t.clientX - cx) / (rect.width / 2);
+      let dy = (t.clientY - cy) / (rect.height / 2);
+      const mag = Math.hypot(dx, dy);
+      if (mag > 1) { dx /= mag; dy /= mag; }
+      virt.strafe = dx;
+      virt.fwd = -dy;
+      knob.style.transform =
+        `translate(calc(-50% + ${dx * rect.width * 0.3}px), calc(-50% + ${dy * rect.height * 0.3}px))`;
+    };
+
+    const resetJoy = () => {
+      joyId = null;
+      virt.strafe = 0;
+      virt.fwd = 0;
+      knob.style.transform = "translate(-50%, -50%)";
+    };
+
+    joy.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (joyId !== null) return;
+      const t = e.changedTouches[0];
+      joyId = t.identifier;
+      updateJoy(t);
+    });
+    document.addEventListener("touchmove", (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joyId) { updateJoy(t); e.preventDefault(); }
+      }
+    }, { passive: false });
+    document.addEventListener("touchend", (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joyId) resetJoy();
+      }
+    });
+    document.addEventListener("touchcancel", resetJoy);
+
+    // --- 視点ドラッグ + タップ設置 / 長押し破壊 ---
+    let lookId = null;
+    let lookLast = null;
+    let tapStart = 0;
+    let movedDist = 0;
+    let breakDelay = null;
+    let breakRepeat = null;
+    let breaking = false;
+
+    const stopBreaking = () => {
+      clearTimeout(breakDelay);
+      clearInterval(breakRepeat);
+      breakDelay = breakRepeat = null;
+      breaking = false;
+    };
+
+    canvas.addEventListener("touchstart", (e) => {
+      if (paused) return;
+      e.preventDefault(); // 合成マウスイベントを抑止
+      if (lookId !== null) return;
+      const t = e.changedTouches[0];
+      lookId = t.identifier;
+      lookLast = [t.clientX, t.clientY];
+      tapStart = performance.now();
+      movedDist = 0;
+      // 長押しで破壊開始
+      breakDelay = setTimeout(() => {
+        breaking = true;
+        doAction(0);
+        breakRepeat = setInterval(() => doAction(0), 280);
+      }, 420);
+    }, { passive: false });
+
+    canvas.addEventListener("touchmove", (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== lookId) continue;
+        const dx = t.clientX - lookLast[0];
+        const dy = t.clientY - lookLast[1];
+        movedDist += Math.hypot(dx, dy);
+        if (movedDist > 14) stopBreaking(); // ドラッグ中は破壊しない
+        const sens = 0.0058;
+        player.yaw += dx * sens;
+        player.pitch = clamp(player.pitch - dy * sens,
+          -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+        lookLast = [t.clientX, t.clientY];
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    const endLook = (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== lookId) continue;
+        // 短いタップ (ドラッグ・長押しでない) は設置
+        if (movedDist <= 14 && !breaking && performance.now() - tapStart < 350) {
+          doAction(2);
+        }
+        stopBreaking();
+        lookId = null;
+      }
+    };
+    canvas.addEventListener("touchend", endLook);
+    canvas.addEventListener("touchcancel", endLook);
+  }
+
   // ---------------- チャンクストリーミング ----------------
 
   function streamChunks() {
@@ -514,10 +663,10 @@
 
     // --- 入力の集約 ---
     const input = {
-      fwd: (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0),
-      strafe: (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0),
-      jump: keys.has("Space"),
-      sneak: keys.has("ShiftLeft") || keys.has("ShiftRight"),
+      fwd: clamp((keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0) + virt.fwd, -1, 1),
+      strafe: clamp((keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) + virt.strafe, -1, 1),
+      jump: keys.has("Space") || virt.jump,
+      sneak: keys.has("ShiftLeft") || keys.has("ShiftRight") || virt.sneak,
       sprint: keys.has("ControlLeft") || keys.has("ControlRight"),
     };
 
