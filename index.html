@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MineCraft.js — ボクセルサンドボックス</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="crosshair">+</div>
+
+<div id="hud">
+  <div id="hotbar"></div>
+</div>
+
+<div id="debug"></div>
+<div id="water-overlay"></div>
+
+<div id="overlay">
+  <div id="overlay-inner">
+    <h1>⛏ MineCraft.js</h1>
+    <p class="sub">ブラウザで動くボクセルサンドボックス</p>
+    <button id="play-btn">クリックしてプレイ</button>
+    <div class="controls">
+      <table>
+        <tr><td>W A S D</td><td>移動</td></tr>
+        <tr><td>マウス</td><td>視点操作</td></tr>
+        <tr><td>Space</td><td>ジャンプ / (飛行中) 上昇</td></tr>
+        <tr><td>Shift</td><td>スニーク / (飛行中) 下降</td></tr>
+        <tr><td>Ctrl</td><td>ダッシュ</td></tr>
+        <tr><td>F / Space×2</td><td>飛行モード切替</td></tr>
+        <tr><td>左クリック</td><td>ブロック破壊</td></tr>
+        <tr><td>右クリック</td><td>ブロック設置</td></tr>
+        <tr><td>1–9 / ホイール</td><td>ブロック選択</td></tr>
+        <tr><td>F3</td><td>デバッグ情報</td></tr>
+        <tr><td>N</td><td>新しいワールド生成</td></tr>
+        <tr><td>Esc</td><td>ポーズ</td></tr>
+      </table>
+    </div>
+    <p class="note">ワールドの変更は自動でブラウザに保存されます</p>
+  </div>
+</div>
+
+<script src="js/math.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/player.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
