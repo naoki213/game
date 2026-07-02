@@ -371,6 +371,45 @@ html, body {
   text-shadow: 1px 1px 0 #000;
 }
 
+/* ---- 縦向き警告 (タッチデバイスでプレイ中のみ JS が表示) ---- */
+#rotate-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 10, 18, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #eee;
+  z-index: 30;
+}
+
+#rotate-overlay.hidden { display: none; }
+
+#rotate-overlay .rotate-icon {
+  font-size: 64px;
+  animation: rotate-hint 1.6s ease-in-out infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes rotate-hint {
+  0%, 25% { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(90deg); }
+}
+
+#rotate-overlay h2 { margin-bottom: 8px; }
+#rotate-overlay p { color: #9ab; font-size: 14px; }
+
+/* タッチデバイス向けの表示切替 */
+.touch-note { display: none; margin-top: 16px; font-size: 14px; color: #ffd75e; }
+body.touch .touch-note { display: block; }
+body.touch .controls { display: none; }
+
+/* セーフエリア (ノッチ) を避ける */
+#joystick { left: calc(26px + env(safe-area-inset-left, 0px)); }
+#touch-buttons { right: calc(22px + env(safe-area-inset-right, 0px)); }
+#btn-pause { right: calc(14px + env(safe-area-inset-right, 0px)); }
+
 /* ---- 小さい画面向け ---- */
 @media (max-width: 760px) {
   .slot { width: 40px; height: 40px; }
@@ -380,6 +419,36 @@ html, body {
   #overlay-inner h1 { font-size: 32px; }
   .controls { display: none; }  /* タッチでは操作表を隠す */
   #inventory-grid { grid-template-columns: repeat(4, 56px); }
+}
+
+/* ---- 横向きスマホ (高さが低い画面) ---- */
+@media (max-height: 500px) {
+  .slot { width: 38px; height: 38px; }
+  .slot canvas { width: 26px; height: 26px; }
+  .slot .key { font-size: 8px; }
+  .slot .count { font-size: 10px; }
+  #hotbar { gap: 3px; padding: 3px; }
+  #hud { bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+  #hearts, #bubbles { font-size: 13px; }
+  #joystick {
+    width: 104px;
+    height: 104px;
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+  #joystick-knob { width: 42px; height: 42px; }
+  .touch-btn { width: 52px; height: 52px; font-size: 22px; }
+  #touch-buttons { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  #btn-pause { width: 40px; height: 40px; font-size: 15px; top: 10px; }
+  #overlay-inner h1 { font-size: 26px; }
+  #overlay-inner .sub { margin-bottom: 10px; }
+  #play-btn { font-size: 16px; padding: 9px 32px; }
+  .touch-note { margin-top: 10px; font-size: 12px; }
+  .note { margin-top: 8px; }
+  #inventory-inner { padding: 10px 14px; max-height: 92vh; overflow-y: auto; }
+  #inventory-grid { grid-template-columns: repeat(8, 48px); gap: 5px; }
+  .inv-item { width: 48px; height: 48px; }
+  .inv-item canvas { width: 26px; height: 26px; }
+  #craft-list { max-height: 120px; }
 }
 
 /* ---- crafting ---- */

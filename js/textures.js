@@ -255,6 +255,13 @@ function buildTextureAtlas(seed) {
     return [0, 0, 0, 0];
   });
 
+  // --- 羊毛 (もこもこの白) ---
+  paintTile(TILE.WOOL, (x, y) => {
+    const swirl = Math.sin(x * 1.9 + y * 0.7) * Math.sin(y * 1.7 - x * 0.5);
+    const v = 0.93 + swirl * 0.05 + (rand() * 2 - 1) * 0.03;
+    return px(238, 234, 228, v);
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {

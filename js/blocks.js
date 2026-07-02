@@ -26,6 +26,7 @@ const B = {
   FLOWER_YELLOW: 18,
   FLOWER_RED: 19,
   TORCH: 20,
+  WOOL: 21,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -58,6 +59,7 @@ const TILE = {
   CRACK_3: 25,
   CRACK_4: 26,
   TORCH: 27,
+  WOOL: 28,
 };
 
 // 各ブロックの属性
@@ -119,6 +121,7 @@ defBlock(B.FLOWER_RED, "flower_red", "ポピー", [TILE.FLOWER_RED, TILE.FLOWER_
 defBlock(B.TORCH, "torch", "松明", [TILE.TORCH, TILE.TORCH, TILE.TORCH],
   { opaque: false, solid: false, emissive: true, hardness: 0.05 });
 BLOCKS[B.TORCH].torch = true;   // 専用の小型モデルで描画
+defBlock(B.WOOL, "wool", "羊毛", [TILE.WOOL, TILE.WOOL, TILE.WOOL], { hardness: 0.8 });
 
 // ホットバーに並ぶブロック (1–9 キー)
 const HOTBAR_BLOCKS = [

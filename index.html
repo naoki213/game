@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>MineCraft.js — ボクセルサンドボックス</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -21,6 +21,14 @@
 
 <div id="hurt-overlay"></div>
 <div id="toast"></div>
+
+<div id="rotate-overlay" class="hidden">
+  <div>
+    <div class="rotate-icon">📱</div>
+    <h2>端末を横向きにしてください</h2>
+    <p>このゲームは横画面でプレイします</p>
+  </div>
+</div>
 
 <div id="touch-ui" class="hidden">
   <div id="joystick">
@@ -80,6 +88,7 @@
         <tr><td>Esc</td><td>ポーズ</td></tr>
       </table>
     </div>
+    <p class="touch-note">📱 スマホでは横画面・全画面でプレイします</p>
     <p class="note">ワールドの変更は自動でブラウザに保存されます</p>
   </div>
 </div>

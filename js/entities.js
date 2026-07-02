@@ -27,6 +27,8 @@ const MOB_TYPES = {
   sheep: {
     speed: 1.2,
     halfW: 0.45, height: 1.1,
+    drops: 21, dropN: 2,   // 羊毛
+
     parts: [
       // もこもこの胴体
       [-0.45, 0.45, -0.55, 0.9, 0.65, 1.1, 0.92, 0.92, 0.90],

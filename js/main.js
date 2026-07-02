@@ -349,17 +349,43 @@
 
   // タッチデバイス判定 (タッチ操作 UI を出すか)
   const isTouch = window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
-  const virt = { fwd: 0, strafe: 0, jump: false, sneak: false };
+  const virt = { fwd: 0, strafe: 0, jump: false, sneak: false, sprint: false };
+  if (isTouch) document.body.classList.add("touch");
 
   function lockPointer() {
     canvas.requestPointerLock();
   }
 
+  // スマホ: 全画面 + 横画面に固定する (ユーザー操作の中で呼ぶこと)
+  async function enterLandscape() {
+    try {
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      }
+    } catch (e) { /* 非対応環境は無視 */ }
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock("landscape");
+      }
+    } catch (e) { /* iOS Safari 等は縦向き警告で代替 */ }
+  }
+
+  // 縦向きのままプレイしようとしたら回転を促す
+  const rotateOverlayEl = document.getElementById("rotate-overlay");
+  function updateRotateOverlay() {
+    const portrait = window.matchMedia("(orientation: portrait)").matches;
+    rotateOverlayEl.classList.toggle("hidden", !(isTouch && !paused && portrait));
+  }
+  window.addEventListener("resize", updateRotateOverlay);
+  window.matchMedia("(orientation: portrait)").addEventListener?.("change", updateRotateOverlay);
+
   document.getElementById("play-btn").addEventListener("click", () => {
     sound.ensure();
     if (isTouch) {
+      enterLandscape();
       paused = false;
       overlay.classList.add("hidden");
+      updateRotateOverlay();
     } else {
       lockPointer();
     }
@@ -744,6 +770,7 @@
       overlay.classList.remove("hidden");
       keys.clear();
       heldButtons.clear();
+      updateRotateOverlay();
     });
 
     // --- ジャンプ / 飛行 / 下降ボタン ---
@@ -781,6 +808,8 @@
       if (mag > 1) { dx /= mag; dy /= mag; }
       virt.strafe = dx;
       virt.fwd = -dy;
+      // スティックを前いっぱいに倒すとダッシュ
+      virt.sprint = -dy > 0.92;
       knob.style.transform =
         `translate(calc(-50% + ${dx * rect.width * 0.3}px), calc(-50% + ${dy * rect.height * 0.3}px))`;
     };
@@ -789,6 +818,7 @@
       joyId = null;
       virt.strafe = 0;
       virt.fwd = 0;
+      virt.sprint = false;
       knob.style.transform = "translate(-50%, -50%)";
     };
 
@@ -995,7 +1025,7 @@
       strafe: clamp((keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) + virt.strafe, -1, 1),
       jump: keys.has("Space") || virt.jump,
       sneak: keys.has("ShiftLeft") || keys.has("ShiftRight") || virt.sneak,
-      sprint: keys.has("ControlLeft") || keys.has("ControlRight"),
+      sprint: keys.has("ControlLeft") || keys.has("ControlRight") || virt.sprint,
     };
 
     if (!paused) {
@@ -1030,9 +1060,18 @@
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
       mobs.update(dt, player, daylightNow);
       for (const death of mobs.deaths) {
-        const col = MOB_TYPES[death.type].parts[0];
+        const def = MOB_TYPES[death.type];
+        const col = def.parts[0];
         spawnPuff(death.pos[0], death.pos[1], death.pos[2], [col[6], col[7], col[8]]);
         sound.thud();
+        // モブのドロップ (ヒツジ → 羊毛)
+        if (gameMode === "survival" && def.drops) {
+          const n = 1 + ((Math.random() * (def.dropN || 1)) | 0);
+          for (let k = 0; k < n; k++) {
+            items.spawn(def.drops,
+              Math.floor(death.pos[0]), Math.floor(death.pos[1]), Math.floor(death.pos[2]));
+          }
+        }
       }
       if (mobs.groanRequest) sound.groan();
 
