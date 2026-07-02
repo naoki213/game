@@ -67,6 +67,38 @@ const Mat4 = {
   },
 };
 
+Mat4.translation = function (out, x, y, z) {
+  out.fill(0);
+  out[0] = out[5] = out[10] = out[15] = 1;
+  out[12] = x; out[13] = y; out[14] = z;
+  return out;
+};
+
+Mat4.rotationX = function (out, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  out.fill(0);
+  out[0] = 1; out[15] = 1;
+  out[5] = c; out[6] = s;
+  out[9] = -s; out[10] = c;
+  return out;
+};
+
+Mat4.rotationY = function (out, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  out.fill(0);
+  out[5] = 1; out[15] = 1;
+  out[0] = c; out[2] = -s;
+  out[8] = s; out[10] = c;
+  return out;
+};
+
+Mat4.scaling = function (out, s) {
+  out.fill(0);
+  out[0] = out[5] = out[10] = s;
+  out[15] = 1;
+  return out;
+};
+
 // ビュー射影行列から視錐台の 6 平面を抽出する (Gribb-Hartmann 法)
 function extractFrustumPlanes(m, planes) {
   // planes: Float32Array(24) — 各平面 [a,b,c,d]

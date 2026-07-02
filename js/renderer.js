@@ -197,6 +197,12 @@ class Renderer {
     this.view = Mat4.create();
     this.mvp = Mat4.create();
     this.frustum = new Float32Array(24);
+    this.tmpA = Mat4.create();
+    this.tmpB = Mat4.create();
+    this.tmpC = Mat4.create();
+
+    // 手持ちブロックのメッシュキャッシュ (blockId -> {vbo, ibo, count})
+    this.heldMeshes = new Map();
 
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
@@ -450,8 +456,107 @@ class Renderer {
     // --- 雲 ---
     this.drawClouds(camPos, env, time);
 
+    // --- 手持ちブロック ---
+    if (state.held) {
+      this.drawHeldItem(state.held.id, env, state.held.swing);
+    }
+
     gl.disable(gl.BLEND);
     return drawCalls;
+  }
+
+  // ---------------- 手持ちブロック ----------------
+
+  getHeldMesh(blockId) {
+    let mesh = this.heldMeshes.get(blockId);
+    if (mesh) return mesh;
+
+    const gl = this.gl;
+    const block = BLOCKS[blockId];
+    const verts = [];
+    const indices = [];
+    let count = 0;
+
+    if (block.cross) {
+      // X 字植生: 2 枚の対角クアッド (原点中心)
+      const uv = tileUV(block.tiles[0]);
+      const quads = [
+        [[-0.5, 0.5, -0.5], [-0.5, -0.5, -0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5]],
+        [[0.5, 0.5, -0.5], [0.5, -0.5, -0.5], [-0.5, -0.5, 0.5], [-0.5, 0.5, 0.5]],
+      ];
+      const quadUV = [[uv.u0, uv.v0], [uv.u0, uv.v1], [uv.u1, uv.v1], [uv.u1, uv.v0]];
+      for (const q of quads) {
+        for (let ci = 0; ci < 4; ci++) {
+          verts.push(q[ci][0], q[ci][1], q[ci][2], quadUV[ci][0], quadUV[ci][1], 1.0, 1.0, 0.0);
+        }
+        indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
+        indices.push(count + 2, count + 1, count, count + 3, count + 2, count);
+        count += 4;
+      }
+    } else {
+      const blk = block.emissive ? 1.0 : 0.0;
+      for (const face of FACES) {
+        const tile = face.dir[1] === 1 ? block.tiles[0]
+          : face.dir[1] === -1 ? block.tiles[2] : block.tiles[1];
+        const uv = tileUV(tile);
+        for (let ci = 0; ci < 4; ci++) {
+          const c = face.corners[ci];
+          verts.push(
+            c[0] - 0.5, c[1] - 0.5, c[2] - 0.5,
+            lerp(uv.u0, uv.u1, face.uvs[ci][0]),
+            lerp(uv.v0, uv.v1, face.uvs[ci][1]),
+            face.shade, 1.0, blk
+          );
+        }
+        indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
+        count += 4;
+      }
+    }
+
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+    const ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(indices), gl.STATIC_DRAW);
+
+    mesh = { vbo, ibo, count: indices.length };
+    this.heldMeshes.set(blockId, mesh);
+    return mesh;
+  }
+
+  drawHeldItem(blockId, env, swing) {
+    const gl = this.gl;
+    const mesh = this.getHeldMesh(blockId);
+    const pw = this.progWorld;
+
+    // 画面手前に常に表示 (深度をクリア)
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.disable(gl.BLEND);
+    gl.useProgram(pw.prog);
+
+    // スイング: 下がりつつ少し回る
+    const s = Math.sin(Math.min(swing, 1) * Math.PI);
+    const proj = Mat4.perspective(this.tmpC, (70 * Math.PI) / 180, this.aspect, 0.05, 10);
+    const T = Mat4.translation(this.tmpA, 0.85, -0.75 - s * 0.3, -1.7);
+    Mat4.multiply(this.tmpB, proj, T);                      // tmpB = P*T
+    const Ry = Mat4.rotationY(this.tmpA, 0.62 + s * 0.9);
+    Mat4.multiply(this.tmpC, this.tmpB, Ry);                // tmpC = P*T*Ry
+    const Rx = Mat4.rotationX(this.tmpA, -0.12 - s * 0.5);
+    Mat4.multiply(this.tmpB, this.tmpC, Rx);                // tmpB = P*T*Ry*Rx
+    const S = Mat4.scaling(this.tmpA, 0.55);
+    Mat4.multiply(this.tmpC, this.tmpB, S);                 // 最終 MVP
+
+    gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.tmpC);
+    gl.uniform3f(pw.uniforms.uCamPos, 0, 0, 0);             // フォグ無効化 (距離 ~0)
+    gl.uniform1f(pw.uniforms.uDaylight, env.daylight);
+    gl.uniform1f(pw.uniforms.uAlpha, 1.0);
+
+    this.bindWorldAttribs(mesh.vbo);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
+    gl.disable(gl.CULL_FACE); // 植生の両面用
+    gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+    gl.enable(gl.CULL_FACE);
   }
 
   drawSky(forward, env) {

@@ -168,6 +168,15 @@
       openInventory();
       return;
     }
+    if (e.code === "KeyM") {
+      const on = sound.toggleMusic();
+      console.log(on ? "BGM: ON" : "BGM: OFF");
+      return;
+    }
+    if (e.code === "KeyP") {
+      pendingShot = true;
+      return;
+    }
 
     switch (e.code) {
       case "Space": {
@@ -291,6 +300,7 @@
   }
 
   function doAction(button) {
+    swingTimer = 0; // 手持ちブロックを振る
     const hit = player.raycast();
     if (!hit && button !== 0) return;
 
@@ -428,6 +438,8 @@
   let fovCurrent = baseFov;
   let bobPhase = 0;
   let bobAmount = 0;
+  let swingTimer = 1;      // 1 = スイング終了
+  let pendingShot = false;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -505,7 +517,23 @@
       time: elapsed,
       particles: { data: particleData, count: particles.length },
       entities: mobs.buildVertexData(),
+      held: { id: HOTBAR_BLOCKS[selectedSlot], swing: swingTimer },
     });
+
+    swingTimer = Math.min(swingTimer + dt * 4.5, 1);
+
+    // スクリーンショット保存 (描画直後の同一フレーム内で取得)
+    if (pendingShot) {
+      pendingShot = false;
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `minecraft-js_${Date.now()}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      });
+    }
 
     waterOverlayEl.classList.toggle("active", player.eyeInWater);
 
