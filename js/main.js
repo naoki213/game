@@ -566,6 +566,51 @@
     }
   }
 
+  // ---------------- 落下ブロック (砂の重力) ----------------
+
+  const fallingBlocks = [];   // {id, pos, vel, phase, spin:false, scale:1}
+
+  // セル (x,y,z) の砂が支えを失っていたら落下エンティティ化する
+  function checkFalling(x, y, z) {
+    if (y <= 0 || y >= CHUNK_H) return;
+    if (world.getBlock(x, y, z) !== B.SAND) return;
+    const below = world.getBlock(x, y - 1, z);
+    if (isSolid(below)) return;
+    if (!world.setBlock(x, y, z, B.AIR)) return;
+    fallingBlocks.push({
+      id: B.SAND,
+      pos: [x + 0.5, y, z + 0.5],
+      vel: 0,
+      phase: 0,
+      spin: false,
+      scale: 1,
+    });
+    // 上に積まれた砂も連鎖して落ちる
+    checkFalling(x, y + 1, z);
+  }
+
+  function updateFallingBlocks(dt) {
+    for (let i = fallingBlocks.length - 1; i >= 0; i--) {
+      const f = fallingBlocks[i];
+      f.vel = Math.min(f.vel + 18 * dt, 30);
+      f.pos[1] -= f.vel * dt;
+      const cx = Math.floor(f.pos[0]);
+      const cz = Math.floor(f.pos[2]);
+      if (f.pos[1] < -5) { fallingBlocks.splice(i, 1); continue; }
+      // 下のセルに着地したか
+      if (world.isSolidAt(cx, Math.floor(f.pos[1] - 0.02), cz)) {
+        const landY = Math.floor(f.pos[1] - 0.02) + 1;
+        fallingBlocks.splice(i, 1);
+        const cur = world.getBlock(cx, landY, cz);
+        if ((cur === B.AIR || cur === B.WATER) && world.setBlock(cx, landY, cz, B.SAND)) {
+          sound.thud();
+        } else if (gameMode === "survival") {
+          items.spawn(B.SAND, cx, landY, cz); // 置けなければアイテム化
+        }
+      }
+    }
+  }
+
   // モブが視線上にいれば叩く。叩いたら true
   function tryPunch() {
     const hit = player.raycast();
@@ -597,6 +642,8 @@
       world.setBlock(bx, by + 1, bz, B.AIR);
       if (gameMode === "survival" && ab.drops !== null) items.spawn(ab.drops, bx, by + 1, bz);
     }
+    // 上の砂は支えを失って落下する
+    checkFalling(bx, by + 1, bz);
   }
 
   // 右クリック / タップでの設置
@@ -614,6 +661,7 @@
     if (!consumeItem(id)) return;
     if (world.setBlock(px, py, pz, id)) {
       sound.place();
+      checkFalling(px, py, pz); // 空中に置いた砂は落ちる
     } else if (gameMode === "survival") {
       addItem(id); // 失敗したら返却
     }
@@ -973,6 +1021,7 @@
         addItem(id);
         sound.pickup();
       });
+      updateFallingBlocks(dt);
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
       updateParticles(dt);
@@ -1037,7 +1086,7 @@
       time: elapsed,
       particles: { data: particleData, count: particles.length },
       entities: mobs.buildVertexData(),
-      items: items.items,
+      items: fallingBlocks.length > 0 ? items.items.concat(fallingBlocks) : items.items,
       crack: (gameMode === "survival" && breakProgress > 0.02 && breakTargetPos)
         ? { pos: breakTargetPos, stage: Math.min(4, (breakProgress * 5) | 0) }
         : null,

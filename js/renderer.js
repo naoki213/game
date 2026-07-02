@@ -553,12 +553,14 @@ class Renderer {
       const dx = it.pos[0] - camPos[0], dz = it.pos[2] - camPos[2];
       if (dx * dx + dz * dz > 48 * 48) continue;
       const mesh = this.getHeldMesh(it.id);
-      const bobY = Math.sin(time * 2.2 + it.phase) * 0.05 + 0.18;
+      // 通常ドロップは回転 + 浮遊, 落下ブロック (spin:false) は等倍で静止
+      const spin = it.spin !== false;
+      const bobY = spin ? Math.sin(time * 2.2 + it.phase) * 0.05 + 0.18 : 0.5;
       const T = Mat4.translation(this.tmpA, it.pos[0], it.pos[1] + bobY, it.pos[2]);
       Mat4.multiply(this.tmpB, this.mvp, T);
-      const Ry = Mat4.rotationY(this.tmpA, time * 1.4 + it.phase);
+      const Ry = Mat4.rotationY(this.tmpA, spin ? time * 1.4 + it.phase : 0);
       Mat4.multiply(this.tmpC, this.tmpB, Ry);
-      const S = Mat4.scaling(this.tmpA, 0.28);
+      const S = Mat4.scaling(this.tmpA, it.scale || 0.28);
       Mat4.multiply(this.tmpB, this.tmpC, S);
       gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.tmpB);
       this.bindWorldAttribs(mesh.vbo);
