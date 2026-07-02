@@ -26,6 +26,27 @@ class Player {
     this.flying = false;
     this.inWater = false;
     this.eyeInWater = false;
+
+    // サバイバル要素
+    this.maxHealth = 20;
+    this.health = 20;
+    this.maxAir = 10;          // 秒
+    this.air = 10;
+    this.dead = false;
+    this.hurtFlash = 0;        // ダメージ演出の残り時間
+    this.time = 0;             // 内部時計
+    this.lastDamageTime = -99;
+    this.regenTimer = 0;
+    this.drownTimer = 0;
+    this.landImpact = 0;       // 着地時の速度
+  }
+
+  takeDamage(n) {
+    if (this.dead || n <= 0) return;
+    this.health = Math.max(0, this.health - n);
+    this.hurtFlash = 0.45;
+    this.lastDamageTime = this.time;
+    if (this.health <= 0) this.dead = true;
   }
 
   spawn(x, z) {
@@ -50,6 +71,9 @@ class Player {
   // 移動入力 (input: {fwd, strafe, up, jump, sneak, sprint}) を反映して 1 ステップ進める
   update(dt, input) {
     const world = this.world;
+    this.time += dt;
+    this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+    if (this.dead) return;
 
     // 体の中心と目が水中か
     const bx = Math.floor(this.pos[0]);
@@ -96,10 +120,51 @@ class Player {
     this.moveAxis(2, this.vel[2] * dt);
     this.moveAxis(1, this.vel[1] * dt);
 
+    // --- 落下ダメージ ---
+    if (this.landImpact > 13 && !this.inWater && !this.flying) {
+      this.takeDamage(Math.ceil((this.landImpact - 13) * 0.6));
+    }
+    this.landImpact = 0;
+
+    // --- 酸素と溺れ ---
+    if (this.eyeInWater && !this.flying) {
+      this.air = Math.max(0, this.air - dt);
+      if (this.air <= 0) {
+        this.drownTimer += dt;
+        if (this.drownTimer >= 1) {
+          this.drownTimer -= 1;
+          this.takeDamage(2);
+        }
+      }
+    } else {
+      this.air = Math.min(this.maxAir, this.air + dt * 2.5);
+      this.drownTimer = 0;
+    }
+
+    // --- 自然回復 (6 秒間ダメージなしで 2.5 秒ごとに +1) ---
+    if (this.health < this.maxHealth && this.time - this.lastDamageTime > 6) {
+      this.regenTimer += dt;
+      if (this.regenTimer >= 2.5) {
+        this.regenTimer -= 2.5;
+        this.health++;
+      }
+    } else if (this.health >= this.maxHealth) {
+      this.regenTimer = 0;
+    }
+
     // 奈落に落ちたら復帰
     if (this.pos[1] < -20) {
       this.spawn(this.pos[0], this.pos[2]);
     }
+  }
+
+  respawn() {
+    this.health = this.maxHealth;
+    this.air = this.maxAir;
+    this.dead = false;
+    this.vel = [0, 0, 0];
+    this.flying = false;
+    this.spawn(8.5, 8.5);
   }
 
   // AABB を 1 軸だけ動かして衝突解決
@@ -143,6 +208,8 @@ class Player {
             } else {
               this.pos[1] = y + 1 + 1e-4;
               this.onGround = true;
+              // 着地速度を記録 (落下ダメージ用)
+              this.landImpact = Math.max(this.landImpact, -this.vel[1]);
             }
             this.vel[1] = 0;
           }

@@ -100,6 +100,71 @@ html, body {
 
 .slot.selected .name { opacity: 1; }
 
+/* ---- status bars (hearts / bubbles) ---- */
+#status-bars {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding: 0 4px;
+}
+
+#hearts, #bubbles {
+  display: flex;
+  gap: 1px;
+  font-size: 18px;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+.heart {
+  position: relative;
+  color: #3a3236;
+}
+
+.heart .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  color: #e5323c;
+  white-space: nowrap;
+}
+
+.bubble { color: #9fd6ff; }
+.bubble.empty { opacity: 0.15; }
+
+/* ---- hurt flash ---- */
+#hurt-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center,
+    rgba(200, 0, 0, 0) 40%, rgba(200, 0, 0, 0.55) 100%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* ---- death overlay ---- */
+#death-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(120, 10, 10, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #fff;
+  z-index: 8;
+}
+
+#death-overlay.hidden { display: none; }
+
+#death-overlay h1 {
+  font-size: 40px;
+  text-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
+  margin-bottom: 10px;
+}
+
+#death-overlay p { color: #fcc; }
+
 /* ---- debug ---- */
 #debug {
   position: absolute;

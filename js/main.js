@@ -69,6 +69,71 @@
     slotEls.forEach((el, j) => el.classList.toggle("selected", j === selectedSlot));
   }
 
+  // ---------------- サバイバル UI (ハート / 酸素) ----------------
+
+  const heartsEl = document.getElementById("hearts");
+  const bubblesEl = document.getElementById("bubbles");
+  const hurtOverlayEl = document.getElementById("hurt-overlay");
+  const deathOverlayEl = document.getElementById("death-overlay");
+  const heartFills = [];
+  const bubbleEls = [];
+
+  for (let i = 0; i < 10; i++) {
+    const h = document.createElement("span");
+    h.className = "heart";
+    h.textContent = "♥";
+    const fill = document.createElement("span");
+    fill.className = "fill";
+    fill.textContent = "♥";
+    h.appendChild(fill);
+    heartsEl.appendChild(h);
+    heartFills.push(fill);
+  }
+  for (let i = 0; i < 10; i++) {
+    const b = document.createElement("span");
+    b.className = "bubble";
+    b.textContent = "●";
+    bubblesEl.appendChild(b);
+    bubbleEls.push(b);
+  }
+
+  let lastHealth = -1, lastAir = -1;
+  let deathTimer = 0;
+
+  function updateSurvivalUI(dt) {
+    if (player.health !== lastHealth) {
+      lastHealth = player.health;
+      for (let i = 0; i < 10; i++) {
+        const hp = player.health - i * 2;
+        heartFills[i].style.width = hp >= 2 ? "100%" : hp === 1 ? "50%" : "0";
+      }
+    }
+    const airCount = Math.ceil(player.air);
+    if (airCount !== lastAir) {
+      lastAir = airCount;
+      const show = player.eyeInWater || player.air < player.maxAir;
+      bubblesEl.style.visibility = show ? "visible" : "hidden";
+      for (let i = 0; i < 10; i++) {
+        bubbleEls[i].classList.toggle("empty", i >= airCount);
+      }
+    }
+    hurtOverlayEl.style.opacity = Math.min(player.hurtFlash * 2.2, 1);
+
+    // 死亡 → 少し置いてリスポーン
+    if (player.dead) {
+      if (deathTimer === 0) {
+        deathOverlayEl.classList.remove("hidden");
+        sound.thud();
+      }
+      deathTimer += dt;
+      if (deathTimer > 2.2) {
+        deathTimer = 0;
+        player.respawn();
+        deathOverlayEl.classList.add("hidden");
+      }
+    }
+  }
+
   // ---------------- インベントリ (E キー) ----------------
 
   const inventoryEl = document.getElementById("inventory");
@@ -475,6 +540,7 @@
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
       updateParticles(dt);
       mobs.update(dt, player.pos);
+      updateSurvivalUI(dt);
 
       // 歩行ボビング
       const hSpeed = Math.hypot(player.vel[0], player.vel[2]);
