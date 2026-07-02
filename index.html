@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MineCraft.js — ボクセルサンドボックス</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="crosshair">+</div>
+
+<div id="hud">
+  <div id="status-bars">
+    <div id="hearts"></div>
+    <div id="bubbles"></div>
+  </div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="hurt-overlay"></div>
+<div id="toast"></div>
+
+<div id="touch-ui" class="hidden">
+  <div id="joystick">
+    <div id="joystick-knob"></div>
+  </div>
+  <div id="touch-buttons">
+    <button id="btn-fly" class="touch-btn">✈</button>
+    <button id="btn-down" class="touch-btn hidden">⬇</button>
+    <button id="btn-jump" class="touch-btn">⬆</button>
+  </div>
+  <button id="btn-pause" class="touch-btn">⏸</button>
+</div>
+
+<div id="death-overlay" class="hidden">
+  <div>
+    <h1>死んでしまった!</h1>
+    <p>スポーン地点に戻ります…</p>
+  </div>
+</div>
+
+<div id="debug"></div>
+<div id="water-overlay"></div>
+
+<div id="inventory" class="hidden">
+  <div id="inventory-inner">
+    <h2>ブロック選択 <span class="hint">— クリックでホットバーの選択枠にセット (E で閉じる)</span></h2>
+    <div id="inventory-grid"></div>
+    <div id="craft-section" class="hidden">
+      <h2>クラフト</h2>
+      <div id="craft-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="overlay-inner">
+    <h1>⛏ MineCraft.js</h1>
+    <p class="sub">ブラウザで動くボクセルサンドボックス</p>
+    <button id="play-btn">クリックしてプレイ</button>
+    <div class="controls">
+      <table>
+        <tr><td>W A S D</td><td>移動</td></tr>
+        <tr><td>マウス</td><td>視点操作</td></tr>
+        <tr><td>Space</td><td>ジャンプ / (飛行中) 上昇</td></tr>
+        <tr><td>Shift</td><td>スニーク / (飛行中) 下降</td></tr>
+        <tr><td>Ctrl</td><td>ダッシュ</td></tr>
+        <tr><td>F / Space×2</td><td>飛行モード切替</td></tr>
+        <tr><td>左クリック</td><td>ブロック破壊</td></tr>
+        <tr><td>右クリック</td><td>ブロック設置</td></tr>
+        <tr><td>1–9 / ホイール</td><td>ブロック選択</td></tr>
+        <tr><td>E</td><td>全ブロックから選ぶ (インベントリ)</td></tr>
+        <tr><td>G</td><td>サバイバル / クリエイティブ切替</td></tr>
+        <tr><td>M</td><td>BGM オン / オフ</td></tr>
+        <tr><td>P</td><td>スクリーンショット保存</td></tr>
+        <tr><td>F3</td><td>デバッグ情報</td></tr>
+        <tr><td>N</td><td>新しいワールド生成</td></tr>
+        <tr><td>Esc</td><td>ポーズ</td></tr>
+      </table>
+    </div>
+    <p class="note">ワールドの変更は自動でブラウザに保存されます</p>
+  </div>
+</div>
+
+<script src="js/math.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/world.js"></script>
+<script src="js/mesher.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/player.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
