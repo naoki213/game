@@ -52,6 +52,27 @@ class Sound {
     this.blip(140, 0.08, "sine", 0.22);
   }
 
+  // ゾンビのうめき声 (低いうなり)
+  groan() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    const f0 = 70 + Math.random() * 30;
+    osc.frequency.setValueAtTime(f0, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(f0 * 0.7, ctx.currentTime + 0.5);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 300;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+    osc.connect(filter).connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+  }
+
   // アイテム回収音 (上昇チャイム)
   pickup() {
     const ctx = this.ensure();

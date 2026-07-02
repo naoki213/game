@@ -39,6 +39,24 @@ const MOB_TYPES = {
       [0.15, 0, 0.22, 0.2, 0.5, 0.2, 0.80, 0.78, 0.74],
     ],
   },
+  zombie: {
+    speed: 2.3,
+    halfW: 0.32, height: 1.9,
+    health: 10,
+    hostile: true,
+    parts: [
+      // 脚 x2 (暗い青のズボン)
+      [-0.22, 0, -0.11, 0.2, 0.72, 0.22, 0.22, 0.25, 0.45],
+      [0.02, 0, -0.11, 0.2, 0.72, 0.22, 0.22, 0.25, 0.45],
+      // 胴体 (青いシャツ)
+      [-0.25, 0.72, -0.14, 0.5, 0.62, 0.28, 0.25, 0.45, 0.65],
+      // 腕 x2 (前に突き出した緑の腕)
+      [-0.43, 1.08, -0.1, 0.18, 0.18, 0.72, 0.4, 0.6, 0.3],
+      [0.25, 1.08, -0.1, 0.18, 0.18, 0.72, 0.4, 0.6, 0.3],
+      // 頭 (緑)
+      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 0.38, 0.58, 0.28],
+    ],
+  },
   chicken: {
     speed: 1.6,
     halfW: 0.25, height: 0.7,
@@ -76,19 +94,61 @@ class Mob {
     this.stateTime = 1 + Math.random() * 2;
     this.walkPhase = 0;
     this.bob = 0;
+    this.health = this.def.health || 6;
+    this.hurt = 0;                 // 被弾の赤フラッシュ残り時間
+    this.attackCooldown = 0;
+    this.burnAccum = 0;
   }
 
-  update(dt, world) {
-    // --- 状態遷移 (ふらふら歩く) ---
-    this.stateTime -= dt;
-    if (this.stateTime <= 0) {
-      if (this.state === "idle") {
+  update(dt, world, player, daylight) {
+    this.hurt = Math.max(0, this.hurt - dt);
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+
+    let chasing = false;
+    if (this.def.hostile) {
+      // --- 昼は燃えてダメージ ---
+      if (daylight > 0.5) {
+        this.burnAccum += dt;
+        if (this.burnAccum >= 1) {
+          this.burnAccum -= 1;
+          this.health -= 3;
+          this.hurt = 0.3;
+        }
+      }
+      // --- プレイヤーを追跡 ---
+      const dx = player.pos[0] - this.pos[0];
+      const dy = player.pos[1] - this.pos[1];
+      const dz = player.pos[2] - this.pos[2];
+      const distH = Math.hypot(dx, dz);
+      if (!player.dead && distH < 28 && Math.abs(dy) < 12) {
+        chasing = true;
+        this.yaw = Math.atan2(dx, dz);
         this.state = "walk";
-        this.yaw = Math.random() * Math.PI * 2;
-        this.stateTime = 1.5 + Math.random() * 3;
-      } else {
-        this.state = "idle";
-        this.stateTime = 1 + Math.random() * 3;
+        // --- 近接攻撃 ---
+        if (distH < 1.4 && Math.abs(dy) < 2 && this.attackCooldown <= 0) {
+          this.attackCooldown = 1.1;
+          player.takeDamage(3);
+          // ノックバック
+          const d = distH || 1;
+          player.vel[0] += (dx / d) * 6;
+          player.vel[2] += (dz / d) * 6;
+          player.vel[1] = Math.max(player.vel[1], 3.5);
+        }
+      }
+    }
+
+    // --- 状態遷移 (ふらふら歩く) ---
+    if (!chasing) {
+      this.stateTime -= dt;
+      if (this.stateTime <= 0) {
+        if (this.state === "idle") {
+          this.state = "walk";
+          this.yaw = Math.random() * Math.PI * 2;
+          this.stateTime = 1.5 + Math.random() * 3;
+        } else {
+          this.state = "idle";
+          this.stateTime = 1 + Math.random() * 3;
+        }
       }
     }
 
@@ -189,15 +249,22 @@ class MobManager {
     this.world = world;
     this.mobs = [];
     this.spawnTimer = 0;
-    this.maxMobs = 14;
+    this.maxAnimals = 12;
+    this.maxZombies = 8;
+    this.deaths = [];        // 今フレーム死んだモブ (演出は main 側)
+    this.groanRequest = false;
   }
 
-  update(dt, playerPos) {
+  update(dt, player, daylight) {
+    this.deaths.length = 0;
+    this.groanRequest = false;
+    const playerPos = player.pos;
+
     // --- スポーン ---
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 2;
-      if (this.mobs.length < this.maxMobs) this.trySpawn(playerPos);
+      this.trySpawn(playerPos, daylight);
     }
 
     // --- 更新 & デスポーン ---
@@ -211,11 +278,27 @@ class MobManager {
       }
       // 遠くのモブは間引いて更新
       if (dx * dx + dz * dz > 48 * 48 && Math.random() < 0.5) continue;
-      m.update(dt, this.world);
+      m.update(dt, this.world, player, daylight);
+
+      if (m.health <= 0) {
+        this.deaths.push({ pos: [...m.pos], type: m.type });
+        this.mobs.splice(i, 1);
+        continue;
+      }
+      // 近くのゾンビはうめき声
+      if (m.def.hostile && dx * dx + dz * dz < 12 * 12 && Math.random() < dt * 0.12) {
+        this.groanRequest = true;
+      }
     }
   }
 
-  trySpawn(playerPos) {
+  count(hostile) {
+    let n = 0;
+    for (const m of this.mobs) if (!!m.def.hostile === hostile) n++;
+    return n;
+  }
+
+  trySpawn(playerPos, daylight) {
     // プレイヤーの周囲 20–50 ブロックのランダム地点
     const ang = Math.random() * Math.PI * 2;
     const dist = 20 + Math.random() * 30;
@@ -226,11 +309,20 @@ class MobManager {
     if (!chunk || !chunk.generated) return;
 
     const y = this.world.surfaceY(x, z);
-    if (this.world.getBlock(x, y, z) !== B.GRASS) return; // 草の上のみ
     if (y + 1 <= WATER_LEVEL) return;
 
-    const type = MOB_NAMES[(Math.random() * MOB_NAMES.length) | 0];
-    this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
+    if (daylight < 0.3) {
+      // 夜: ゾンビ
+      if (this.count(true) >= this.maxZombies) return;
+      this.mobs.push(new Mob("zombie", x + 0.5, y + 1.01, z + 0.5));
+    } else if (daylight > 0.5) {
+      // 昼: 動物 (草の上のみ)
+      if (this.count(false) >= this.maxAnimals) return;
+      if (this.world.getBlock(x, y, z) !== B.GRASS) return;
+      const passive = MOB_NAMES.filter((n) => !MOB_TYPES[n].hostile);
+      const type = passive[(Math.random() * passive.length) | 0];
+      this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
+    }
   }
 
   // 視線上のモブを探す
@@ -243,14 +335,18 @@ class MobManager {
     return best;
   }
 
-  // 叩いてノックバック
+  // 叩いてダメージ + ノックバック
   punch(mob, dir) {
+    mob.health -= 4;
+    mob.hurt = 0.35;
     mob.vel[0] += dir[0] * 7;
     mob.vel[2] += dir[2] * 7;
     mob.vel[1] = 5;
-    mob.state = "walk";
-    mob.yaw = Math.atan2(dir[0], dir[2]); // 叩かれた方向へ逃げる
-    mob.stateTime = 2;
+    if (!mob.def.hostile) {
+      mob.state = "walk";
+      mob.yaw = Math.atan2(dir[0], dir[2]); // 叩かれた方向へ逃げる
+      mob.stateTime = 2;
+    }
   }
 
   // 描画用の頂点配列 [x,y,z,r,g,b] を組み立てる
@@ -259,9 +355,16 @@ class MobManager {
     for (const m of this.mobs) {
       const sin = Math.sin(m.yaw), cos = Math.cos(m.yaw);
       const bobY = Math.abs(m.bob) * 0.04;
+      const hurtT = m.hurt > 0 ? 0.55 : 0;
       for (let pi = 0; pi < m.def.parts.length; pi++) {
         const p = m.def.parts[pi];
         let [ox, oy, oz, w, h, d, r, g, b] = p;
+        if (hurtT > 0) {
+          // 被弾中は赤くフラッシュ
+          r = r + (1 - r) * hurtT;
+          g *= 1 - hurtT;
+          b *= 1 - hurtT;
+        }
         // 脚は歩行時に前後へ振る
         const isLeg = oy === 0;
         if (isLeg && m.bob !== 0) {

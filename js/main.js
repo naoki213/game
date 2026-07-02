@@ -421,6 +421,19 @@
   const particles = [];                                  // {pos, vel, life}
   const particleData = new Float32Array(MAX_PARTICLES * 6); // [x,y,z,r,g,b]
 
+  // モブ死亡時などの汎用パフ
+  function spawnPuff(x, y, z, col) {
+    for (let i = 0; i < 10; i++) {
+      if (particles.length >= MAX_PARTICLES) break;
+      particles.push({
+        pos: [x + (Math.random() - 0.5) * 0.6, y + Math.random() * 1.2, z + (Math.random() - 0.5) * 0.6],
+        vel: [(Math.random() - 0.5) * 3, Math.random() * 3 + 0.5, (Math.random() - 0.5) * 3],
+        life: 0.4 + Math.random() * 0.3,
+        col: [col[0], col[1], col[2]],
+      });
+    }
+  }
+
   function spawnBreakParticles(x, y, z, blockId) {
     const tile = BLOCKS[blockId].tiles[1];
     const col = TILE_AVG_COLORS[tile] || [0.5, 0.5, 0.5];
@@ -882,7 +895,17 @@
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
       updateParticles(dt);
-      mobs.update(dt, player.pos);
+
+      // モブ更新 (夜はゾンビ, 昼は動物が湧く)
+      const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
+      mobs.update(dt, player, daylightNow);
+      for (const death of mobs.deaths) {
+        const col = MOB_TYPES[death.type].parts[0];
+        spawnPuff(death.pos[0], death.pos[1], death.pos[2], [col[6], col[7], col[8]]);
+        sound.thud();
+      }
+      if (mobs.groanRequest) sound.groan();
+
       updateSurvivalUI(dt);
 
       // 歩行ボビングと足音
