@@ -18,6 +18,13 @@
 <div id="debug"></div>
 <div id="water-overlay"></div>
 
+<div id="inventory" class="hidden">
+  <div id="inventory-inner">
+    <h2>ブロック選択 <span class="hint">— クリックでホットバーの選択枠にセット (E で閉じる)</span></h2>
+    <div id="inventory-grid"></div>
+  </div>
+</div>
+
 <div id="overlay">
   <div id="overlay-inner">
     <h1>⛏ MineCraft.js</h1>
@@ -34,6 +41,7 @@
         <tr><td>左クリック</td><td>ブロック破壊</td></tr>
         <tr><td>右クリック</td><td>ブロック設置</td></tr>
         <tr><td>1–9 / ホイール</td><td>ブロック選択</td></tr>
+        <tr><td>E</td><td>全ブロックから選ぶ (インベントリ)</td></tr>
         <tr><td>F3</td><td>デバッグ情報</td></tr>
         <tr><td>N</td><td>新しいワールド生成</td></tr>
         <tr><td>Esc</td><td>ポーズ</td></tr>
@@ -52,6 +60,7 @@
 <script src="js/renderer.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/player.js"></script>
+<script src="js/entities.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

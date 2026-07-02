@@ -22,6 +22,7 @@
   const world = new World(seed);
   const player = new Player(world);
   const sound = new Sound();
+  const mobs = new MobManager(world);
 
   // スポーン地点周辺を先に同期生成してからスポーン
   for (let cz = -1; cz <= 1; cz++) {
@@ -37,6 +38,15 @@
   let selectedSlot = 0;
   const hotbarEl = document.getElementById("hotbar");
   const slotEls = [];
+
+  // 保存されたホットバー構成を復元
+  try {
+    const savedBar = JSON.parse(localStorage.getItem("mcjs_hotbar"));
+    if (Array.isArray(savedBar) && savedBar.length === HOTBAR_BLOCKS.length &&
+        savedBar.every((id) => BLOCKS[id] && id !== B.AIR)) {
+      savedBar.forEach((id, i) => { HOTBAR_BLOCKS[i] = id; });
+    }
+  } catch (e) { /* 壊れたデータは無視 */ }
   HOTBAR_BLOCKS.forEach((blockId, i) => {
     const slot = document.createElement("div");
     slot.className = "slot" + (i === 0 ? " selected" : "");
@@ -57,6 +67,44 @@
   function selectSlot(i) {
     selectedSlot = ((i % HOTBAR_BLOCKS.length) + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length;
     slotEls.forEach((el, j) => el.classList.toggle("selected", j === selectedSlot));
+  }
+
+  // ---------------- インベントリ (E キー) ----------------
+
+  const inventoryEl = document.getElementById("inventory");
+  const inventoryGrid = document.getElementById("inventory-grid");
+  let inventoryOpen = false;
+
+  for (const block of BLOCKS) {
+    if (!block || block.id === B.AIR || block.id === B.WATER || block.id === B.BEDROCK) continue;
+    const item = document.createElement("div");
+    item.className = "inv-item";
+    const icon = document.createElement("canvas");
+    icon.width = icon.height = 48;
+    drawBlockIcon(icon, block.id, atlas);
+    const label = document.createElement("span");
+    label.textContent = block.jp;
+    item.append(icon, label);
+    item.addEventListener("click", () => {
+      HOTBAR_BLOCKS[selectedSlot] = block.id;
+      drawBlockIcon(slotEls[selectedSlot].querySelector("canvas"), block.id, atlas);
+      slotEls[selectedSlot].querySelector(".name").textContent = block.jp;
+      localStorage.setItem("mcjs_hotbar", JSON.stringify(HOTBAR_BLOCKS));
+      closeInventory();
+    });
+    inventoryGrid.appendChild(item);
+  }
+
+  function openInventory() {
+    inventoryOpen = true;
+    inventoryEl.classList.remove("hidden");
+    document.exitPointerLock();
+  }
+
+  function closeInventory() {
+    inventoryOpen = false;
+    inventoryEl.classList.add("hidden");
+    canvas.requestPointerLock();
   }
 
   // ---------------- 入力 ----------------
@@ -86,10 +134,14 @@
 
   document.addEventListener("pointerlockchange", () => {
     paused = document.pointerLockElement !== canvas;
-    overlay.classList.toggle("hidden", !paused);
+    // インベントリを開いている間はポーズ画面を出さない
+    overlay.classList.toggle("hidden", !paused || inventoryOpen);
     if (paused) {
       keys.clear();
       heldButtons.clear();
+    } else if (inventoryOpen) {
+      inventoryOpen = false;
+      inventoryEl.classList.add("hidden");
     }
   });
 
@@ -102,10 +154,20 @@
   });
 
   document.addEventListener("keydown", (e) => {
+    // インベントリが開いている間は E / Esc で閉じるだけ
+    if (inventoryOpen) {
+      if (e.code === "KeyE" || e.code === "Escape") closeInventory();
+      return;
+    }
     if (paused) return;
     if (e.code === "F3") e.preventDefault();
     if (e.repeat) return;
     keys.add(e.code);
+
+    if (e.code === "KeyE") {
+      openInventory();
+      return;
+    }
 
     switch (e.code) {
       case "Space": {
@@ -230,9 +292,18 @@
 
   function doAction(button) {
     const hit = player.raycast();
-    if (!hit) return;
+    if (!hit && button !== 0) return;
 
     if (button === 0) {
+      // モブが手前にいれば叩く
+      const fwd = player.forward();
+      const mob = mobs.pick(player.eyePos(), fwd, hit ? hit.t : REACH);
+      if (mob) {
+        mobs.punch(mob, fwd);
+        sound.thud();
+        return;
+      }
+      if (!hit) return;
       // 破壊
       if (hit.id === B.BEDROCK) return;
       if (world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR)) {
@@ -391,6 +462,7 @@
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
       updateParticles(dt);
+      mobs.update(dt, player.pos);
 
       // 歩行ボビング
       const hSpeed = Math.hypot(player.vel[0], player.vel[2]);
@@ -432,6 +504,7 @@
       highlight: hit ? hit.pos : null,
       time: elapsed,
       particles: { data: particleData, count: particles.length },
+      entities: mobs.buildVertexData(),
     });
 
     waterOverlayEl.classList.toggle("active", player.eyeInWater);
@@ -453,7 +526,7 @@
       debugEl.textContent =
         `FPS: ${fps}  描画: ${drawCalls} calls\n` +
         `XYZ: ${p[0].toFixed(1)} / ${p[1].toFixed(1)} / ${p[2].toFixed(1)}\n` +
-        `チャンク: ${Math.floor(p[0]) >> 4}, ${Math.floor(p[2]) >> 4} (計 ${world.chunks.size})\n` +
+        `チャンク: ${Math.floor(p[0]) >> 4}, ${Math.floor(p[2]) >> 4} (計 ${world.chunks.size})  モブ: ${mobs.mobs.length}\n` +
         `バイオーム: ${biomeInfo.biome}  シード: ${seed}\n` +
         `時刻: ${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}\n` +
         `${player.flying ? "飛行中 " : ""}${player.onGround ? "接地 " : ""}${player.inWater ? "水中" : ""}`;
@@ -471,6 +544,7 @@
   window.__mc = {
     player,
     world,
+    mobs,
     seed,
     selectSlot,
     setTime: (t) => { timeOfDay = ((t % 1) + 1) % 1; },

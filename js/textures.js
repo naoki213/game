@@ -266,6 +266,13 @@ function drawBlockIcon(canvas, blockId, atlas) {
     return [tx, ty];
   };
 
+  // X 字植生はタイルをそのまま描く
+  if (block.cross) {
+    const [tx, ty] = srcTile(block.tiles[0]);
+    ctx.drawImage(atlas, tx, ty, TILE_PX, TILE_PX, s * 0.08, s * 0.08, s * 0.84, s * 0.84);
+    return;
+  }
+
   const cx = s / 2;
   const topH = s * 0.28;   // 上面のつぶれ具合
   const half = s * 0.46;

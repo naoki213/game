@@ -193,7 +193,7 @@ class Player {
     while (t <= REACH) {
       const id = world.getBlock(x, y, z);
       if (id !== B.AIR && id !== B.WATER) {
-        return { pos: [x, y, z], prev: [px, py, pz], id };
+        return { pos: [x, y, z], prev: [px, py, pz], id, t };
       }
       px = x; py = y; pz = z;
       if (tX < tY && tX < tZ) {

@@ -132,6 +132,78 @@ html, body {
 
 #water-overlay.active { opacity: 1; }
 
+/* ---- inventory ---- */
+#inventory {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 24, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+#inventory.hidden { display: none; }
+
+#inventory-inner {
+  background: rgba(20, 26, 40, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  padding: 18px 22px;
+  max-width: 640px;
+}
+
+#inventory-inner h2 {
+  color: #eee;
+  font-size: 17px;
+  margin-bottom: 14px;
+}
+
+#inventory-inner .hint {
+  font-size: 12px;
+  font-weight: normal;
+  color: #9ab;
+}
+
+#inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 64px);
+  gap: 8px;
+}
+
+.inv-item {
+  width: 64px;
+  height: 64px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.inv-item:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.inv-item canvas {
+  width: 36px;
+  height: 36px;
+  image-rendering: pixelated;
+}
+
+.inv-item span {
+  font-size: 9px;
+  color: #cde;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 60px;
+}
+
 /* ---- start / pause overlay ---- */
 #overlay {
   position: absolute;

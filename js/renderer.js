@@ -157,6 +157,7 @@ class Renderer {
 
     // パーティクル用の動的バッファ
     this.particleBuf = gl.createBuffer();
+    this.entityBuf = gl.createBuffer();
 
     // --- テクスチャアトラス ---
     this.atlas = gl.createTexture();
@@ -378,6 +379,25 @@ class Renderer {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
       drawCalls++;
+    }
+
+    // --- エンティティ (動物モブ) ---
+    if (state.entities && state.entities.length > 0) {
+      const pp = this.progPoint;
+      gl.useProgram(pp.prog);
+      gl.disable(gl.CULL_FACE); // ボックスの面順は保証しないため両面描画
+      gl.uniformMatrix4fv(pp.uniforms.uMVP, false, this.mvp);
+      gl.uniform1f(pp.uniforms.uPointScale, 1);
+      gl.uniform1f(pp.uniforms.uLight, lerp(0.22, 1.0, env.daylight));
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.entityBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, state.entities, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(pp.attribs.aPos);
+      gl.vertexAttribPointer(pp.attribs.aPos, 3, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(pp.attribs.aCol);
+      gl.vertexAttribPointer(pp.attribs.aCol, 3, gl.FLOAT, false, 24, 12);
+      gl.drawArrays(gl.TRIANGLES, 0, state.entities.length / 6);
+      gl.enable(gl.CULL_FACE);
+      gl.useProgram(pw.prog);
     }
 
     // --- 水パス (半透明, 奥から手前へ) ---
