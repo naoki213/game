@@ -8,6 +8,9 @@ const TILE_PX = 16;
 const ATLAS_COLS = 8;
 const ATLAS_ROWS = 4;
 
+// 各タイルの平均色 [r,g,b] (0..1) — 破壊パーティクルの色に使う
+const TILE_AVG_COLORS = [];
+
 // タイル番号 → アトラス UV (半テクセル内側にずらして滲みを防ぐ)
 function tileUV(tile) {
   const tx = tile % ATLAS_COLS;
@@ -176,12 +179,61 @@ function buildTextureAtlas(seed) {
       spots(x, y) ? px(216, 175, 147, jitter(1, 0.1)) : px(127, 127, 127, jitter(1, 0.09)));
   }
 
+  // --- 草 (X 字植生, アルファ抜き) ---
+  {
+    // 列ごとの草の高さを先に決める
+    const blades = [];
+    for (let x = 0; x < 16; x++) {
+      blades[x] = rand() < 0.55 ? 4 + (rand() * 9) | 0 : 0;
+    }
+    paintTile(TILE.TALL_GRASS, (x, y) => {
+      if (blades[x] === 0 || y < 16 - blades[x]) return [0, 0, 0, 0];
+      return px(88, 160, 60, jitter(1, 0.18));
+    });
+  }
+
+  // --- タンポポ ---
+  paintTile(TILE.FLOWER_YELLOW, (x, y) => {
+    const dx = x - 7.5, dy = y - 4.5;
+    if (dx * dx + dy * dy < 5.5) return px(245, 210, 50, jitter(1, 0.08)); // 花
+    if ((x === 7 || x === 8) && y >= 7) return px(70, 140, 50, jitter(1, 0.1)); // 茎
+    if (y >= 11 && (x === 5 || x === 10) && rand() < 0.7) return px(70, 140, 50, 1); // 葉
+    return [0, 0, 0, 0];
+  });
+
+  // --- ポピー ---
+  paintTile(TILE.FLOWER_RED, (x, y) => {
+    const dx = x - 7.5, dy = y - 4;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return px(40, 30, 30, 1); // 中心
+    if (dx * dx + dy * dy < 4.5) return px(205, 40, 40, jitter(1, 0.1));
+    if ((x === 7 || x === 8) && y >= 6) return px(70, 140, 50, jitter(1, 0.1));
+    return [0, 0, 0, 0];
+  });
+
   // --- グロウストーン ---
   paintTile(TILE.GLOWSTONE, (x, y) => {
     const n = Math.sin(x * 1.3) * Math.sin(y * 1.1);
     const bright = n > 0.15 || rand() < 0.12;
     return bright ? px(255, 220, 130, jitter(1, 0.06)) : px(180, 140, 70, jitter(1, 0.1));
   });
+
+  // --- 各タイルの平均色を計算 ---
+  const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
+    const ox = (tile % ATLAS_COLS) * TILE_PX;
+    const oy = Math.floor(tile / ATLAS_COLS) * TILE_PX;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let y = 0; y < TILE_PX; y++) {
+      for (let x = 0; x < TILE_PX; x++) {
+        const i = ((oy + y) * canvas.width + ox + x) * 4;
+        if (full[i + 3] < 128) continue;
+        r += full[i]; g += full[i + 1]; b += full[i + 2]; n++;
+      }
+    }
+    TILE_AVG_COLORS[tile] = n > 0
+      ? [r / n / 255, g / n / 255, b / n / 255]
+      : [0.5, 0.5, 0.5];
+  }
 
   return canvas;
 }

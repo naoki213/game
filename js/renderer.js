@@ -93,6 +93,26 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+const POINT_VS = `
+attribute vec3 aPos;
+attribute vec3 aCol;
+uniform mat4 uMVP;
+uniform float uPointScale;
+varying vec3 vCol;
+void main() {
+  gl_Position = uMVP * vec4(aPos, 1.0);
+  gl_PointSize = clamp(uPointScale / max(gl_Position.w, 0.1), 2.0, 14.0);
+  vCol = aCol;
+}`;
+
+const POINT_FS = `
+precision mediump float;
+uniform float uLight;
+varying vec3 vCol;
+void main() {
+  gl_FragColor = vec4(vCol * uLight, 1.0);
+}`;
+
 const COLOR_VS = `
 attribute vec3 aPos;
 uniform mat4 uMVP;
@@ -122,6 +142,10 @@ class Renderer {
     this.progWorld = this.createProgram(WORLD_VS, WORLD_FS);
     this.progSky = this.createProgram(SKY_VS, SKY_FS);
     this.progColor = this.createProgram(COLOR_VS, COLOR_FS);
+    this.progPoint = this.createProgram(POINT_VS, POINT_FS);
+
+    // パーティクル用の動的バッファ
+    this.particleBuf = gl.createBuffer();
 
     // --- テクスチャアトラス ---
     this.atlas = gl.createTexture();
@@ -354,6 +378,25 @@ class Renderer {
       drawCalls++;
     }
     gl.enable(gl.CULL_FACE);
+
+    // --- 破壊パーティクル (点スプライト) ---
+    if (state.particles && state.particles.count > 0) {
+      const pp = this.progPoint;
+      gl.useProgram(pp.prog);
+      gl.disable(gl.BLEND);
+      gl.uniformMatrix4fv(pp.uniforms.uMVP, false, this.mvp);
+      gl.uniform1f(pp.uniforms.uPointScale, this.canvas.height * 0.08);
+      gl.uniform1f(pp.uniforms.uLight, lerp(0.25, 1.0, env.daylight));
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.particleBuf);
+      gl.bufferData(gl.ARRAY_BUFFER,
+        state.particles.data.subarray(0, state.particles.count * 6), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(pp.attribs.aPos);
+      gl.vertexAttribPointer(pp.attribs.aPos, 3, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(pp.attribs.aCol);
+      gl.vertexAttribPointer(pp.attribs.aCol, 3, gl.FLOAT, false, 24, 12);
+      gl.drawArrays(gl.POINTS, 0, state.particles.count);
+      gl.enable(gl.BLEND);
+    }
 
     // --- ブロックハイライト ---
     if (highlight) {

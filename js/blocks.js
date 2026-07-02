@@ -22,6 +22,9 @@ const B = {
   COAL_ORE: 14,
   IRON_ORE: 15,
   GLOWSTONE: 16,
+  TALL_GRASS: 17,
+  FLOWER_YELLOW: 18,
+  FLOWER_RED: 19,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -45,6 +48,9 @@ const TILE = {
   COAL_ORE: 16,
   IRON_ORE: 17,
   GLOWSTONE: 18,
+  TALL_GRASS: 19,
+  FLOWER_YELLOW: 20,
+  FLOWER_RED: 21,
 };
 
 // 各ブロックの属性
@@ -52,6 +58,7 @@ const TILE = {
 //   opaque: 完全不透明 (隣接面をカリングできる / AO を落とす)
 //   solid:  当たり判定あり
 //   emissive: 自己発光 (シェーディングを弱める)
+//   cross: X 字型の板ポリで描画する植生 (草花)
 const BLOCKS = [];
 
 function defBlock(id, name, jp, tiles, opts = {}) {
@@ -63,6 +70,7 @@ function defBlock(id, name, jp, tiles, opts = {}) {
     opaque: opts.opaque !== false,
     solid: opts.solid !== false,
     emissive: !!opts.emissive,
+    cross: !!opts.cross,
   };
 }
 
@@ -83,6 +91,9 @@ defBlock(B.BEDROCK, "bedrock", "岩盤", [TILE.BEDROCK, TILE.BEDROCK, TILE.BEDRO
 defBlock(B.COAL_ORE, "coal_ore", "石炭鉱石", [TILE.COAL_ORE, TILE.COAL_ORE, TILE.COAL_ORE]);
 defBlock(B.IRON_ORE, "iron_ore", "鉄鉱石", [TILE.IRON_ORE, TILE.IRON_ORE, TILE.IRON_ORE]);
 defBlock(B.GLOWSTONE, "glowstone", "グロウストーン", [TILE.GLOWSTONE, TILE.GLOWSTONE, TILE.GLOWSTONE], { emissive: true });
+defBlock(B.TALL_GRASS, "tall_grass", "草", [TILE.TALL_GRASS, TILE.TALL_GRASS, TILE.TALL_GRASS], { opaque: false, solid: false, cross: true });
+defBlock(B.FLOWER_YELLOW, "flower_yellow", "タンポポ", [TILE.FLOWER_YELLOW, TILE.FLOWER_YELLOW, TILE.FLOWER_YELLOW], { opaque: false, solid: false, cross: true });
+defBlock(B.FLOWER_RED, "flower_red", "ポピー", [TILE.FLOWER_RED, TILE.FLOWER_RED, TILE.FLOWER_RED], { opaque: false, solid: false, cross: true });
 
 // ホットバーに並ぶブロック (1–9 キー)
 const HOTBAR_BLOCKS = [

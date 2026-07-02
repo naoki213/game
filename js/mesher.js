@@ -85,6 +85,31 @@ function buildChunkMesh(world, chunk) {
         if (id === B.AIR) continue;
 
         const block = BLOCKS[id];
+
+        // --- X 字植生 (草花): 対角の板ポリ 2 枚を両面で張る ---
+        if (block.cross) {
+          const uv = tileUV(block.tiles[0]);
+          const x0 = ox + lx, z0 = oz + lz;
+          // 2 枚の対角クアッド, 各 [TL, BL, BR, TR]
+          const quads = [
+            [[x0, y + 1, z0], [x0, y, z0], [x0 + 1, y, z0 + 1], [x0 + 1, y + 1, z0 + 1]],
+            [[x0 + 1, y + 1, z0], [x0 + 1, y, z0], [x0, y, z0 + 1], [x0, y + 1, z0 + 1]],
+          ];
+          const quadUV = [[uv.u0, uv.v0], [uv.u0, uv.v1], [uv.u1, uv.v1], [uv.u1, uv.v0]];
+          for (const q of quads) {
+            const vi = opaque.count;
+            for (let ci = 0; ci < 4; ci++) {
+              opaque.verts.push(q[ci][0], q[ci][1], q[ci][2],
+                quadUV[ci][0], quadUV[ci][1], 0.95);
+            }
+            // 両面 (表裏の三角形を両方積む)
+            opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+            opaque.indices.push(vi + 2, vi + 1, vi, vi + 3, vi + 2, vi);
+            opaque.count += 4;
+          }
+          continue;
+        }
+
         const isWater = id === B.WATER;
         const target = isWater ? water : opaque;
         // 水面: 上が空気なら少し低くして水面らしく

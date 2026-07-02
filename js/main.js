@@ -125,13 +125,27 @@
         showDebug = !showDebug;
         debugEl.classList.toggle("visible", showDebug);
         break;
-      case "KeyN":
-        if (confirm("新しいワールドを生成しますか? (現在のワールドは保存されたままです)")) {
-          world.saveEdits();
-          localStorage.setItem("mcjs_seed", String((Math.random() * 0x7fffffff) | 0));
-          location.reload();
+      case "KeyN": {
+        document.exitPointerLock();
+        const input = prompt(
+          "新しいワールドのシード値を入力してください (空欄でランダム)\n" +
+          "※ 現在のワールドは保存されたままです");
+        if (input === null) break;
+        let newSeed;
+        if (input.trim() === "") {
+          newSeed = (Math.random() * 0x7fffffff) | 0;
+        } else if (/^-?\d+$/.test(input.trim())) {
+          newSeed = parseInt(input.trim(), 10) | 0;
+        } else {
+          // 文字列は簡易ハッシュでシード化
+          newSeed = 0;
+          for (const ch of input) newSeed = (Math.imul(newSeed, 31) + ch.codePointAt(0)) | 0;
         }
+        world.saveEdits();
+        localStorage.setItem("mcjs_seed", String(newSeed));
+        location.reload();
         break;
+      }
       case "Digit1": case "Digit2": case "Digit3":
       case "Digit4": case "Digit5": case "Digit6":
       case "Digit7": case "Digit8": case "Digit9":
@@ -157,6 +171,63 @@
   document.addEventListener("mouseup", (e) => heldButtons.delete(e.button));
   document.addEventListener("contextmenu", (e) => e.preventDefault());
 
+  // ---------------- 破壊パーティクル ----------------
+
+  const MAX_PARTICLES = 400;
+  const particles = [];                                  // {pos, vel, life}
+  const particleData = new Float32Array(MAX_PARTICLES * 6); // [x,y,z,r,g,b]
+
+  function spawnBreakParticles(x, y, z, blockId) {
+    const tile = BLOCKS[blockId].tiles[1];
+    const col = TILE_AVG_COLORS[tile] || [0.5, 0.5, 0.5];
+    for (let i = 0; i < 14; i++) {
+      if (particles.length >= MAX_PARTICLES) break;
+      particles.push({
+        pos: [x + 0.2 + Math.random() * 0.6, y + 0.2 + Math.random() * 0.6, z + 0.2 + Math.random() * 0.6],
+        vel: [(Math.random() - 0.5) * 4, Math.random() * 4 + 1, (Math.random() - 0.5) * 4],
+        life: 0.45 + Math.random() * 0.3,
+        col: [
+          col[0] * (0.8 + Math.random() * 0.4),
+          col[1] * (0.8 + Math.random() * 0.4),
+          col[2] * (0.8 + Math.random() * 0.4),
+        ],
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    // 物理更新と寿命切れの除去
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+      p.vel[1] -= 18 * dt;
+      const nx = p.pos[0] + p.vel[0] * dt;
+      const ny = p.pos[1] + p.vel[1] * dt;
+      const nz = p.pos[2] + p.vel[2] * dt;
+      // 地面で跳ねずに止まる
+      if (world.isSolidAt(Math.floor(nx), Math.floor(ny), Math.floor(nz))) {
+        p.vel = [0, 0, 0];
+      } else {
+        p.pos = [nx, ny, nz];
+      }
+    }
+    // 描画用バッファへ詰め直す
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      const o = i * 6;
+      particleData[o] = p.pos[0];
+      particleData[o + 1] = p.pos[1];
+      particleData[o + 2] = p.pos[2];
+      particleData[o + 3] = p.col[0];
+      particleData[o + 4] = p.col[1];
+      particleData[o + 5] = p.col[2];
+    }
+  }
+
   function doAction(button) {
     const hit = player.raycast();
     if (!hit) return;
@@ -165,6 +236,7 @@
       // 破壊
       if (hit.id === B.BEDROCK) return;
       if (world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR)) {
+        spawnBreakParticles(hit.pos[0], hit.pos[1], hit.pos[2], hit.id);
         sound.break_();
       }
     } else if (button === 2) {
@@ -280,6 +352,8 @@
   let saveTimer = 0;
   const baseFov = (70 * Math.PI) / 180;
   let fovCurrent = baseFov;
+  let bobPhase = 0;
+  let bobAmount = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -313,6 +387,16 @@
       }
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
+      updateParticles(dt);
+
+      // 歩行ボビング
+      const hSpeed = Math.hypot(player.vel[0], player.vel[2]);
+      if (player.onGround && hSpeed > 0.5) {
+        bobPhase += hSpeed * dt * 2.2;
+        bobAmount = Math.min(bobAmount + dt * 4, 1);
+      } else {
+        bobAmount = Math.max(bobAmount - dt * 4, 0);
+      }
     }
 
     streamChunks();
@@ -333,14 +417,18 @@
       return da - db;
     });
 
+    const camPos = player.eyePos();
+    camPos[1] += Math.sin(bobPhase * Math.PI * 2) * 0.055 * bobAmount;
+
     const drawCalls = renderer.render({
-      camPos: player.eyePos(),
+      camPos,
       forward: player.forward(),
       chunks: chunkList,
       env,
       fov: fovCurrent,
       highlight: hit ? hit.pos : null,
       time: elapsed,
+      particles: { data: particleData, count: particles.length },
     });
 
     waterOverlayEl.classList.toggle("active", player.eyeInWater);

@@ -184,6 +184,26 @@ class World {
       }
     }
 
+    // --- 草花の生成 (草ブロックの上, 空きセルのみ) ---
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        const wx = ox + lx, wz = oz + lz;
+        const { h, biome } = this.columnInfo(wx, wz);
+        if (biome !== "plains" && biome !== "forest") continue;
+        if (h + 1 >= CHUNK_H) continue;
+        if (chunk.get(lx, h, lz) !== B.GRASS) continue;
+        if (chunk.get(lx, h + 1, lz) !== B.AIR) continue;
+
+        const r = hash2(wx, wz, seed ^ 0x77aa11);
+        if (r < 0.09) {
+          chunk.set(lx, h + 1, lz, B.TALL_GRASS);
+        } else if (r < 0.102) {
+          chunk.set(lx, h + 1, lz,
+            hash2(wx, wz, seed ^ 0x33cc) < 0.5 ? B.FLOWER_YELLOW : B.FLOWER_RED);
+        }
+      }
+    }
+
     // --- 保存済みの編集を適用 ---
     const edits = this.edits.get(key);
     if (edits) {
@@ -248,7 +268,7 @@ class World {
   surfaceY(wx, wz) {
     for (let y = CHUNK_H - 1; y > 0; y--) {
       const id = this.getBlock(wx, y, wz);
-      if (id !== B.AIR && id !== B.WATER && id !== B.LEAVES) return y;
+      if (isSolid(id) && id !== B.LEAVES) return y;
     }
     return WATER_LEVEL;
   }
