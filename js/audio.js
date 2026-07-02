@@ -52,6 +52,44 @@ class Sound {
     this.blip(140, 0.08, "sine", 0.22);
   }
 
+  // アイテム回収音 (上昇チャイム)
+  pickup() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(520, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1040, ctx.currentTime + 0.09);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  }
+
+  // 足音 (柔らかいノイズ)
+  step() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const dur = 0.07;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = 0.8 + Math.random() * 0.4;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 500;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.1;
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+  }
+
   // ---------------- 環境 BGM (生成) ----------------
 
   // M キーでトグル。ペンタトニックの穏やかなアルペジオ

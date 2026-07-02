@@ -217,6 +217,44 @@ function buildTextureAtlas(seed) {
     return bright ? px(255, 220, 130, jitter(1, 0.06)) : px(180, 140, 70, jitter(1, 0.1));
   });
 
+  // --- 破壊ひび割れ (5 段階, 進行するほど密になる) ---
+  {
+    // ランダムウォークでひびのピクセル集合を作る (段階ごとに本数が増える)
+    const crackRand = mulberry32(seed ^ 0xc4ac4);
+    const walks = [];
+    for (let w = 0; w < 12; w++) {
+      const pixels = [];
+      let x = 2 + crackRand() * 12, y = 2 + crackRand() * 12;
+      let dx = crackRand() * 2 - 1, dy = crackRand() * 2 - 1;
+      for (let i = 0; i < 14; i++) {
+        pixels.push(((x | 0) & 15) + (((y | 0) & 15) << 4));
+        dx += (crackRand() - 0.5) * 0.9;
+        dy += (crackRand() - 0.5) * 0.9;
+        const m = Math.hypot(dx, dy) || 1;
+        x += dx / m; y += dy / m;
+        if (x < 0 || x > 15 || y < 0 || y > 15) break;
+      }
+      walks.push(pixels);
+    }
+    for (let stage = 0; stage < 5; stage++) {
+      const set = new Set();
+      const n = 3 + stage * 2;
+      for (let w = 0; w < n && w < walks.length; w++) {
+        for (const p of walks[w]) set.add(p);
+      }
+      paintTile(TILE.CRACK_0 + stage, (x, y) =>
+        set.has(x + (y << 4)) ? [15, 12, 10, 200] : [0, 0, 0, 0]);
+    }
+  }
+
+  // --- 松明 (中央の棒 + 光る先端) ---
+  paintTile(TILE.TORCH, (x, y) => {
+    if (x < 7 || x > 8) return [0, 0, 0, 0];
+    if (y >= 4 && y <= 5) return px(255, 220, 120, jitter(1, 0.05)); // 炎
+    if (y > 5 && y <= 14) return px(120, 90, 50, jitter(1, 0.1));    // 柄
+    return [0, 0, 0, 0];
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
@@ -266,8 +304,8 @@ function drawBlockIcon(canvas, blockId, atlas) {
     return [tx, ty];
   };
 
-  // X 字植生はタイルをそのまま描く
-  if (block.cross) {
+  // X 字植生 / 松明はタイルをそのまま描く
+  if (block.cross || block.torch) {
     const [tx, ty] = srcTile(block.tiles[0]);
     ctx.drawImage(atlas, tx, ty, TILE_PX, TILE_PX, s * 0.08, s * 0.08, s * 0.84, s * 0.84);
     return;

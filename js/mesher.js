@@ -141,8 +141,9 @@ function computeLight(world, chunk) {
   // --- 発光ブロック ---
   const blkQueue = [];
   for (let i = 0; i < L_CELLS; i++) {
-    if (EMISSIVE_LUT[lightBlocks[i]]) {
-      lightBlk[i] = 15;
+    const lv = LIGHT_LUT[lightBlocks[i]];
+    if (lv > 0) {
+      lightBlk[i] = lv;
       blkQueue.push(i);
     }
   }
@@ -232,6 +233,37 @@ function buildChunkMesh(world, chunk) {
         if (id === B.AIR) continue;
 
         const block = BLOCKS[id];
+
+        // --- 松明: 中央の細い棒 (4 側面 + 上面) ---
+        if (block.torch) {
+          const uv = tileUV(block.tiles[0]);
+          const uA = lerp(uv.u0, uv.u1, 7 / 16), uB = lerp(uv.u0, uv.u1, 9 / 16);
+          const vA = lerp(uv.v0, uv.v1, 4 / 16), vB = lerp(uv.v0, uv.v1, 14 / 16);
+          const x0 = ox + lx + 7 / 16, x1 = ox + lx + 9 / 16;
+          const z0 = oz + lz + 7 / 16, z1 = oz + lz + 9 / 16;
+          const y0 = y, y1 = y + 10 / 16;
+          // [TL, BL, BR, TR] × 4 側面 + 上面
+          const quads = [
+            { c: [[x1, y1, z1], [x1, y0, z1], [x1, y0, z0], [x1, y1, z0]], uv: [uA, vA, uB, vB] },
+            { c: [[x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1]], uv: [uA, vA, uB, vB] },
+            { c: [[x0, y1, z1], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1]], uv: [uA, vA, uB, vB] },
+            { c: [[x1, y1, z0], [x1, y0, z0], [x0, y0, z0], [x0, y1, z0]], uv: [uA, vA, uB, vB] },
+            { c: [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]],
+              uv: [uA, lerp(uv.v0, uv.v1, 4 / 16), uB, lerp(uv.v0, uv.v1, 6 / 16)] },
+          ];
+          for (const q of quads) {
+            const vi = opaque.count;
+            const [qu0, qv0, qu1, qv1] = q.uv;
+            const uvs = [[qu0, qv0], [qu0, qv1], [qu1, qv1], [qu1, qv0]];
+            for (let ci = 0; ci < 4; ci++) {
+              opaque.verts.push(q.c[ci][0], q.c[ci][1], q.c[ci][2],
+                uvs[ci][0], uvs[ci][1], 1.0, 1.0, 1.0);
+            }
+            opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+            opaque.count += 4;
+          }
+          continue;
+        }
 
         // --- X 字植生 (草花): 対角の板ポリ 2 枚を両面で張る ---
         if (block.cross) {

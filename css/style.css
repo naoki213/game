@@ -85,6 +85,16 @@ html, body {
   text-shadow: 1px 1px 0 #000;
 }
 
+.slot .count {
+  position: absolute;
+  bottom: 1px;
+  right: 3px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+
 .slot .name {
   position: absolute;
   bottom: -20px;
@@ -131,6 +141,26 @@ html, body {
 
 .bubble { color: #9fd6ff; }
 .bubble.empty { opacity: 0.15; }
+
+/* ---- toast ---- */
+#toast {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 20px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 15px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 4;
+}
+
+#toast.show { opacity: 1; }
 
 /* ---- hurt flash ---- */
 #hurt-overlay {

@@ -203,6 +203,8 @@ class Renderer {
 
     // 手持ちブロックのメッシュキャッシュ (blockId -> {vbo, ibo, count})
     this.heldMeshes = new Map();
+    // ひび割れ段階ごとのメッシュキャッシュ
+    this.crackMeshes = new Map();
 
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
@@ -387,6 +389,16 @@ class Renderer {
       drawCalls++;
     }
 
+    // --- 破壊ひび割れ (対象ブロックに重ねる) ---
+    if (state.crack) {
+      this.drawCrack(state.crack.pos, state.crack.stage);
+    }
+
+    // --- アイテムドロップ (回転するミニブロック) ---
+    if (state.items && state.items.length > 0) {
+      this.drawItemDrops(state.items, camPos, time);
+    }
+
     // --- エンティティ (動物モブ) ---
     if (state.entities && state.entities.length > 0) {
       const pp = this.progPoint;
@@ -465,6 +477,99 @@ class Renderer {
     return drawCalls;
   }
 
+  // ---------------- 破壊ひび割れ ----------------
+
+  getCrackMesh(stage) {
+    let mesh = this.crackMeshes.get(stage);
+    if (mesh) return mesh;
+
+    const gl = this.gl;
+    const uv = tileUV(TILE.CRACK_0 + stage);
+    const verts = [];
+    const indices = [];
+    let count = 0;
+    const e = 0.004; // Z ファイティング防止に少し膨らませる
+    for (const face of FACES) {
+      for (let ci = 0; ci < 4; ci++) {
+        const c = face.corners[ci];
+        verts.push(
+          c[0] === 1 ? 1 + e : -e,
+          c[1] === 1 ? 1 + e : -e,
+          c[2] === 1 ? 1 + e : -e,
+          lerp(uv.u0, uv.u1, face.uvs[ci][0]),
+          lerp(uv.v0, uv.v1, face.uvs[ci][1]),
+          1.0, 1.0, 1.0
+        );
+      }
+      indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
+      count += 4;
+    }
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+    const ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(indices), gl.STATIC_DRAW);
+    mesh = { vbo, ibo, count: indices.length };
+    this.crackMeshes.set(stage, mesh);
+    return mesh;
+  }
+
+  drawCrack(pos, stage) {
+    const gl = this.gl;
+    const pw = this.progWorld;
+    const mesh = this.getCrackMesh(clamp(stage, 0, 4));
+
+    gl.useProgram(pw.prog);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+
+    const T = Mat4.translation(this.tmpA, pos[0], pos[1], pos[2]);
+    Mat4.multiply(this.tmpB, this.mvp, T);
+    gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.tmpB);
+    gl.uniform1f(pw.uniforms.uAlpha, 0.95); // 1 未満にして discard を避けブレンドする
+
+    this.bindWorldAttribs(mesh.vbo);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
+    gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    // uMVP / uAlpha を戻す
+    gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.mvp);
+    gl.uniform1f(pw.uniforms.uAlpha, 1.0);
+  }
+
+  // ---------------- アイテムドロップ ----------------
+
+  drawItemDrops(items, camPos, time) {
+    const gl = this.gl;
+    const pw = this.progWorld;
+    gl.useProgram(pw.prog);
+    gl.disable(gl.CULL_FACE); // 植生アイテムの両面用
+
+    for (const it of items) {
+      const dx = it.pos[0] - camPos[0], dz = it.pos[2] - camPos[2];
+      if (dx * dx + dz * dz > 48 * 48) continue;
+      const mesh = this.getHeldMesh(it.id);
+      const bobY = Math.sin(time * 2.2 + it.phase) * 0.05 + 0.18;
+      const T = Mat4.translation(this.tmpA, it.pos[0], it.pos[1] + bobY, it.pos[2]);
+      Mat4.multiply(this.tmpB, this.mvp, T);
+      const Ry = Mat4.rotationY(this.tmpA, time * 1.4 + it.phase);
+      Mat4.multiply(this.tmpC, this.tmpB, Ry);
+      const S = Mat4.scaling(this.tmpA, 0.28);
+      Mat4.multiply(this.tmpB, this.tmpC, S);
+      gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.tmpB);
+      this.bindWorldAttribs(mesh.vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
+      gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+    }
+
+    gl.enable(gl.CULL_FACE);
+    gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.mvp);
+  }
+
   // ---------------- 手持ちブロック ----------------
 
   getHeldMesh(blockId) {
@@ -477,8 +582,8 @@ class Renderer {
     const indices = [];
     let count = 0;
 
-    if (block.cross) {
-      // X 字植生: 2 枚の対角クアッド (原点中心)
+    if (block.cross || block.torch) {
+      // X 字植生 / 松明: 2 枚の対角クアッド (原点中心)
       const uv = tileUV(block.tiles[0]);
       const quads = [
         [[-0.5, 0.5, -0.5], [-0.5, -0.5, -0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5]],
@@ -549,7 +654,8 @@ class Renderer {
 
     gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.tmpC);
     gl.uniform3f(pw.uniforms.uCamPos, 0, 0, 0);             // フォグ無効化 (距離 ~0)
-    gl.uniform1f(pw.uniforms.uDaylight, env.daylight);
+    // 手持ちは夜でも見えるよう最低輝度を確保
+    gl.uniform1f(pw.uniforms.uDaylight, Math.max(env.daylight, 0.45));
     gl.uniform1f(pw.uniforms.uAlpha, 1.0);
 
     this.bindWorldAttribs(mesh.vbo);

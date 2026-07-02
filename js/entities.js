@@ -275,6 +275,83 @@ class MobManager {
   }
 }
 
+// ---------------- アイテムドロップ ----------------
+
+class ItemManager {
+  constructor(world) {
+    this.world = world;
+    this.items = [];   // {id, pos, vel, phase, age}
+  }
+
+  spawn(blockId, x, y, z) {
+    if (this.items.length > 120) this.items.shift();
+    this.items.push({
+      id: blockId,
+      pos: [x + 0.5, y + 0.3, z + 0.5],
+      vel: [(Math.random() - 0.5) * 2.2, 2.5 + Math.random() * 1.5, (Math.random() - 0.5) * 2.2],
+      phase: Math.random() * Math.PI * 2,
+      age: 0,
+    });
+  }
+
+  // onPickup(blockId) — プレイヤーが拾ったときに呼ばれる
+  update(dt, player, onPickup) {
+    const world = this.world;
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      it.age += dt;
+      if (it.age > 240) { this.items.splice(i, 1); continue; }
+
+      // --- プレイヤーへの吸い寄せと回収 ---
+      const px = player.pos[0] - it.pos[0];
+      const py = (player.pos[1] + 0.4) - it.pos[1];
+      const pz = player.pos[2] - it.pos[2];
+      const d2h = px * px + pz * pz;              // 水平距離
+      const d2 = d2h + py * py;
+      if (it.age > 0.5) {
+        // 回収は水平距離ベース (アイテムは地面に転がっているため)
+        if (d2h < 0.9 * 0.9 && py > -1.2 && py < 2.0) {
+          this.items.splice(i, 1);
+          onPickup(it.id);
+          continue;
+        }
+        if (d2 < 2.5 * 2.5) {
+          const d = Math.sqrt(d2) || 1;
+          const pull = 22;                        // 重力に勝てる強さ
+          it.vel[0] += (px / d) * pull * dt;
+          it.vel[1] += (py / d) * pull * dt;
+          it.vel[2] += (pz / d) * pull * dt;
+        }
+      }
+
+      // --- 物理 (簡易: 軸ごとに判定して止める) ---
+      it.vel[1] -= 16 * dt;
+      it.vel[1] = Math.max(it.vel[1], -20);
+      // 水に浮く
+      if (world.getBlock(Math.floor(it.pos[0]), Math.floor(it.pos[1]), Math.floor(it.pos[2])) === B.WATER) {
+        it.vel[1] = Math.min(it.vel[1] + 40 * dt, 1.2);
+        it.vel[0] *= 0.95; it.vel[2] *= 0.95;
+      }
+      for (let a = 0; a < 3; a++) {
+        const next = it.pos[a] + it.vel[a] * dt;
+        const test = [it.pos[0], it.pos[1], it.pos[2]];
+        test[a] = next + (a === 1 ? -0.05 : 0);
+        if (world.isSolidAt(Math.floor(test[0]), Math.floor(test[1]), Math.floor(test[2]))) {
+          if (a === 1 && it.vel[1] < 0) {
+            // 着地: 摩擦で滑りを止める
+            it.vel[0] *= 0.6;
+            it.vel[2] *= 0.6;
+          }
+          it.vel[a] = 0;
+        } else {
+          it.pos[a] = next;
+        }
+      }
+      if (it.pos[1] < -10) this.items.splice(i, 1);
+    }
+  }
+}
+
 // ボックスをエンティティのヨーで回転させて三角形 36 頂点を積む
 function pushBox(verts, pos, sin, cos, ox, oy, oz, w, h, d, r, g, b) {
   // ローカル 8 頂点

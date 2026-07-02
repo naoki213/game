@@ -23,6 +23,40 @@
   const player = new Player(world);
   const sound = new Sound();
   const mobs = new MobManager(world);
+  const items = new ItemManager(world);
+
+  // ---------------- ゲームモード (クリエイティブ / サバイバル) ----------------
+
+  let gameMode = localStorage.getItem("mcjs_mode") === "survival" ? "survival" : "creative";
+  player.creative = gameMode === "creative";
+
+  // サバイバルの所持ブロック数
+  const invCounts = new Map();
+  let invDirty = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem("mcjs_inv_" + seed));
+    if (Array.isArray(saved)) {
+      for (const [id, n] of saved) {
+        if (BLOCKS[id] && n > 0) invCounts.set(id, n);
+      }
+    }
+  } catch (e) { /* 壊れたデータは無視 */ }
+
+  function addItem(id, n = 1) {
+    invCounts.set(id, (invCounts.get(id) || 0) + n);
+    invDirty = true;
+    updateHotbarCounts();
+  }
+
+  function consumeItem(id) {
+    if (gameMode === "creative") return true;
+    const c = invCounts.get(id) || 0;
+    if (c <= 0) return false;
+    invCounts.set(id, c - 1);
+    invDirty = true;
+    updateHotbarCounts();
+    return true;
+  }
 
   // スポーン地点周辺を先に同期生成してからスポーン
   for (let cz = -1; cz <= 1; cz++) {
@@ -59,10 +93,28 @@
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = BLOCKS[blockId].jp;
-    slot.append(icon, key, name);
+    const count = document.createElement("span");
+    count.className = "count";
+    slot.append(icon, key, name, count);
     hotbarEl.appendChild(slot);
     slotEls.push(slot);
   });
+
+  // サバイバルでは所持数を表示し, 持っていないブロックは薄くする
+  function updateHotbarCounts() {
+    for (let i = 0; i < HOTBAR_BLOCKS.length; i++) {
+      const countEl = slotEls[i].querySelector(".count");
+      const iconEl = slotEls[i].querySelector("canvas");
+      if (gameMode === "creative") {
+        countEl.textContent = "";
+        iconEl.style.opacity = "1";
+      } else {
+        const c = invCounts.get(HOTBAR_BLOCKS[i]) || 0;
+        countEl.textContent = c > 0 ? String(c) : "";
+        iconEl.style.opacity = c > 0 ? "1" : "0.35";
+      }
+    }
+  }
 
   function selectSlot(i) {
     selectedSlot = ((i % HOTBAR_BLOCKS.length) + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length;
@@ -99,6 +151,35 @@
 
   let lastHealth = -1, lastAir = -1;
   let deathTimer = 0;
+
+  // --- モード切替とトースト表示 ---
+  const statusBarsEl = document.getElementById("status-bars");
+  const toastEl = document.getElementById("toast");
+  let toastTimer = null;
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+  }
+
+  function applyModeUI() {
+    // クリエイティブでは体力 / 酸素を表示しない (本家準拠)
+    statusBarsEl.style.visibility = gameMode === "creative" ? "hidden" : "visible";
+    updateHotbarCounts();
+  }
+
+  function setMode(m) {
+    gameMode = m;
+    localStorage.setItem("mcjs_mode", m);
+    player.creative = m === "creative";
+    if (m === "survival") player.flying = false;
+    applyModeUI();
+    showToast(m === "survival" ? "サバイバルモード (G で切替)" : "クリエイティブモード (G で切替)");
+  }
+
+  applyModeUI();
 
   function updateSurvivalUI(dt) {
     if (player.health !== lastHealth) {
@@ -155,6 +236,7 @@
       drawBlockIcon(slotEls[selectedSlot].querySelector("canvas"), block.id, atlas);
       slotEls[selectedSlot].querySelector(".name").textContent = block.jp;
       localStorage.setItem("mcjs_hotbar", JSON.stringify(HOTBAR_BLOCKS));
+      updateHotbarCounts();
       closeInventory();
     });
     inventoryGrid.appendChild(item);
@@ -255,7 +337,7 @@
     switch (e.code) {
       case "Space": {
         const now = performance.now();
-        if (now - lastSpaceTime < 280) {
+        if (now - lastSpaceTime < 280 && gameMode === "creative") {
           player.flying = !player.flying;
           player.vel[1] = 0;
         }
@@ -263,8 +345,15 @@
         break;
       }
       case "KeyF":
+        if (gameMode !== "creative") {
+          showToast("飛行はクリエイティブモード限定です");
+          break;
+        }
         player.flying = !player.flying;
         player.vel[1] = 0;
+        break;
+      case "KeyG":
+        setMode(gameMode === "survival" ? "creative" : "survival");
         break;
       case "F3":
         showDebug = !showDebug;
@@ -309,8 +398,18 @@
   canvas.addEventListener("mousedown", (e) => {
     if (paused) return;
     heldButtons.add(e.button);
-    doAction(e.button);
-    actionCooldown = ACTION_REPEAT;
+    if (e.button === 0) {
+      swingTimer = 0;
+      if (tryPunch()) return;
+      if (gameMode === "creative") {
+        const hit = player.raycast();
+        if (hit) breakBlockAt(hit);
+        actionCooldown = ACTION_REPEAT;
+      }
+    } else if (e.button === 2) {
+      placeAction();
+      actionCooldown = ACTION_REPEAT;
+    }
   });
 
   document.addEventListener("mouseup", (e) => heldButtons.delete(e.button));
@@ -373,37 +472,120 @@
     }
   }
 
-  function doAction(button) {
-    swingTimer = 0; // 手持ちブロックを振る
+  // モブが視線上にいれば叩く。叩いたら true
+  function tryPunch() {
     const hit = player.raycast();
-    if (!hit && button !== 0) return;
+    const fwd = player.forward();
+    const mob = mobs.pick(player.eyePos(), fwd, hit ? hit.t : REACH);
+    if (mob) {
+      mobs.punch(mob, fwd);
+      sound.thud();
+      return true;
+    }
+    return false;
+  }
 
+  // ブロックを実際に破壊する (ドロップ・上に乗った植生の処理込み)
+  function breakBlockAt(hit) {
+    const block = BLOCKS[hit.id];
+    if (!isFinite(block.hardness)) return;
+    if (!world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR)) return;
+    spawnBreakParticles(hit.pos[0], hit.pos[1], hit.pos[2], hit.id);
+    sound.break_();
+    if (gameMode === "survival" && block.drops !== null && block.drops !== B.AIR) {
+      items.spawn(block.drops, hit.pos[0], hit.pos[1], hit.pos[2]);
+    }
+    // 上に乗っていた植生 / 松明も壊す
+    const [bx, by, bz] = hit.pos;
+    const above = world.getBlock(bx, by + 1, bz);
+    const ab = BLOCKS[above];
+    if (above !== B.AIR && (ab.cross || ab.torch)) {
+      world.setBlock(bx, by + 1, bz, B.AIR);
+      if (gameMode === "survival" && ab.drops !== null) items.spawn(ab.drops, bx, by + 1, bz);
+    }
+  }
+
+  // 右クリック / タップでの設置
+  function placeAction() {
+    swingTimer = 0;
+    const hit = player.raycast();
+    if (!hit) return;
+    const [px, py, pz] = hit.prev;
+    const cur = world.getBlock(px, py, pz);
+    if (cur !== B.AIR && cur !== B.WATER) return;
+    const id = HOTBAR_BLOCKS[selectedSlot];
+    if (isSolid(id) && player.intersectsBlock(px, py, pz)) return;
+    // 松明と植生は下が固体ブロックのときだけ置ける
+    if ((BLOCKS[id].torch || BLOCKS[id].cross) && !world.isSolidAt(px, py - 1, pz)) return;
+    if (!consumeItem(id)) return;
+    if (world.setBlock(px, py, pz, id)) {
+      sound.place();
+    } else if (gameMode === "survival") {
+      addItem(id); // 失敗したら返却
+    }
+  }
+
+  // 旧 API 互換 (テスト / デバッグフック用): 即時破壊 / 設置
+  function doAction(button) {
+    swingTimer = 0;
     if (button === 0) {
-      // モブが手前にいれば叩く
-      const fwd = player.forward();
-      const mob = mobs.pick(player.eyePos(), fwd, hit ? hit.t : REACH);
-      if (mob) {
-        mobs.punch(mob, fwd);
-        sound.thud();
-        return;
-      }
-      if (!hit) return;
-      // 破壊
-      if (hit.id === B.BEDROCK) return;
-      if (world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR)) {
-        spawnBreakParticles(hit.pos[0], hit.pos[1], hit.pos[2], hit.id);
-        sound.break_();
-      }
+      if (tryPunch()) return;
+      const hit = player.raycast();
+      if (hit) breakBlockAt(hit);
     } else if (button === 2) {
-      // 設置
-      const [px, py, pz] = hit.prev;
-      const cur = world.getBlock(px, py, pz);
-      if (cur !== B.AIR && cur !== B.WATER) return;
-      const id = HOTBAR_BLOCKS[selectedSlot];
-      if (isSolid(id) && player.intersectsBlock(px, py, pz)) return;
-      if (world.setBlock(px, py, pz, id)) {
-        sound.place();
+      placeAction();
+    }
+  }
+
+  // ---------------- 採掘 (サバイバルは長押しで掘る) ----------------
+
+  let breakTargetKey = null;
+  let breakTargetPos = null;
+  let breakProgress = 0;
+  let touchHoldBreak = false;   // タッチの長押しフラグ
+
+  function updateBreaking(dt) {
+    const breaking = heldButtons.has(0) || touchHoldBreak;
+    if (!breaking) {
+      breakTargetKey = null;
+      breakProgress = 0;
+      return;
+    }
+    const hit = player.raycast();
+    if (!hit) {
+      breakTargetKey = null;
+      breakProgress = 0;
+      return;
+    }
+
+    if (gameMode === "creative") {
+      // クリエイティブ: 一定間隔で即時破壊
+      actionCooldown -= dt;
+      if (actionCooldown <= 0) {
+        swingTimer = 0;
+        breakBlockAt(hit);
+        actionCooldown = ACTION_REPEAT;
       }
+      return;
+    }
+
+    // サバイバル: 硬さに応じて掘り進める
+    const key = hit.pos.join(",");
+    if (key !== breakTargetKey) {
+      breakTargetKey = key;
+      breakTargetPos = hit.pos;
+      breakProgress = 0;
+    }
+    const hard = BLOCKS[hit.id].hardness;
+    if (!isFinite(hard)) {
+      breakProgress = 0;
+      return;
+    }
+    breakProgress += dt / hard;
+    if (breakProgress >= 1) {
+      breakBlockAt(hit);
+      breakTargetKey = null;
+      breakProgress = 0;
     }
   }
 
@@ -433,6 +615,10 @@
     btnDown.addEventListener("touchend", () => { virt.sneak = false; });
     btnFly.addEventListener("touchstart", (e) => {
       e.preventDefault();
+      if (gameMode !== "creative") {
+        showToast("飛行はクリエイティブモード限定です");
+        return;
+      }
       player.flying = !player.flying;
       player.vel[1] = 0;
       btnDown.classList.toggle("hidden", !player.flying);
@@ -489,14 +675,13 @@
     let tapStart = 0;
     let movedDist = 0;
     let breakDelay = null;
-    let breakRepeat = null;
     let breaking = false;
 
     const stopBreaking = () => {
       clearTimeout(breakDelay);
-      clearInterval(breakRepeat);
-      breakDelay = breakRepeat = null;
+      breakDelay = null;
       breaking = false;
+      touchHoldBreak = false;
     };
 
     canvas.addEventListener("touchstart", (e) => {
@@ -508,11 +693,11 @@
       lookLast = [t.clientX, t.clientY];
       tapStart = performance.now();
       movedDist = 0;
-      // 長押しで破壊開始
+      // 長押しで破壊開始 (サバイバルは掘り続ける)
       breakDelay = setTimeout(() => {
         breaking = true;
-        doAction(0);
-        breakRepeat = setInterval(() => doAction(0), 280);
+        touchHoldBreak = true;
+        actionCooldown = 0;
       }, 420);
     }, { passive: false });
 
@@ -535,9 +720,9 @@
     const endLook = (e) => {
       for (const t of e.changedTouches) {
         if (t.identifier !== lookId) continue;
-        // 短いタップ (ドラッグ・長押しでない) は設置
+        // 短いタップ (ドラッグ・長押しでない) はモブ攻撃 → 設置
         if (movedDist <= 14 && !breaking && performance.now() - tapStart < 350) {
-          doAction(2);
+          if (!tryPunch()) placeAction();
         }
         stopBreaking();
         lookId = null;
@@ -654,6 +839,7 @@
   let bobAmount = 0;
   let swingTimer = 1;      // 1 = スイング終了
   let pendingShot = false;
+  let stepAccum = 0;
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -676,26 +862,41 @@
       const sub = dt / steps;
       for (let i = 0; i < steps; i++) player.update(sub, input);
 
-      // 長押しで連続破壊/設置
-      if (heldButtons.size > 0) {
+      // 採掘 (長押しで掘る / クリエイティブは連続破壊)
+      updateBreaking(dt);
+
+      // 右クリック長押しで連続設置
+      if (heldButtons.has(2) && !heldButtons.has(0)) {
         actionCooldown -= dt;
         if (actionCooldown <= 0) {
-          if (heldButtons.has(0)) doAction(0);
-          else if (heldButtons.has(2)) doAction(2);
+          placeAction();
           actionCooldown = ACTION_REPEAT;
         }
       }
+
+      // アイテムドロップの回収
+      items.update(dt, player, (id) => {
+        addItem(id);
+        sound.pickup();
+      });
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
       updateParticles(dt);
       mobs.update(dt, player.pos);
       updateSurvivalUI(dt);
 
-      // 歩行ボビング
+      // 歩行ボビングと足音
       const hSpeed = Math.hypot(player.vel[0], player.vel[2]);
       if (player.onGround && hSpeed > 0.5) {
         bobPhase += hSpeed * dt * 2.2;
         bobAmount = Math.min(bobAmount + dt * 4, 1);
+        if (!player.inWater) {
+          stepAccum += hSpeed * dt;
+          if (stepAccum > 2.8) {
+            stepAccum = 0;
+            sound.step();
+          }
+        }
       } else {
         bobAmount = Math.max(bobAmount - dt * 4, 0);
       }
@@ -732,7 +933,15 @@
       time: elapsed,
       particles: { data: particleData, count: particles.length },
       entities: mobs.buildVertexData(),
-      held: { id: HOTBAR_BLOCKS[selectedSlot], swing: swingTimer },
+      items: items.items,
+      crack: (gameMode === "survival" && breakProgress > 0.02 && breakTargetPos)
+        ? { pos: breakTargetPos, stage: Math.min(4, (breakProgress * 5) | 0) }
+        : null,
+      held: {
+        id: HOTBAR_BLOCKS[selectedSlot],
+        // サバイバルで掘っている間は連続スイング
+        swing: (gameMode === "survival" && breakTargetKey) ? (elapsed * 3) % 1 : swingTimer,
+      },
     });
 
     swingTimer = Math.min(swingTimer + dt * 4.5, 1);
@@ -780,6 +989,12 @@
     if (saveTimer > 4) {
       saveTimer = 0;
       world.saveEdits();
+      if (invDirty) {
+        invDirty = false;
+        try {
+          localStorage.setItem("mcjs_inv_" + seed, JSON.stringify([...invCounts]));
+        } catch (e) { /* 容量超過などは無視 */ }
+      }
     }
   }
 
@@ -788,6 +1003,10 @@
     player,
     world,
     mobs,
+    items,
+    inv: invCounts,
+    get mode() { return gameMode; },
+    setMode,
     seed,
     selectSlot,
     setTime: (t) => { timeOfDay = ((t % 1) + 1) % 1; },

@@ -28,6 +28,7 @@ class Player {
     this.eyeInWater = false;
 
     // サバイバル要素
+    this.creative = true;      // クリエイティブ中はダメージ無効
     this.maxHealth = 20;
     this.health = 20;
     this.maxAir = 10;          // 秒
@@ -42,7 +43,7 @@ class Player {
   }
 
   takeDamage(n) {
-    if (this.dead || n <= 0) return;
+    if (this.creative || this.dead || n <= 0) return;
     this.health = Math.max(0, this.health - n);
     this.hurtFlash = 0.45;
     this.lastDamageTime = this.time;
@@ -127,7 +128,7 @@ class Player {
     this.landImpact = 0;
 
     // --- 酸素と溺れ ---
-    if (this.eyeInWater && !this.flying) {
+    if (this.eyeInWater && !this.flying && !this.creative) {
       this.air = Math.max(0, this.air - dt);
       if (this.air <= 0) {
         this.drownTimer += dt;
