@@ -252,15 +252,22 @@ class World {
     edits.set(blockIndex(lx, wy, lz), id);
     this.editsDirty = true;
 
-    // チャンク境界なら隣も再メッシュ
+    // ライトはチャンク境界を越えて 8 ブロックまで影響するため,
+    // 境界近くの編集は隣接チャンクも再メッシュする
     const markDirty = (ncx, ncz) => {
       const c = this.chunks.get(World.key(ncx, ncz));
       if (c) c.dirty = true;
     };
-    if (lx === 0) markDirty(cx - 1, cz);
-    if (lx === 15) markDirty(cx + 1, cz);
-    if (lz === 0) markDirty(cx, cz - 1);
-    if (lz === 15) markDirty(cx, cz + 1);
+    const west = lx < 8, east = lx >= 8;
+    const north = lz < 8, south = lz >= 8;
+    if (west) markDirty(cx - 1, cz);
+    if (east) markDirty(cx + 1, cz);
+    if (north) markDirty(cx, cz - 1);
+    if (south) markDirty(cx, cz + 1);
+    if (west && north) markDirty(cx - 1, cz - 1);
+    if (west && south) markDirty(cx - 1, cz + 1);
+    if (east && north) markDirty(cx + 1, cz - 1);
+    if (east && south) markDirty(cx + 1, cz + 1);
     return true;
   }
 

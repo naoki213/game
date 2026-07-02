@@ -258,9 +258,10 @@
     const pcx = Math.floor(player.pos[0]) >> 4;
     const pcz = Math.floor(player.pos[2]) >> 4;
 
-    // 必要チャンクを距離順に集める (データ生成は描画半径 +1)
+    // 必要チャンクを距離順に集める
+    // (ライト計算に斜め隣接チャンクも必要なため, データ生成は描画半径 +2)
     const wanted = [];
-    const genDist = RENDER_DIST + 1;
+    const genDist = RENDER_DIST + 2;
     for (let dz = -genDist; dz <= genDist; dz++) {
       for (let dx = -genDist; dx <= genDist; dx++) {
         const d2 = dx * dx + dz * dz;
@@ -289,11 +290,13 @@
       if (d2 > rd2) continue;
       const chunk = world.getChunk(cx, cz);
       if (!chunk || !chunk.generated || !chunk.dirty) continue;
-      const nbOk =
-        world.getChunk(cx + 1, cz)?.generated &&
-        world.getChunk(cx - 1, cz)?.generated &&
-        world.getChunk(cx, cz + 1)?.generated &&
-        world.getChunk(cx, cz - 1)?.generated;
+      // ライト計算のため周囲 8 チャンクすべての生成が必要
+      let nbOk = true;
+      for (let dz = -1; dz <= 1 && nbOk; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!world.getChunk(cx + dx, cz + dz)?.generated) { nbOk = false; break; }
+        }
+      }
       if (!nbOk) continue;
       renderer.uploadChunkMesh(chunk, buildChunkMesh(world, chunk));
       chunk.dirty = false;

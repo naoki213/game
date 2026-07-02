@@ -4,18 +4,28 @@
 "use strict";
 
 const WORLD_VS = `
+precision mediump float;
 attribute vec3 aPos;
 attribute vec2 aUV;
-attribute float aLight;
+attribute float aShade;
+attribute float aSky;
+attribute float aBlock;
 uniform mat4 uMVP;
 uniform vec3 uCamPos;
+uniform float uDaylight;
 varying vec2 vUV;
 varying float vLight;
+varying float vWarm;
 varying float vDist;
 void main() {
   gl_Position = uMVP * vec4(aPos, 1.0);
   vUV = aUV;
-  vLight = aLight;
+  // スカイライトは昼夜で変動, ブロックライトは常に一定
+  float sky = aSky * mix(0.13, 1.0, uDaylight);
+  float br = max(max(sky, aBlock), 0.045);
+  vLight = aShade * br;
+  // ブロックライト優勢の場所は暖色にする
+  vWarm = clamp(aBlock - sky, 0.0, 1.0);
   vDist = distance(aPos.xz, uCamPos.xz);
 }`;
 
@@ -29,14 +39,15 @@ uniform float uDaylight;
 uniform float uAlpha;
 varying vec2 vUV;
 varying float vLight;
+varying float vWarm;
 varying float vDist;
 void main() {
   vec4 tex = texture2D(uTex, vUV);
   if (uAlpha >= 1.0 && tex.a < 0.5) discard;
-  float day = mix(0.22, 1.0, uDaylight);
-  // 夜はわずかに青みがかる
+  // 夜はわずかに青みがかり, 発光ブロックの近くは暖色になる
   vec3 nightTint = mix(vec3(0.85, 0.9, 1.15), vec3(1.0), uDaylight);
-  vec3 col = tex.rgb * vLight * day * nightTint;
+  vec3 tint = mix(nightTint, vec3(1.12, 1.0, 0.82), vWarm);
+  vec3 col = tex.rgb * vLight * tint;
   float fog = clamp((vDist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
   col = mix(col, uFogColor, fog * fog);
   gl_FragColor = vec4(col, tex.a * uAlpha);
@@ -300,13 +311,18 @@ class Renderer {
   bindWorldAttribs(vbo) {
     const gl = this.gl;
     const a = this.progWorld.attribs;
+    const stride = 32; // 8 floats: pos3 + uv2 + shade + sky + block
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.enableVertexAttribArray(a.aPos);
-    gl.vertexAttribPointer(a.aPos, 3, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribPointer(a.aPos, 3, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(a.aUV);
-    gl.vertexAttribPointer(a.aUV, 2, gl.FLOAT, false, 24, 12);
-    gl.enableVertexAttribArray(a.aLight);
-    gl.vertexAttribPointer(a.aLight, 1, gl.FLOAT, false, 24, 20);
+    gl.vertexAttribPointer(a.aUV, 2, gl.FLOAT, false, stride, 12);
+    gl.enableVertexAttribArray(a.aShade);
+    gl.vertexAttribPointer(a.aShade, 1, gl.FLOAT, false, stride, 20);
+    gl.enableVertexAttribArray(a.aSky);
+    gl.vertexAttribPointer(a.aSky, 1, gl.FLOAT, false, stride, 24);
+    gl.enableVertexAttribArray(a.aBlock);
+    gl.vertexAttribPointer(a.aBlock, 1, gl.FLOAT, false, stride, 28);
   }
 
   // メインの描画

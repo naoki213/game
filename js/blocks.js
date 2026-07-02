@@ -103,3 +103,12 @@ const HOTBAR_BLOCKS = [
 
 function isOpaque(id) { return BLOCKS[id].opaque; }
 function isSolid(id) { return BLOCKS[id].solid; }
+
+// 高速参照用 LUT (ライト計算のホットループで使う)
+const OPAQUE_LUT = new Uint8Array(256);
+const EMISSIVE_LUT = new Uint8Array(256);
+for (const b of BLOCKS) {
+  if (!b) continue;
+  OPAQUE_LUT[b.id] = b.opaque ? 1 : 0;
+  EMISSIVE_LUT[b.id] = b.emissive ? 1 : 0;
+}
