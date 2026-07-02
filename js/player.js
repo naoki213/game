@@ -40,6 +40,22 @@ class Player {
     this.regenTimer = 0;
     this.drownTimer = 0;
     this.landImpact = 0;       // 着地時の速度
+    this.sneaking = false;
+  }
+
+  // 足元 (AABB 直下) に支えがあるか
+  hasSupport() {
+    const y = Math.floor(this.pos[1] - 0.05);
+    const x0 = Math.floor(this.pos[0] - PLAYER_HALF_W);
+    const x1 = Math.floor(this.pos[0] + PLAYER_HALF_W - 1e-7);
+    const z0 = Math.floor(this.pos[2] - PLAYER_HALF_W);
+    const z1 = Math.floor(this.pos[2] + PLAYER_HALF_W - 1e-7);
+    for (let z = z0; z <= z1; z++) {
+      for (let x = x0; x <= x1; x++) {
+        if (this.world.isSolidAt(x, y, z)) return true;
+      }
+    }
+    return false;
   }
 
   takeDamage(n) {
@@ -57,7 +73,9 @@ class Player {
   }
 
   eyePos() {
-    return [this.pos[0], this.pos[1] + EYE_HEIGHT, this.pos[2]];
+    // スニーク中は視点が少し下がる
+    const eye = this.sneaking ? EYE_HEIGHT - 0.15 : EYE_HEIGHT;
+    return [this.pos[0], this.pos[1] + eye, this.pos[2]];
   }
 
   forward() {
@@ -93,6 +111,10 @@ class Player {
     if (this.flying) speed = input.sprint ? FLY_SPEED * 2 : FLY_SPEED;
     else if (this.inWater) speed = SWIM_SPEED;
 
+    // スニーク: 減速 + 端から落ちない
+    this.sneaking = input.sneak && !this.flying && !this.inWater;
+    if (this.sneaking) speed *= 0.35;
+
     // 水平速度は即応 (地上) / 少し慣性 (空中)
     const accel = this.onGround || this.flying ? 20 : 6;
     this.vel[0] = lerp(this.vel[0], dx * speed, Math.min(accel * dt, 1));
@@ -116,9 +138,17 @@ class Player {
     }
 
     // --- 軸ごとの衝突解決 ---
+    const sneakGuard = this.sneaking && this.onGround;
     this.onGround = false;
-    this.moveAxis(0, this.vel[0] * dt);
-    this.moveAxis(2, this.vel[2] * dt);
+    for (const axis of [0, 2]) {
+      const old = this.pos[axis];
+      this.moveAxis(axis, this.vel[axis] * dt);
+      // スニーク中は足場から踏み出さない (本家準拠)
+      if (sneakGuard && !this.hasSupport()) {
+        this.pos[axis] = old;
+        this.vel[axis] = 0;
+      }
+    }
     this.moveAxis(1, this.vel[1] * dt);
 
     // --- 落下ダメージ ---
