@@ -225,12 +225,15 @@
     if (!block || block.id === B.AIR || block.id === B.WATER || block.id === B.BEDROCK) continue;
     const item = document.createElement("div");
     item.className = "inv-item";
+    item.dataset.blockId = String(block.id);
     const icon = document.createElement("canvas");
     icon.width = icon.height = 48;
     drawBlockIcon(icon, block.id, atlas);
     const label = document.createElement("span");
     label.textContent = block.jp;
-    item.append(icon, label);
+    const badge = document.createElement("span");
+    badge.className = "count";
+    item.append(icon, label, badge);
     item.addEventListener("click", () => {
       HOTBAR_BLOCKS[selectedSlot] = block.id;
       drawBlockIcon(slotEls[selectedSlot].querySelector("canvas"), block.id, atlas);
@@ -242,9 +245,87 @@
     inventoryGrid.appendChild(item);
   }
 
+  // ---------------- クラフト (サバイバル) ----------------
+
+  const RECIPES = [
+    { out: B.PLANK, outN: 4, in: [[B.LOG, 1]] },
+    { out: B.TORCH, outN: 4, in: [[B.PLANK, 2]] },
+    { out: B.TORCH, outN: 8, in: [[B.COAL_ORE, 1], [B.PLANK, 1]] },
+    { out: B.GLASS, outN: 2, in: [[B.SAND, 2]] },
+    { out: B.STONE, outN: 2, in: [[B.COBBLE, 2]] },
+    { out: B.BRICK, outN: 2, in: [[B.STONE, 2]] },
+    { out: B.GLOWSTONE, outN: 1, in: [[B.TORCH, 4], [B.GLASS, 1]] },
+  ];
+
+  const craftSectionEl = document.getElementById("craft-section");
+  const craftListEl = document.getElementById("craft-list");
+  const craftRows = [];
+
+  for (const recipe of RECIPES) {
+    const row = document.createElement("div");
+    row.className = "craft-row";
+    const icon = document.createElement("canvas");
+    icon.width = icon.height = 40;
+    drawBlockIcon(icon, recipe.out, atlas);
+    const desc = document.createElement("span");
+    desc.className = "craft-desc";
+    const btn = document.createElement("button");
+    btn.textContent = "作成";
+    btn.addEventListener("click", () => {
+      if (!canCraft(recipe)) return;
+      for (const [id, n] of recipe.in) {
+        invCounts.set(id, (invCounts.get(id) || 0) - n);
+      }
+      invDirty = true;
+      addItem(recipe.out, recipe.outN);
+      sound.pickup();
+      refreshCraftUI();
+      refreshInventoryCounts();
+    });
+    row.append(icon, desc, btn);
+    craftListEl.appendChild(row);
+    craftRows.push({ recipe, desc, btn });
+  }
+
+  function canCraft(recipe) {
+    return recipe.in.every(([id, n]) => (invCounts.get(id) || 0) >= n);
+  }
+
+  function refreshCraftUI() {
+    for (const { recipe, desc, btn } of craftRows) {
+      const parts = recipe.in.map(([id, n]) => {
+        const have = invCounts.get(id) || 0;
+        const cls = have >= n ? "" : ' class="lack"';
+        return `<span${cls}>${BLOCKS[id].jp} ×${n} (所持 ${have})</span>`;
+      });
+      desc.innerHTML = `${BLOCKS[recipe.out].jp} ×${recipe.outN} ← ` + parts.join(" + ");
+      btn.disabled = !canCraft(recipe);
+    }
+  }
+
+  // インベントリのブロック一覧にも所持数を表示 (サバイバル)
+  function refreshInventoryCounts() {
+    const els = inventoryGrid.querySelectorAll(".inv-item");
+    els.forEach((el) => {
+      const id = parseInt(el.dataset.blockId, 10);
+      const badge = el.querySelector(".count");
+      if (gameMode === "creative") {
+        badge.textContent = "";
+        el.style.opacity = "1";
+      } else {
+        const c = invCounts.get(id) || 0;
+        badge.textContent = c > 0 ? String(c) : "";
+        el.style.opacity = c > 0 ? "1" : "0.45";
+      }
+    });
+  }
+
   function openInventory() {
     inventoryOpen = true;
     inventoryEl.classList.remove("hidden");
+    craftSectionEl.classList.toggle("hidden", gameMode !== "survival");
+    refreshCraftUI();
+    refreshInventoryCounts();
     document.exitPointerLock();
   }
 

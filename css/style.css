@@ -328,6 +328,7 @@ html, body {
 }
 
 .inv-item {
+  position: relative;
   width: 64px;
   height: 64px;
   border: 2px solid rgba(255, 255, 255, 0.2);
@@ -360,6 +361,16 @@ html, body {
   max-width: 60px;
 }
 
+.inv-item .count {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+
 /* ---- 小さい画面向け ---- */
 @media (max-width: 760px) {
   .slot { width: 40px; height: 40px; }
@@ -369,6 +380,64 @@ html, body {
   #overlay-inner h1 { font-size: 32px; }
   .controls { display: none; }  /* タッチでは操作表を隠す */
   #inventory-grid { grid-template-columns: repeat(4, 56px); }
+}
+
+/* ---- crafting ---- */
+#craft-section {
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 12px;
+}
+
+#craft-section.hidden { display: none; }
+
+#craft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.craft-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.craft-row canvas {
+  width: 30px;
+  height: 30px;
+  image-rendering: pixelated;
+}
+
+.craft-row .craft-desc {
+  flex: 1;
+  font-size: 13px;
+  color: #cde;
+}
+
+.craft-row .craft-desc .lack { color: #e77; }
+
+.craft-row button {
+  padding: 5px 16px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  background: linear-gradient(#6abe4d, #3f8f2c);
+  border: 1px solid #2a6b1e;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.craft-row button:disabled {
+  background: #444;
+  border-color: #333;
+  color: #888;
+  cursor: default;
 }
 
 /* ---- start / pause overlay ---- */
