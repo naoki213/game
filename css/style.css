@@ -737,6 +737,20 @@ body.touch .controls { display: none; }
 
 #mode-btn:hover { background: rgba(255, 255, 255, 0.18); }
 
+#newworld-btn {
+  margin-top: 14px;
+  margin-left: 10px;
+  font-size: 14px;
+  padding: 8px 22px;
+  cursor: pointer;
+  color: #dfe8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+}
+
+#newworld-btn:hover { background: rgba(255, 255, 255, 0.18); }
+
 .controls {
   margin: 24px auto 0;
   display: inline-block;

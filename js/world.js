@@ -4,8 +4,8 @@
 "use strict";
 
 const CHUNK_SIZE = 16;    // X/Z 方向
-const CHUNK_H = 64;       // Y 方向 (ワールドの高さ)
-const WATER_LEVEL = 27;   // 海面
+const CHUNK_H = 128;      // Y 方向 (ワールドの高さ) — 高い山と深い海のため 2 倍に拡張
+const WATER_LEVEL = 46;   // 海面
 const VILLAGE_GRID = 320; // 村の配置グリッド (ブロック)
 
 // チャンク内インデックス: idx = (y << 8) | (z << 4) | x
@@ -68,21 +68,31 @@ class World {
     const cont = n.fbm2(x * 0.0025 + 300, z * 0.0025 - 300, 3);
     // 細かい起伏
     const base = n.fbm2(x * 0.008, z * 0.008, 4);
-    // 山岳 (リッジノイズ): 尾根が立ち上がる。海上では抑える
+    // 山岳 (リッジノイズ 2 種を重ねて複雑な尾根にする): 海上では抑える
     let ridge = 1 - Math.abs(n.noise2(x * 0.004 + 100, z * 0.004 - 100));
     ridge = Math.pow(Math.max(0, ridge - 0.55) / 0.45, 2);
-    ridge *= smoothstep(-0.15, 0.2, cont);
+    ridge *= smoothstep(-0.1, 0.2, cont);
+    let ridge2 = 1 - Math.abs(n.noise2(x * 0.0095 - 200, z * 0.0095 + 200));
+    ridge2 = Math.pow(Math.max(0, ridge2 - 0.62) / 0.38, 2);
+    ridge2 *= smoothstep(0.05, 0.3, cont);
 
-    let h = 29 + cont * 19 + base * 5 + ridge * 24;
-    if (h > 50) h = 50 + (h - 50) * 0.4; // 高山をなだらかに
-    h = Math.round(clamp(h, 4, CHUNK_H - 8));
+    let h = WATER_LEVEL - 3 + cont * 34 + base * 7 + ridge * 46 + ridge2 * 20;
+    // 深海: 大陸ノイズが強く負のところはさらに掘り下げて深い海溝にする
+    if (cont < -0.2) {
+      const t = Math.min(1, (-cont - 0.2) / 0.55);
+      h -= t * t * 28;
+    }
+    // 最高峰をなだらかにして極端になりすぎないようにする
+    const peak = WATER_LEVEL + 62;
+    if (h > peak) h = peak + (h - peak) * 0.35;
+    h = Math.round(clamp(h, 6, CHUNK_H - 14));
 
     // バイオーム: 湿度と温度
     const moist = this.noiseBiome.fbm2(x * 0.0035, z * 0.0035, 2);
     const temp = this.noiseBiome.fbm2(x * 0.003 + 500, z * 0.003 + 500, 2);
 
     let biome;
-    if (h >= 46 || temp < -0.42) biome = "snow";
+    if (h >= WATER_LEVEL + 34 || temp < -0.42) biome = "snow";
     else if (moist < -0.32 && h <= WATER_LEVEL + 6) biome = "desert";
     else if (moist > 0.12) biome = "forest";
     else biome = "plains";
@@ -95,15 +105,18 @@ class World {
 
   isCave(x, y, z, surfaceH) {
     if (y <= 2 || y > surfaceH - 4) return false;
-    // 塊状の洞窟
+    // 塊状の洞窟 (閾値を下げて量を増やした)
     const c = this.noiseCave.noise3(x * 0.085, y * 0.11, z * 0.085);
-    if (c > 0.58) return true;
-    // スパゲッティ洞窟 (2 つのノイズの零面が交差する細長いトンネル)
+    if (c > 0.54) return true;
+    // スパゲッティ洞窟 (2 つのノイズの零面が交差する細長いトンネル。太く/繋がりやすくした)
     const a = this.noiseCave.noise3(x * 0.045, y * 0.07, z * 0.045);
     const b = this.noiseCave2.noise3(x * 0.045 + 77, y * 0.07 + 77, z * 0.045 + 77);
-    if (Math.abs(a) < 0.075 && Math.abs(b) < 0.075) return true;
-    // 深層の大空洞
-    if (y < 26 && this.noiseCave2.noise3(x * 0.02, y * 0.045, z * 0.02) > 0.5) return true;
+    if (Math.abs(a) < 0.085 && Math.abs(b) < 0.085) return true;
+    // 深層の大空洞 (ワールドが高くなった分, 対象レンジを拡張)
+    if (y < 52 && this.noiseCave2.noise3(x * 0.02, y * 0.045, z * 0.02) > 0.46) return true;
+    // 中層の広間 (新規レイヤー: 洞窟の総量を増やす)
+    if (y > 30 && y < surfaceH - 10 &&
+        this.noiseCave.noise3(x * 0.03 + 500, y * 0.06 + 500, z * 0.03 + 500) > 0.62) return true;
     return false;
   }
 
@@ -145,11 +158,11 @@ class World {
             id = B.STONE;
             // 鉱石 (深いほど貴重な鉱石が出る)
             const r = hash3(wx, y, wz, seed);
-            if (y < 42 && r < 0.014) id = B.COAL_ORE;
-            else if (y < 26 && r >= 0.014 && r < 0.021) id = B.IRON_ORE;
-            else if (y < 18 && r >= 0.021 && r < 0.0242) id = B.GOLD_ORE;
-            else if (y < 13 && r >= 0.0242 && r < 0.0262) id = B.DIAMOND_ORE;
-            else if (y < 7 && r >= 0.027 && r < 0.0285) id = B.OBSIDIAN; // 最深部の黒曜石
+            if (y < 84 && r < 0.014) id = B.COAL_ORE;
+            else if (y < 52 && r >= 0.014 && r < 0.021) id = B.IRON_ORE;
+            else if (y < 36 && r >= 0.021 && r < 0.0242) id = B.GOLD_ORE;
+            else if (y < 26 && r >= 0.0242 && r < 0.0262) id = B.DIAMOND_ORE;
+            else if (y < 14 && r >= 0.027 && r < 0.0285) id = B.OBSIDIAN; // 最深部の黒曜石
             else if (r >= 0.03 && r < 0.037) id = B.GRAVEL; // 砂利ポケット
           }
           chunk.set(lx, y, lz, id);
@@ -255,7 +268,7 @@ class World {
       const cz = gz * G + 80 + Math.floor(hash2(gx, gz, this.seed ^ 0x2222) * (G - 160));
       const center = this.columnInfo(cx, cz);
       // 平地にしか村はできない
-      if (center.h > WATER_LEVEL + 1 && center.h < 44) {
+      if (center.h > WATER_LEVEL + 1 && center.h < WATER_LEVEL + 20) {
         const buildings = [{ type: "well", x: cx - 1, z: cz - 1, w: 3, d: 3 }];
         const n = 4 + Math.floor(hash2(gx, gz, this.seed ^ 0x3333) * 3);
         for (let i = 0; i < n; i++) {
@@ -266,7 +279,7 @@ class World {
           const bx = Math.round(cx + Math.cos(ang) * dist) - (w >> 1);
           const bz = Math.round(cz + Math.sin(ang) * dist) - (d >> 1);
           const bh = this.columnInfo(bx + (w >> 1), bz + (d >> 1)).h;
-          if (bh <= WATER_LEVEL || bh > 44) continue;
+          if (bh <= WATER_LEVEL || bh > WATER_LEVEL + 20) continue;
           buildings.push({ type: "house", x: bx, z: bz, w, d, door: i % 4 });
         }
         village = { cx, cz, buildings };
@@ -381,7 +394,7 @@ class World {
 
   townY() {
     if (this._townY == null) {
-      this._townY = clamp(this.columnInfo(56, 8).h, 30, 42);
+      this._townY = clamp(this.columnInfo(56, 8).h, WATER_LEVEL + 2, WATER_LEVEL + 16);
     }
     return this._townY;
   }

@@ -268,6 +268,29 @@
   }
   applyModeUI();
 
+  // 新しいワールドの生成 (N キー / ポーズ画面のボタン, スマホでも使えるように)
+  function startNewWorldFlow() {
+    document.exitPointerLock();
+    const input = prompt(
+      "新しいワールドのシード値を入力してください (空欄でランダム)\n" +
+      "※ 現在のワールドは保存されたままです");
+    if (input === null) return;
+    let newSeed;
+    if (input.trim() === "") {
+      newSeed = (Math.random() * 0x7fffffff) | 0;
+    } else if (/^-?\d+$/.test(input.trim())) {
+      newSeed = parseInt(input.trim(), 10) | 0;
+    } else {
+      // 文字列は簡易ハッシュでシード化
+      newSeed = 0;
+      for (const ch of input) newSeed = (Math.imul(newSeed, 31) + ch.codePointAt(0)) | 0;
+    }
+    world.saveEdits();
+    localStorage.setItem("mcjs_seed", String(newSeed));
+    location.reload();
+  }
+  document.getElementById("newworld-btn").addEventListener("click", startNewWorldFlow);
+
   function updateSurvivalUI(dt) {
     if (player.health !== lastHealth) {
       lastHealth = player.health;
@@ -780,27 +803,9 @@
         showDebug = !showDebug;
         debugEl.classList.toggle("visible", showDebug);
         break;
-      case "KeyN": {
-        document.exitPointerLock();
-        const input = prompt(
-          "新しいワールドのシード値を入力してください (空欄でランダム)\n" +
-          "※ 現在のワールドは保存されたままです");
-        if (input === null) break;
-        let newSeed;
-        if (input.trim() === "") {
-          newSeed = (Math.random() * 0x7fffffff) | 0;
-        } else if (/^-?\d+$/.test(input.trim())) {
-          newSeed = parseInt(input.trim(), 10) | 0;
-        } else {
-          // 文字列は簡易ハッシュでシード化
-          newSeed = 0;
-          for (const ch of input) newSeed = (Math.imul(newSeed, 31) + ch.codePointAt(0)) | 0;
-        }
-        world.saveEdits();
-        localStorage.setItem("mcjs_seed", String(newSeed));
-        location.reload();
+      case "KeyN":
+        startNewWorldFlow();
         break;
-      }
       case "Digit1": case "Digit2": case "Digit3":
       case "Digit4": case "Digit5": case "Digit6":
       case "Digit7": case "Digit8": case "Digit9":
