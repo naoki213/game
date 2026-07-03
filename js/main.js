@@ -375,7 +375,28 @@
     { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
     { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
     { out: B.GLOWSTONE, outN: 1, in: [[B.TORCH, 4], [B.GLASS, 1]] },
+    // 石材バリエーション
+    { out: B.SMOOTH_STONE, outN: 1, in: [[B.STONE, 1]] },
+    { out: B.CRACKED_STONE_BRICK, outN: 1, in: [[B.STONE_BRICK, 1]] },
+    { out: B.CHISELED_STONE_BRICK, outN: 2, in: [[B.STONE_BRICK, 2]] },
+    { out: B.GRANITE, outN: 2, in: [[B.STONE, 1], [B.SAND, 1]] },
+    { out: B.DIORITE, outN: 2, in: [[B.STONE, 1], [B.GRAVEL, 1]] },
+    { out: B.ANDESITE, outN: 2, in: [[B.COBBLE, 1], [B.GRAVEL, 1]] },
+    { out: B.QUARTZ, outN: 1, in: [[B.SANDSTONE, 2]] },
+    { out: B.DARK_BRICK, outN: 2, in: [[B.BRICK, 2]] },
+    // 木材バリエーション
+    { out: B.BIRCH_PLANK, outN: 1, in: [[B.PLANK, 1]] },
+    { out: B.DARK_PLANK, outN: 1, in: [[B.PLANK, 1]] },
+    // ハーフブロック
+    { out: B.STONE_BRICK_SLAB, outN: 4, in: [[B.STONE_BRICK, 2]] },
+    { out: B.BRICK_SLAB, outN: 4, in: [[B.BRICK, 2]] },
+    { out: B.SANDSTONE_SLAB, outN: 4, in: [[B.SANDSTONE, 2]] },
   ];
+
+  // 色付き羊毛: 羊毛 1 → 各色 1
+  WOOL_COLORS.forEach((_, i) => {
+    RECIPES.push({ out: WOOL_ID_BASE + i, outN: 1, in: [[B.WOOL, 1]] });
+  });
 
   const craftSectionEl = document.getElementById("craft-section");
   const craftListEl = document.getElementById("craft-list");

@@ -47,7 +47,39 @@ const B = {
   PUMPKIN: 39,
   OBSIDIAN: 40,
   SANDSTONE: 41,
+  // 42-53 は色付き羊毛 (WOOL_COLORS から自動割当)
+  SMOOTH_STONE: 54,
+  CRACKED_STONE_BRICK: 55,
+  CHISELED_STONE_BRICK: 56,
+  GRANITE: 57,
+  DIORITE: 58,
+  ANDESITE: 59,
+  QUARTZ: 60,
+  DARK_BRICK: 61,
+  BIRCH_PLANK: 62,
+  DARK_PLANK: 63,
+  STONE_BRICK_SLAB: 64,
+  BRICK_SLAB: 65,
+  SANDSTONE_SLAB: 66,
 };
+
+// 色付き羊毛 (建築の彩り用)
+const WOOL_ID_BASE = 42;
+const WOOL_TILE_BASE = 68;
+const WOOL_COLORS = [
+  ["red", "赤の羊毛", [190, 55, 50]],
+  ["orange", "橙の羊毛", [235, 140, 40]],
+  ["yellow", "黄の羊毛", [235, 205, 60]],
+  ["lime", "黄緑の羊毛", [140, 200, 60]],
+  ["green", "緑の羊毛", [75, 130, 55]],
+  ["lightblue", "空色の羊毛", [120, 180, 230]],
+  ["blue", "青の羊毛", [60, 80, 180]],
+  ["purple", "紫の羊毛", [140, 70, 180]],
+  ["pink", "桃色の羊毛", [235, 150, 180]],
+  ["gray", "灰色の羊毛", [110, 110, 115]],
+  ["black", "黒の羊毛", [40, 40, 45]],
+  ["brown", "茶色の羊毛", [115, 75, 50]],
+];
 
 // 道具・素材アイテム (ID 100 以降はブロックではなく設置不可)
 const I = {
@@ -141,6 +173,17 @@ const TILE = {
   PUMPKIN_TOP: 65,
   OBSIDIAN: 66,
   SANDSTONE: 67,
+  // 68-79 は色付き羊毛
+  SMOOTH_STONE: 80,
+  CRACKED_STONE_BRICK: 81,
+  CHISELED_STONE_BRICK: 82,
+  GRANITE: 83,
+  DIORITE: 84,
+  ANDESITE: 85,
+  QUARTZ: 86,
+  DARK_BRICK: 87,
+  BIRCH_PLANK: 88,
+  DARK_PLANK: 89,
 };
 
 // 各ブロックの属性
@@ -241,6 +284,48 @@ defBlock(B.OBSIDIAN, "obsidian", "黒曜石", [TILE.OBSIDIAN, TILE.OBSIDIAN, TIL
   { hardness: 12, pickable: true, minTier: 4 });
 defBlock(B.SANDSTONE, "sandstone", "砂岩", [TILE.SANDSTONE, TILE.SANDSTONE, TILE.SANDSTONE],
   { hardness: 1.5, pickable: true, minTier: 1 });
+
+// --- 色付き羊毛 12 色 ---
+WOOL_COLORS.forEach(([name, jp], i) => {
+  const t = WOOL_TILE_BASE + i;
+  defBlock(WOOL_ID_BASE + i, "wool_" + name, jp, [t, t, t], { hardness: 0.8 });
+});
+
+// --- 石材バリエーション ---
+const stoneOpts = { hardness: 1.8, pickable: true, minTier: 1 };
+defBlock(B.SMOOTH_STONE, "smooth_stone", "磨かれた石",
+  [TILE.SMOOTH_STONE, TILE.SMOOTH_STONE, TILE.SMOOTH_STONE], stoneOpts);
+defBlock(B.CRACKED_STONE_BRICK, "cracked_stone_brick", "ひび割れた石レンガ",
+  [TILE.CRACKED_STONE_BRICK, TILE.CRACKED_STONE_BRICK, TILE.CRACKED_STONE_BRICK], stoneOpts);
+defBlock(B.CHISELED_STONE_BRICK, "chiseled_stone_brick", "模様入り石レンガ",
+  [TILE.CHISELED_STONE_BRICK, TILE.CHISELED_STONE_BRICK, TILE.CHISELED_STONE_BRICK], stoneOpts);
+defBlock(B.GRANITE, "granite", "花崗岩",
+  [TILE.GRANITE, TILE.GRANITE, TILE.GRANITE], stoneOpts);
+defBlock(B.DIORITE, "diorite", "閃緑岩",
+  [TILE.DIORITE, TILE.DIORITE, TILE.DIORITE], stoneOpts);
+defBlock(B.ANDESITE, "andesite", "安山岩",
+  [TILE.ANDESITE, TILE.ANDESITE, TILE.ANDESITE], stoneOpts);
+defBlock(B.QUARTZ, "quartz", "クォーツブロック",
+  [TILE.QUARTZ, TILE.QUARTZ, TILE.QUARTZ], stoneOpts);
+defBlock(B.DARK_BRICK, "dark_brick", "黒レンガ",
+  [TILE.DARK_BRICK, TILE.DARK_BRICK, TILE.DARK_BRICK], stoneOpts);
+
+// --- 木材バリエーション ---
+defBlock(B.BIRCH_PLANK, "birch_plank", "白樺の木材",
+  [TILE.BIRCH_PLANK, TILE.BIRCH_PLANK, TILE.BIRCH_PLANK], { hardness: 1.2 });
+defBlock(B.DARK_PLANK, "dark_plank", "ダークオークの木材",
+  [TILE.DARK_PLANK, TILE.DARK_PLANK, TILE.DARK_PLANK], { hardness: 1.2 });
+
+// --- ハーフブロック追加 ---
+defBlock(B.STONE_BRICK_SLAB, "stone_brick_slab", "石レンガハーフ",
+  [TILE.STONE_BRICK, TILE.STONE_BRICK, TILE.STONE_BRICK],
+  { hardness: 1.6, pickable: true, minTier: 1, opaque: false, height: 0.5 });
+defBlock(B.BRICK_SLAB, "brick_slab", "レンガハーフ",
+  [TILE.BRICK, TILE.BRICK, TILE.BRICK],
+  { hardness: 1.6, pickable: true, minTier: 1, opaque: false, height: 0.5 });
+defBlock(B.SANDSTONE_SLAB, "sandstone_slab", "砂岩ハーフ",
+  [TILE.SANDSTONE, TILE.SANDSTONE, TILE.SANDSTONE],
+  { hardness: 1.4, pickable: true, minTier: 1, opaque: false, height: 0.5 });
 defBlock(B.GOLD_ORE, "gold_ore", "金鉱石", [TILE.GOLD_ORE, TILE.GOLD_ORE, TILE.GOLD_ORE],
   { hardness: 2.6, pickable: true, minTier: 3 });
 defBlock(B.DIAMOND_ORE, "diamond_ore", "ダイヤモンド鉱石", [TILE.DIAMOND_ORE, TILE.DIAMOND_ORE, TILE.DIAMOND_ORE],

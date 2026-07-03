@@ -500,12 +500,75 @@ function buildTextureAtlas(seed) {
     return px(215, 200, 150, jitter(band, 0.05));
   });
 
-  // --- 羊毛 (もこもこの白) ---
-  paintTile(TILE.WOOL, (x, y) => {
+  // --- 羊毛 (白 + 12 色) ---
+  const woolPainter = (r, g, b) => (x, y) => {
     const swirl = Math.sin(x * 1.9 + y * 0.7) * Math.sin(y * 1.7 - x * 0.5);
     const v = 0.93 + swirl * 0.05 + (rand() * 2 - 1) * 0.03;
-    return px(238, 234, 228, v);
+    return px(r, g, b, v);
+  };
+  paintTile(TILE.WOOL, woolPainter(238, 234, 228));
+  WOOL_COLORS.forEach(([, , c], i) => {
+    paintTile(WOOL_TILE_BASE + i, woolPainter(c[0], c[1], c[2]));
   });
+
+  // --- 石材バリエーション ---
+  paintTile(TILE.SMOOTH_STONE, (x, y) => {
+    const border = y === 15 ? 0.85 : 1;
+    return px(160, 160, 162, jitter(border, 0.03));
+  });
+  paintTile(TILE.CRACKED_STONE_BRICK, (x, y) => {
+    const row = Math.floor(y / 8);
+    const mortar = y % 8 === 7 || (x + (row % 2) * 4) % 8 === 7;
+    // ひび
+    const crack = Math.abs((x * 13 + y * 7) % 16 - y) <= 0 && x > 2 && x < 14;
+    if (crack) return px(70, 70, 72, 1);
+    if (mortar) return px(90, 90, 92, jitter(1, 0.05));
+    return px(125, 125, 127, jitter(1, 0.08));
+  });
+  paintTile(TILE.CHISELED_STONE_BRICK, (x, y) => {
+    const outer = x === 0 || y === 0 || x === 15 || y === 15;
+    const ring = (x === 3 || x === 12 || y === 3 || y === 12) &&
+      x >= 3 && x <= 12 && y >= 3 && y <= 12;
+    if (outer) return px(95, 95, 97, jitter(1, 0.04));
+    if (ring) return px(105, 105, 108, jitter(1, 0.04));
+    return px(140, 140, 142, jitter(1, 0.05));
+  });
+  paintTile(TILE.GRANITE, () => {
+    const v = rand();
+    if (v < 0.2) return px(120, 75, 60, jitter(1, 0.1));
+    if (v < 0.35) return px(200, 165, 140, jitter(1, 0.08));
+    return px(170, 115, 95, jitter(1, 0.09));
+  });
+  paintTile(TILE.DIORITE, () => {
+    const v = rand();
+    if (v < 0.25) return px(120, 120, 125, jitter(1, 0.1));
+    return px(215, 215, 218, jitter(1, 0.06));
+  });
+  paintTile(TILE.ANDESITE, () => {
+    const v = rand();
+    if (v < 0.25) return px(110, 112, 108, jitter(1, 0.08));
+    return px(150, 152, 148, jitter(1, 0.06));
+  });
+  paintTile(TILE.QUARTZ, (x, y) => {
+    const vein = (x * 3 + y) % 11 === 0 ? 0.94 : 1;
+    return px(236, 232, 226, jitter(vein, 0.03));
+  });
+  paintTile(TILE.DARK_BRICK, (x, y) => {
+    const row = Math.floor(y / 4);
+    const mortarY = y % 4 === 3;
+    const mortarX = (x + (row % 2) * 4) % 8 === 7;
+    if (mortarY || mortarX) return px(45, 30, 35, jitter(1, 0.08));
+    return px(75, 40, 45, jitter(1, 0.1));
+  });
+
+  // --- 木材バリエーション ---
+  const plankPainter = (r, g, b) => (x, y) => {
+    const plankEdge = (y % 4 === 3) ? 0.72 : 1;
+    const nail = (y % 4 === 1 && (x === 0 || x === 8)) ? 0.8 : 1;
+    return px(r, g, b, jitter(plankEdge * nail, 0.05));
+  };
+  paintTile(TILE.BIRCH_PLANK, plankPainter(215, 200, 160));
+  paintTile(TILE.DARK_PLANK, plankPainter(95, 70, 45));
 
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
