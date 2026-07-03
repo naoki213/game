@@ -37,6 +37,9 @@ const B = {
   BED: 29,
   STONE_SLAB: 30,
   PLANK_SLAB: 31,
+  WHEAT_0: 32,   // 小麦の成長段階
+  WHEAT_1: 33,
+  WHEAT_2: 34,
 };
 
 // 道具・素材アイテム (ID 100 以降はブロックではなく設置不可)
@@ -56,6 +59,9 @@ const I = {
   PORK: 112,
   BEEF: 113,
   CHICKEN_MEAT: 114,
+  SEEDS: 115,
+  WHEAT: 116,
+  BREAD: 117,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -114,6 +120,12 @@ const TILE = {
   CHEST_SIDE: 51,
   CHEST_TOP: 52,
   BED_TOP: 53,
+  WHEAT_0: 54,
+  WHEAT_1: 55,
+  WHEAT_2: 56,
+  SEEDS: 57,
+  WHEAT_ITEM: 58,
+  BREAD: 59,
 };
 
 // 各ブロックの属性
@@ -194,6 +206,12 @@ defBlock(B.STONE_SLAB, "stone_slab", "石ハーフブロック", [TILE.STONE, TI
   { hardness: 1.4, pickable: true, minTier: 1, opaque: false, height: 0.5 });
 defBlock(B.PLANK_SLAB, "plank_slab", "木材ハーフブロック", [TILE.PLANK, TILE.PLANK, TILE.PLANK],
   { hardness: 1.0, opaque: false, height: 0.5 });
+defBlock(B.WHEAT_0, "wheat_0", "小麦 (芽)", [TILE.WHEAT_0, TILE.WHEAT_0, TILE.WHEAT_0],
+  { opaque: false, solid: false, cross: true, hardness: 0.05, drops: null });
+defBlock(B.WHEAT_1, "wheat_1", "小麦 (成長中)", [TILE.WHEAT_1, TILE.WHEAT_1, TILE.WHEAT_1],
+  { opaque: false, solid: false, cross: true, hardness: 0.05, drops: null });
+defBlock(B.WHEAT_2, "wheat_2", "小麦 (実り)", [TILE.WHEAT_2, TILE.WHEAT_2, TILE.WHEAT_2],
+  { opaque: false, solid: false, cross: true, hardness: 0.05, drops: null });
 defBlock(B.GOLD_ORE, "gold_ore", "金鉱石", [TILE.GOLD_ORE, TILE.GOLD_ORE, TILE.GOLD_ORE],
   { hardness: 2.6, pickable: true, minTier: 3 });
 defBlock(B.DIAMOND_ORE, "diamond_ore", "ダイヤモンド鉱石", [TILE.DIAMOND_ORE, TILE.DIAMOND_ORE, TILE.DIAMOND_ORE],
@@ -236,6 +254,10 @@ defItem(I.DIAMOND, "diamond", "ダイヤモンド", TILE.GEM_DIAMOND);
 defItem(I.PORK, "pork", "豚肉", TILE.PORK, null, 8);
 defItem(I.BEEF, "beef", "牛肉", TILE.BEEF, null, 8);
 defItem(I.CHICKEN_MEAT, "chicken_meat", "鶏肉", TILE.CHICKEN_MEAT, null, 6);
+defItem(I.SEEDS, "seeds", "小麦の種", TILE.SEEDS);
+ITEMS[I.SEEDS].seeds = true;   // 土 / 草の上に植えられる
+defItem(I.WHEAT, "wheat", "小麦", TILE.WHEAT_ITEM);
+defItem(I.BREAD, "bread", "パン", TILE.BREAD, null, 10);
 
 // ブロック / アイテムを問わず定義を引く
 function getDef(id) {

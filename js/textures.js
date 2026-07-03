@@ -397,6 +397,48 @@ function buildTextureAtlas(seed) {
     return px(200, 45, 45, jitter(1, 0.06));                 // 毛布
   });
 
+  // --- 小麦 (3 段階) ---
+  {
+    const stalks = [];
+    for (let x = 0; x < 16; x++) stalks[x] = (x % 3 === 1) && crackIsh(x);
+    function crackIsh(x) { return (x * 7 + 3) % 5 !== 0; }
+    const wheatTile = (height, col, headCol) => (x, y) => {
+      if (!stalks[x]) return [0, 0, 0, 0];
+      const top = 15 - height;
+      if (y < top) return [0, 0, 0, 0];
+      // 穂 (最終段階のみ)
+      if (headCol && y <= top + 3) return px(headCol[0], headCol[1], headCol[2], jitter(1, 0.08));
+      return px(col[0], col[1], col[2], jitter(1, 0.12));
+    };
+    paintTile(TILE.WHEAT_0, wheatTile(4, [95, 165, 70], null));
+    paintTile(TILE.WHEAT_1, wheatTile(9, [110, 160, 60], null));
+    paintTile(TILE.WHEAT_2, wheatTile(13, [180, 160, 70], [215, 185, 90]));
+  }
+
+  // --- 小麦の種 / 小麦 / パン ---
+  paintTile(TILE.SEEDS, (x, y) => {
+    const spots = [[5, 8], [8, 6], [10, 9], [7, 10], [9, 11], [6, 6]];
+    for (const [sx, sy] of spots) {
+      if (Math.abs(x - sx) <= 0 && Math.abs(y - sy) <= 1) return px(120, 180, 90, 1);
+    }
+    return [0, 0, 0, 0];
+  });
+  paintTile(TILE.WHEAT_ITEM, (x, y) => {
+    if (x >= 6 && x <= 9 && y >= 2 && y <= 13) {
+      const head = y <= 6;
+      return px(head ? 220 : 190, head ? 190 : 165, head ? 95 : 75, jitter(1, 0.08));
+    }
+    return [0, 0, 0, 0];
+  });
+  paintTile(TILE.BREAD, (x, y) => {
+    const dx = x - 8, dy = y - 8;
+    if (dx * dx * 0.5 + dy * dy < 22) {
+      const crust = dx * dx * 0.5 + dy * dy > 13;
+      return px(crust ? 150 : 205, crust ? 100 : 160, crust ? 55 : 105, jitter(1, 0.06));
+    }
+    return [0, 0, 0, 0];
+  });
+
   // --- 羊毛 (もこもこの白) ---
   paintTile(TILE.WOOL, (x, y) => {
     const swirl = Math.sin(x * 1.9 + y * 0.7) * Math.sin(y * 1.7 - x * 0.5);

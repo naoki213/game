@@ -367,6 +367,7 @@
     { out: B.BED, outN: 1, in: [[B.WOOL, 3], [B.PLANK, 3]] },
     { out: B.STONE_SLAB, outN: 4, in: [[B.STONE, 2]] },
     { out: B.PLANK_SLAB, outN: 4, in: [[B.PLANK, 2]] },
+    { out: I.BREAD, outN: 1, in: [[I.WHEAT, 3]] },
     // 装飾ブロック
     { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
     { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
@@ -735,6 +736,33 @@
       particleData[o + 3] = p.col[0];
       particleData[o + 4] = p.col[1];
       particleData[o + 5] = p.col[2];
+    }
+  }
+
+  // ---------------- ランダムティック (作物の成長) ----------------
+
+  let randomTickTimer = 0;
+
+  function updateRandomTicks(dt) {
+    randomTickTimer += dt;
+    if (randomTickTimer < 0.25) return;
+    randomTickTimer = 0;
+    const pcx = Math.floor(player.pos[0]) >> 4;
+    const pcz = Math.floor(player.pos[2]) >> 4;
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const chunk = world.getChunk(pcx + dx, pcz + dz);
+        if (!chunk || !chunk.generated) continue;
+        // チャンクごとにランダムなセルを叩く (本家のランダムティック方式)
+        for (let k = 0; k < 80; k++) {
+          const i = (Math.random() * chunk.data.length) | 0;
+          const id = chunk.data[i];
+          if ((id === B.WHEAT_0 || id === B.WHEAT_1) && Math.random() < 0.7) {
+            const lx = i & 15, lz = (i >> 4) & 15, ly = i >> 8;
+            world.setBlock(chunk.cx * 16 + lx, ly, chunk.cz * 16 + lz, id + 1);
+          }
+        }
+      }
     }
   }
 
@@ -1124,6 +1152,16 @@
       if (canDrop && block.drops !== null && block.drops !== B.AIR) {
         items.spawn(block.drops, hit.pos[0], hit.pos[1], hit.pos[2]);
       }
+      // 特殊ドロップ: 草→種 (30%), 小麦→段階に応じて
+      if (hit.id === B.TALL_GRASS && Math.random() < 0.3) {
+        items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
+      } else if (hit.id === B.WHEAT_2) {
+        items.spawn(I.WHEAT, hit.pos[0], hit.pos[1], hit.pos[2]);
+        items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2],
+          1 + (Math.random() < 0.5 ? 1 : 0));
+      } else if (hit.id === B.WHEAT_0 || hit.id === B.WHEAT_1) {
+        items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
+      }
       // 道具の消耗 (硬いブロックのみ)
       if (tool && block.hardness >= 0.3) damageTool(tool.id);
     }
@@ -1174,8 +1212,21 @@
       if (hitFirst.id === B.CHEST) { openChest(hitFirst.pos); return; }
       if (hitFirst.id === B.BED) { trySleep(hitFirst.pos); return; }
     }
-    // 食料: 食べる
+    // 種: 土 / 草ブロックの上面に植える
     const heldDef = getDef(HOTBAR_BLOCKS[selectedSlot]);
+    if (heldDef && heldDef.seeds) {
+      if (!hitFirst) return;
+      const [px, py, pz] = hitFirst.prev;
+      if ((hitFirst.id === B.GRASS || hitFirst.id === B.DIRT) &&
+          py === hitFirst.pos[1] + 1 &&
+          world.getBlock(px, py, pz) === B.AIR) {
+        if (!consumeItem(heldDef.id)) return;
+        world.setBlock(px, py, pz, B.WHEAT_0);
+        sound.place();
+      }
+      return;
+    }
+    // 食料: 食べる
     if (heldDef && heldDef.food) {
       if (gameMode !== "survival") return;
       if (player.food >= player.maxFood - 0.5) {
@@ -1605,6 +1656,7 @@
       updateFallingBlocks(dt);
       updatePrimedTNT(dt);
       updateLeafDecay(dt);
+      updateRandomTicks(dt);
       bowCooldown = Math.max(0, bowCooldown - dt);
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
