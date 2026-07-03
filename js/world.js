@@ -6,6 +6,7 @@
 const CHUNK_SIZE = 16;    // X/Z 方向
 const CHUNK_H = 64;       // Y 方向 (ワールドの高さ)
 const WATER_LEVEL = 27;   // 海面
+const VILLAGE_GRID = 320; // 村の配置グリッド (ブロック)
 
 // チャンク内インデックス: idx = (y << 8) | (z << 4) | x
 function blockIndex(x, y, z) {
@@ -37,8 +38,10 @@ class World {
     this.chunks = new Map();          // "cx,cz" -> Chunk
     this.noise = new Perlin(seed);
     this.noiseCave = new Perlin(seed ^ 0x51ab3f);
+    this.noiseCave2 = new Perlin(seed ^ 0x77aa1e);
     this.noiseBiome = new Perlin(seed ^ 0x9e3779b9);
     this.heightCache = new Map();     // 列の高さキャッシュ
+    this.villageCache = new Map();    // 村グリッドのキャッシュ
 
     // プレイヤーの編集 (生成地形との差分): "cx,cz" -> Map(idx -> blockId)
     this.edits = new Map();
@@ -92,8 +95,16 @@ class World {
 
   isCave(x, y, z, surfaceH) {
     if (y <= 2 || y > surfaceH - 4) return false;
+    // 塊状の洞窟
     const c = this.noiseCave.noise3(x * 0.085, y * 0.11, z * 0.085);
-    return c > 0.58;
+    if (c > 0.58) return true;
+    // スパゲッティ洞窟 (2 つのノイズの零面が交差する細長いトンネル)
+    const a = this.noiseCave.noise3(x * 0.045, y * 0.07, z * 0.045);
+    const b = this.noiseCave2.noise3(x * 0.045 + 77, y * 0.07 + 77, z * 0.045 + 77);
+    if (Math.abs(a) < 0.075 && Math.abs(b) < 0.075) return true;
+    // 深層の大空洞
+    if (y < 26 && this.noiseCave2.noise3(x * 0.02, y * 0.045, z * 0.02) > 0.5) return true;
+    return false;
   }
 
   generateChunk(cx, cz) {
@@ -128,6 +139,8 @@ class World {
             else id = B.GRASS;
           } else if (y >= h - 3) {
             id = sandy ? B.SAND : B.DIRT;
+          } else if (sandy && y >= h - 6) {
+            id = B.SANDSTONE;   // 砂漠の砂の下は砂岩
           } else {
             id = B.STONE;
             // 鉱石 (深いほど貴重な鉱石が出る)
@@ -136,14 +149,16 @@ class World {
             else if (y < 26 && r >= 0.014 && r < 0.021) id = B.IRON_ORE;
             else if (y < 18 && r >= 0.021 && r < 0.0242) id = B.GOLD_ORE;
             else if (y < 13 && r >= 0.0242 && r < 0.0262) id = B.DIAMOND_ORE;
+            else if (y < 7 && r >= 0.027 && r < 0.0285) id = B.OBSIDIAN; // 最深部の黒曜石
             else if (r >= 0.03 && r < 0.037) id = B.GRAVEL; // 砂利ポケット
           }
           chunk.set(lx, y, lz, id);
         }
 
-        // 水
+        // 水 (雪原の水面は凍る)
         for (let y = h + 1; y <= WATER_LEVEL; y++) {
-          chunk.set(lx, y, lz, B.WATER);
+          chunk.set(lx, y, lz,
+            biome === "snow" && y === WATER_LEVEL ? B.ICE : B.WATER);
         }
       }
     }
@@ -203,9 +218,14 @@ class World {
         } else if (r < 0.102) {
           chunk.set(lx, h + 1, lz,
             hash2(wx, wz, seed ^ 0x33cc) < 0.5 ? B.FLOWER_YELLOW : B.FLOWER_RED);
+        } else if (r < 0.1032) {
+          chunk.set(lx, h + 1, lz, B.PUMPKIN);   // 野生のカボチャ
         }
       }
     }
+
+    // --- 村の建物を刻印 ---
+    this.stampVillages(chunk);
 
     // --- 保存済みの編集を適用 ---
     const edits = this.edits.get(key);
@@ -216,6 +236,140 @@ class World {
     chunk.generated = true;
     chunk.dirty = true;
     return chunk;
+  }
+
+  // ---------------- 村の生成 ----------------
+  // 世界を 320 ブロックのグリッドに分け、セルごとに決定論的に村を配置する
+
+  villageInCell(gx, gz) {
+    const key = gx + "," + gz;
+    if (this.villageCache.has(key)) return this.villageCache.get(key);
+
+    let village = null;
+    if (hash2(gx, gz, this.seed ^ 0x76a9c3) < 0.5) {
+      const G = VILLAGE_GRID;
+      const cx = gx * G + 80 + Math.floor(hash2(gx, gz, this.seed ^ 0x1111) * (G - 160));
+      const cz = gz * G + 80 + Math.floor(hash2(gx, gz, this.seed ^ 0x2222) * (G - 160));
+      const center = this.columnInfo(cx, cz);
+      // 平地にしか村はできない
+      if (center.h > WATER_LEVEL + 1 && center.h < 44) {
+        const buildings = [{ type: "well", x: cx - 1, z: cz - 1, w: 3, d: 3 }];
+        const n = 4 + Math.floor(hash2(gx, gz, this.seed ^ 0x3333) * 3);
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * Math.PI * 2 + hash2(gx, gz + i * 7, this.seed ^ 0x4444) * 0.8;
+          const dist = 9 + hash2(gx + i * 7, gz, this.seed ^ 0x5555) * 12;
+          const w = 5 + 2 * Math.floor(hash2(i, gx ^ gz, this.seed ^ 0x66) * 2);   // 5 or 7
+          const d = 5 + 2 * Math.floor(hash2(i * 3, gx ^ gz, this.seed ^ 0x77) * 2);
+          const bx = Math.round(cx + Math.cos(ang) * dist) - (w >> 1);
+          const bz = Math.round(cz + Math.sin(ang) * dist) - (d >> 1);
+          const bh = this.columnInfo(bx + (w >> 1), bz + (d >> 1)).h;
+          if (bh <= WATER_LEVEL || bh > 44) continue;
+          buildings.push({ type: "house", x: bx, z: bz, w, d, door: i % 4 });
+        }
+        village = { cx, cz, buildings };
+      }
+    }
+    this.villageCache.set(key, village);
+    return village;
+  }
+
+  stampVillages(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    // 建物は村の中心から最大 ~30 ブロック → 隣接グリッドセルも確認
+    const g0x = Math.floor((ox - 48) / VILLAGE_GRID);
+    const g1x = Math.floor((ox + 64) / VILLAGE_GRID);
+    const g0z = Math.floor((oz - 48) / VILLAGE_GRID);
+    const g1z = Math.floor((oz + 64) / VILLAGE_GRID);
+    for (let gz = g0z; gz <= g1z; gz++) {
+      for (let gx = g0x; gx <= g1x; gx++) {
+        const v = this.villageInCell(gx, gz);
+        if (!v) continue;
+        for (const b of v.buildings) this.stampBuilding(chunk, ox, oz, b);
+      }
+    }
+  }
+
+  stampBuilding(chunk, ox, oz, b) {
+    // チャンクと重ならなければ何もしない
+    if (b.x + b.w - 1 < ox || b.x > ox + 15 || b.z + b.d - 1 < oz || b.z > oz + 15) return;
+    const seed = this.seed;
+    const set = (wx, y, wz, id) => {
+      if (wx < ox || wx > ox + 15 || wz < oz || wz > oz + 15 || y < 1 || y >= CHUNK_H) return;
+      chunk.set(wx - ox, y, wz - oz, id);
+    };
+    const baseY = this.columnInfo(b.x + (b.w >> 1), b.z + (b.d >> 1)).h;
+
+    if (b.type === "well") {
+      // 井戸: 3x3 の丸石枠 + 中央の水 + 屋根
+      for (let dz = 0; dz < 3; dz++) {
+        for (let dx = 0; dx < 3; dx++) {
+          const wx = b.x + dx, wz = b.z + dz;
+          const mid = dx === 1 && dz === 1;
+          for (let y = baseY - 2; y <= baseY; y++) {
+            set(wx, y, wz, mid && y > baseY - 2 ? B.WATER : B.COBBLE);
+          }
+          for (let y = baseY + 1; y <= baseY + 3; y++) set(wx, y, wz, B.AIR);
+          const corner = (dx === 0 || dx === 2) && (dz === 0 || dz === 2);
+          if (corner) {
+            set(wx, baseY + 1, wz, B.COBBLE);
+            set(wx, baseY + 2, wz, B.COBBLE);
+          }
+          set(wx, baseY + 3, wz, B.STONE_SLAB);
+        }
+      }
+      return;
+    }
+
+    // 家: 丸石基礎 + 木材の壁 + 原木の柱 + ハーフブロックの屋根
+    const floorY = baseY;
+    const topY = floorY + 4;
+    const midX = b.x + (b.w >> 1);
+    const midZ = b.z + (b.d >> 1);
+
+    for (let dz = 0; dz < b.d; dz++) {
+      for (let dx = 0; dx < b.w; dx++) {
+        const wx = b.x + dx, wz = b.z + dz;
+        const edge = dx === 0 || dz === 0 || dx === b.w - 1 || dz === b.d - 1;
+        const corner = (dx === 0 || dx === b.w - 1) && (dz === 0 || dz === b.d - 1);
+
+        // 床と基礎 (地形の低いところは丸石で埋める)
+        const gh = this.columnInfo(wx, wz).h;
+        for (let y = Math.min(gh, floorY); y < floorY; y++) {
+          set(wx, y, wz, hash3(wx, y, wz, seed ^ 0xa0a0) < 0.25 ? B.MOSSY_COBBLE : B.COBBLE);
+        }
+        set(wx, floorY, wz, B.PLANK);
+
+        // 内部と上空をくり抜く (丘や木を除去)
+        for (let y = floorY + 1; y <= topY + 2; y++) set(wx, y, wz, B.AIR);
+
+        // 壁
+        if (edge) {
+          for (let y = floorY + 1; y <= floorY + 3; y++) {
+            set(wx, y, wz, corner ? B.LOG : B.PLANK);
+          }
+        }
+        // 屋根
+        set(wx, topY, wz, edge ? B.PLANK : B.PLANK_SLAB);
+      }
+    }
+
+    // ドア (向きに応じた辺の中央, 2 マス分の開口)
+    let doorX = midX, doorZ = b.z;
+    if (b.door === 1) doorZ = b.z + b.d - 1;
+    else if (b.door === 2) { doorX = b.x; doorZ = midZ; }
+    else if (b.door === 3) { doorX = b.x + b.w - 1; doorZ = midZ; }
+    set(doorX, floorY + 1, doorZ, B.AIR);
+    set(doorX, floorY + 2, doorZ, B.AIR);
+
+    // 窓 (ドア以外の辺の中央にガラス)
+    const sides = [[midX, b.z], [midX, b.z + b.d - 1], [b.x, midZ], [b.x + b.w - 1, midZ]];
+    sides.forEach(([wx, wz], i) => {
+      if (i !== b.door) set(wx, floorY + 2, wz, B.GLASS);
+    });
+
+    // 室内の松明
+    set(midX, floorY + 1, midZ, B.TORCH);
   }
 
   // ---------------- ブロックアクセス ----------------

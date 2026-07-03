@@ -6,7 +6,7 @@
 
 const TILE_PX = 16;
 const ATLAS_COLS = 8;
-const ATLAS_ROWS = 8;
+const ATLAS_ROWS = 16;   // 128x256 (POT)
 
 // 各タイルの平均色 [r,g,b] (0..1) — 破壊パーティクルの色に使う
 const TILE_AVG_COLORS = [];
@@ -437,6 +437,67 @@ function buildTextureAtlas(seed) {
       return px(crust ? 150 : 205, crust ? 100 : 160, crust ? 55 : 105, jitter(1, 0.06));
     }
     return [0, 0, 0, 0];
+  });
+
+  // --- 石レンガ ---
+  paintTile(TILE.STONE_BRICK, (x, y) => {
+    const row = Math.floor(y / 8);
+    const mortarY = y % 8 === 7;
+    const shift = (row % 2) * 4;
+    const mortarX = (x + shift) % 8 === 7;
+    if (mortarY || mortarX) return px(90, 90, 92, jitter(1, 0.05));
+    return px(130, 130, 132, jitter(1, 0.07));
+  });
+
+  // --- 苔むした丸石 ---
+  paintTile(TILE.MOSSY_COBBLE, (x, y) => {
+    const n = Math.sin(x * 1.7 + y * 0.9) + Math.sin(x * 0.6 - y * 1.9);
+    const mossy = Math.sin(x * 1.1 - y * 1.3) > 0.35 || rand() < 0.08;
+    if (mossy) return px(90, 130, 70, jitter(1, 0.1));
+    const v = 0.85 + 0.18 * Math.abs(n % 1) + (rand() * 2 - 1) * 0.06;
+    return px(118, 118, 118, v);
+  });
+
+  // --- 氷 ---
+  paintTile(TILE.ICE, (x, y) => {
+    const streak = (x + y * 2) % 9 < 2 ? 1.1 : 1;
+    return px(155, 195, 235, jitter(streak, 0.05));
+  });
+
+  // --- 本棚 (側面) ---
+  paintTile(TILE.BOOKSHELF, (x, y) => {
+    const frame = y <= 0 || y >= 15 || y === 7 || y === 8;
+    if (frame) return px(178, 143, 90, jitter(1, 0.05));
+    // 本の背表紙
+    const bookCols = [[170, 60, 55], [70, 100, 170], [90, 150, 75], [190, 160, 70], [140, 80, 160]];
+    const c = bookCols[(x * 7 + (y > 8 ? 3 : 0)) % bookCols.length];
+    if (x % 3 === 2 && rand() < 0.4) return px(120, 95, 65, 1); // 隙間
+    return px(c[0], c[1], c[2], jitter(1, 0.08));
+  });
+
+  // --- カボチャ ---
+  paintTile(TILE.PUMPKIN_SIDE, (x) => {
+    const ridge = x % 4 === 0 ? 0.8 : 1;
+    return px(225, 130, 30, jitter(ridge, 0.07));
+  });
+  paintTile(TILE.PUMPKIN_TOP, (x, y) => {
+    const dx = Math.abs(x - 7.5), dy = Math.abs(y - 7.5);
+    if (dx < 1.5 && dy < 1.5) return px(90, 120, 45, 1); // ヘタ
+    const ridge = (x + y) % 4 === 0 ? 0.85 : 1;
+    return px(210, 120, 28, jitter(ridge, 0.07));
+  });
+
+  // --- 黒曜石 ---
+  paintTile(TILE.OBSIDIAN, (x, y) => {
+    const sheen = Math.sin(x * 0.9 + y * 1.4) > 0.75;
+    if (sheen) return px(70, 45, 105, jitter(1, 0.1));
+    return px(25, 18, 38, jitter(1, 0.15));
+  });
+
+  // --- 砂岩 ---
+  paintTile(TILE.SANDSTONE, (x, y) => {
+    const band = y % 5 === 4 ? 0.88 : 1;
+    return px(215, 200, 150, jitter(band, 0.05));
   });
 
   // --- 羊毛 (もこもこの白) ---

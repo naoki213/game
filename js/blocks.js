@@ -40,6 +40,13 @@ const B = {
   WHEAT_0: 32,   // 小麦の成長段階
   WHEAT_1: 33,
   WHEAT_2: 34,
+  STONE_BRICK: 35,
+  MOSSY_COBBLE: 36,
+  ICE: 37,
+  BOOKSHELF: 38,
+  PUMPKIN: 39,
+  OBSIDIAN: 40,
+  SANDSTONE: 41,
 };
 
 // 道具・素材アイテム (ID 100 以降はブロックではなく設置不可)
@@ -126,6 +133,14 @@ const TILE = {
   SEEDS: 57,
   WHEAT_ITEM: 58,
   BREAD: 59,
+  STONE_BRICK: 60,
+  MOSSY_COBBLE: 61,
+  ICE: 62,
+  BOOKSHELF: 63,
+  PUMPKIN_SIDE: 64,
+  PUMPKIN_TOP: 65,
+  OBSIDIAN: 66,
+  SANDSTONE: 67,
 };
 
 // 各ブロックの属性
@@ -212,6 +227,20 @@ defBlock(B.WHEAT_1, "wheat_1", "小麦 (成長中)", [TILE.WHEAT_1, TILE.WHEAT_1
   { opaque: false, solid: false, cross: true, hardness: 0.05, drops: null });
 defBlock(B.WHEAT_2, "wheat_2", "小麦 (実り)", [TILE.WHEAT_2, TILE.WHEAT_2, TILE.WHEAT_2],
   { opaque: false, solid: false, cross: true, hardness: 0.05, drops: null });
+defBlock(B.STONE_BRICK, "stone_brick", "石レンガ", [TILE.STONE_BRICK, TILE.STONE_BRICK, TILE.STONE_BRICK],
+  { hardness: 1.8, pickable: true, minTier: 1 });
+defBlock(B.MOSSY_COBBLE, "mossy_cobble", "苔むした丸石", [TILE.MOSSY_COBBLE, TILE.MOSSY_COBBLE, TILE.MOSSY_COBBLE],
+  { hardness: 1.8, pickable: true, minTier: 1 });
+defBlock(B.ICE, "ice", "氷", [TILE.ICE, TILE.ICE, TILE.ICE],
+  { hardness: 0.4, drops: null });
+defBlock(B.BOOKSHELF, "bookshelf", "本棚", [TILE.PLANK, TILE.BOOKSHELF, TILE.PLANK],
+  { hardness: 1.2, drops: B.PLANK });
+defBlock(B.PUMPKIN, "pumpkin", "カボチャ", [TILE.PUMPKIN_TOP, TILE.PUMPKIN_SIDE, TILE.PUMPKIN_TOP],
+  { hardness: 0.8 });
+defBlock(B.OBSIDIAN, "obsidian", "黒曜石", [TILE.OBSIDIAN, TILE.OBSIDIAN, TILE.OBSIDIAN],
+  { hardness: 12, pickable: true, minTier: 4 });
+defBlock(B.SANDSTONE, "sandstone", "砂岩", [TILE.SANDSTONE, TILE.SANDSTONE, TILE.SANDSTONE],
+  { hardness: 1.5, pickable: true, minTier: 1 });
 defBlock(B.GOLD_ORE, "gold_ore", "金鉱石", [TILE.GOLD_ORE, TILE.GOLD_ORE, TILE.GOLD_ORE],
   { hardness: 2.6, pickable: true, minTier: 3 });
 defBlock(B.DIAMOND_ORE, "diamond_ore", "ダイヤモンド鉱石", [TILE.DIAMOND_ORE, TILE.DIAMOND_ORE, TILE.DIAMOND_ORE],

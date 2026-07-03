@@ -368,6 +368,9 @@
     { out: B.STONE_SLAB, outN: 4, in: [[B.STONE, 2]] },
     { out: B.PLANK_SLAB, outN: 4, in: [[B.PLANK, 2]] },
     { out: I.BREAD, outN: 1, in: [[I.WHEAT, 3]] },
+    { out: B.STONE_BRICK, outN: 4, in: [[B.STONE, 4]] },
+    { out: B.SANDSTONE, outN: 1, in: [[B.SAND, 4]] },
+    { out: B.BOOKSHELF, outN: 1, in: [[B.PLANK, 6]] },
     // 装飾ブロック
     { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
     { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
