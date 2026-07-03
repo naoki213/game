@@ -46,6 +46,7 @@ const I = {
   IRON_INGOT: 108,
   GOLD_INGOT: 109,
   DIAMOND: 110,
+  BOW: 111,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -94,6 +95,7 @@ const TILE = {
   INGOT_IRON: 41,
   INGOT_GOLD: 42,
   GEM_DIAMOND: 43,
+  BOW: 44,
 };
 
 // 各ブロックの属性
@@ -198,6 +200,8 @@ defItem(I.IRON_SWORD, "iron_sword", "鉄の剣", TILE.SWORD_IRON,
   { kind: "sword", tier: 3, speed: 1, damage: 6, durability: 250 });
 defItem(I.DIAMOND_SWORD, "diamond_sword", "ダイヤの剣", TILE.SWORD_DIAMOND,
   { kind: "sword", tier: 4, speed: 1, damage: 7, durability: 600 });
+defItem(I.BOW, "bow", "弓", TILE.BOW,
+  { kind: "bow", tier: 1, speed: 1, damage: 2, durability: 100 });
 defItem(I.IRON_INGOT, "iron_ingot", "鉄インゴット", TILE.INGOT_IRON);
 defItem(I.GOLD_INGOT, "gold_ingot", "金インゴット", TILE.INGOT_GOLD);
 defItem(I.DIAMOND, "diamond", "ダイヤモンド", TILE.GEM_DIAMOND);

@@ -324,6 +324,18 @@ function buildTextureAtlas(seed) {
     return [0, 0, 0, 0];
   });
 
+  // --- 弓 (弧 + 弦) ---
+  paintTile(TILE.BOW, (x, y) => {
+    // 弧: 左上から右下への曲線
+    const arc = Math.hypot(x - 13, y - 13);
+    if (arc >= 10 && arc <= 11.5 && x <= 12 && y <= 12) {
+      return px(140, 105, 60, jitter(1, 0.08));
+    }
+    // 弦: 対角線
+    if (Math.abs(x - y) <= 0 && x >= 3 && x <= 12) return px(230, 230, 225, 1);
+    return [0, 0, 0, 0];
+  });
+
   // --- 羊毛 (もこもこの白) ---
   paintTile(TILE.WOOL, (x, y) => {
     const swirl = Math.sin(x * 1.9 + y * 0.7) * Math.sin(y * 1.7 - x * 0.5);

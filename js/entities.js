@@ -344,6 +344,17 @@ class MobManager {
     this.shootRequest = true;
   }
 
+  // プレイヤーが矢を放つ (弓)
+  playerShoot(origin, dir) {
+    const SPEED = 22;
+    this.arrows.push({
+      pos: [origin[0] + dir[0] * 0.4, origin[1] + dir[1] * 0.4, origin[2] + dir[2] * 0.4],
+      vel: [dir[0] * SPEED, dir[1] * SPEED, dir[2] * SPEED],
+      life: 3,
+      fromPlayer: true,
+    });
+  }
+
   updateArrows(dt, player) {
     for (let i = this.arrows.length - 1; i >= 0; i--) {
       const a = this.arrows[i];
@@ -353,16 +364,40 @@ class MobManager {
       a.pos[0] += a.vel[0] * dt;
       a.pos[1] += a.vel[1] * dt;
       a.pos[2] += a.vel[2] * dt;
-      // プレイヤー命中
-      const dx = a.pos[0] - player.pos[0];
-      const dz = a.pos[2] - player.pos[2];
-      const dy = a.pos[1] - player.pos[1];
-      if (!player.dead && Math.abs(dx) < 0.5 && Math.abs(dz) < 0.5 && dy > -0.2 && dy < 1.9) {
-        player.takeDamage(3);
-        player.vel[0] += a.vel[0] * 0.12;
-        player.vel[2] += a.vel[2] * 0.12;
-        this.arrows.splice(i, 1);
-        continue;
+
+      if (a.fromPlayer) {
+        // プレイヤーの矢 → モブに命中
+        let hitMob = null;
+        for (const m of this.mobs) {
+          const hw = m.def.halfW + 0.15;
+          if (Math.abs(a.pos[0] - m.pos[0]) < hw &&
+              Math.abs(a.pos[2] - m.pos[2]) < hw &&
+              a.pos[1] > m.pos[1] - 0.1 && a.pos[1] < m.pos[1] + m.def.height + 0.1) {
+            hitMob = m;
+            break;
+          }
+        }
+        if (hitMob) {
+          hitMob.health -= 5;
+          hitMob.hurt = 0.35;
+          hitMob.vel[0] += a.vel[0] * 0.15;
+          hitMob.vel[1] = 4;
+          hitMob.vel[2] += a.vel[2] * 0.15;
+          this.arrows.splice(i, 1);
+          continue;
+        }
+      } else {
+        // 敵の矢 → プレイヤーに命中
+        const dx = a.pos[0] - player.pos[0];
+        const dz = a.pos[2] - player.pos[2];
+        const dy = a.pos[1] - player.pos[1];
+        if (!player.dead && Math.abs(dx) < 0.5 && Math.abs(dz) < 0.5 && dy > -0.2 && dy < 1.9) {
+          player.takeDamage(3);
+          player.vel[0] += a.vel[0] * 0.12;
+          player.vel[2] += a.vel[2] * 0.12;
+          this.arrows.splice(i, 1);
+          continue;
+        }
       }
       // ブロック命中
       if (this.world.isSolidAt(Math.floor(a.pos[0]), Math.floor(a.pos[1]), Math.floor(a.pos[2]))) {

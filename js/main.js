@@ -314,6 +314,7 @@
     { out: I.IRON_PICK, outN: 1, in: [[I.IRON_INGOT, 3], [B.PLANK, 2]] },
     { out: I.DIAMOND_PICK, outN: 1, in: [[I.DIAMOND, 3], [B.PLANK, 2]] },
     { out: I.WOOD_SWORD, outN: 1, in: [[B.PLANK, 2]] },
+    { out: I.BOW, outN: 1, in: [[B.PLANK, 3]] },
     { out: I.STONE_SWORD, outN: 1, in: [[B.COBBLE, 2], [B.PLANK, 1]] },
     { out: I.IRON_SWORD, outN: 1, in: [[I.IRON_INGOT, 2], [B.PLANK, 1]] },
     { out: I.DIAMOND_SWORD, outN: 1, in: [[I.DIAMOND, 2], [B.PLANK, 1]] },
@@ -803,9 +804,21 @@
     checkFalling(bx, by + 1, bz);
   }
 
-  // 右クリック / タップでの設置
+  // 右クリック / タップでの設置 (弓を持っていれば射撃)
+  let bowCooldown = 0;
+
   function placeAction() {
     swingTimer = 0;
+    // 弓: 矢を放つ
+    const tool = heldTool();
+    if (tool && tool.kind === "bow") {
+      if (bowCooldown > 0) return;
+      bowCooldown = 0.6;
+      mobs.playerShoot(player.eyePos(), player.forward());
+      sound.bow();
+      damageTool(tool.id);
+      return;
+    }
     const hit = player.raycast();
     if (!hit) return;
     const [px, py, pz] = hit.prev;
@@ -1191,6 +1204,7 @@
         sound.pickup();
       });
       updateFallingBlocks(dt);
+      bowCooldown = Math.max(0, bowCooldown - dt);
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
       updateParticles(dt);
