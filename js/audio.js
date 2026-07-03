@@ -73,6 +73,54 @@ class Sound {
     osc.stop(ctx.currentTime + 0.6);
   }
 
+  // 弓を放つ音
+  bow() {
+    this.blip(700, 0.1, "triangle", 0.15);
+  }
+
+  // クリーパーの導火線 (シューッ)
+  hiss() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const dur = 1.2;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      d[i] = (Math.random() * 2 - 1) * (0.3 + 0.7 * (i / d.length));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 2500;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.14;
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+  }
+
+  // 爆発 (低いドーン)
+  explosion() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const dur = 0.8;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.6);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(400, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + dur);
+    const gain = ctx.createGain();
+    gain.gain.value = 0.55;
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+  }
+
   // アイテム回収音 (上昇チャイム)
   pickup() {
     const ctx = this.ensure();

@@ -59,6 +59,44 @@ const MOB_TYPES = {
       [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 0.38, 0.58, 0.28],
     ],
   },
+  skeleton: {
+    speed: 2.0,
+    halfW: 0.3, height: 1.9,
+    health: 10,
+    hostile: true,
+    ranged: true,
+    parts: [
+      // 脚 x2 (細い骨)
+      [-0.18, 0, -0.08, 0.13, 0.75, 0.16, 0.82, 0.82, 0.78],
+      [0.05, 0, -0.08, 0.13, 0.75, 0.16, 0.82, 0.82, 0.78],
+      // 胴体 (あばら)
+      [-0.2, 0.75, -0.12, 0.4, 0.6, 0.24, 0.72, 0.72, 0.68],
+      // 腕 x2
+      [-0.34, 0.85, -0.08, 0.12, 0.5, 0.16, 0.8, 0.8, 0.76],
+      [0.22, 0.85, -0.08, 0.12, 0.5, 0.16, 0.8, 0.8, 0.76],
+      // 頭 (白い骨)
+      [-0.22, 1.35, -0.22, 0.44, 0.44, 0.44, 0.9, 0.9, 0.86],
+    ],
+  },
+  creeper: {
+    speed: 2.6,
+    halfW: 0.3, height: 1.7,
+    health: 12,
+    hostile: true,
+    creeper: true,
+    noBurn: true,
+    parts: [
+      // 脚 x4 (低い)
+      [-0.25, 0, -0.28, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
+      [0.03, 0, -0.28, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
+      [-0.25, 0, 0.06, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
+      [0.03, 0, 0.06, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
+      // 縦長の胴体
+      [-0.2, 0.4, -0.15, 0.4, 0.85, 0.3, 0.33, 0.65, 0.3],
+      // 頭
+      [-0.24, 1.25, -0.24, 0.48, 0.45, 0.48, 0.36, 0.68, 0.33],
+    ],
+  },
   chicken: {
     speed: 1.6,
     halfW: 0.25, height: 0.7,
@@ -102,14 +140,14 @@ class Mob {
     this.burnAccum = 0;
   }
 
-  update(dt, world, player, daylight) {
+  update(dt, world, player, daylight, mgr) {
     this.hurt = Math.max(0, this.hurt - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
     let chasing = false;
     if (this.def.hostile) {
-      // --- 昼は燃えてダメージ ---
-      if (daylight > 0.5) {
+      // --- 昼は燃えてダメージ (クリーパーは燃えない) ---
+      if (daylight > 0.5 && !this.def.noBurn) {
         this.burnAccum += dt;
         if (this.burnAccum >= 1) {
           this.burnAccum -= 1;
@@ -126,8 +164,32 @@ class Mob {
         chasing = true;
         this.yaw = Math.atan2(dx, dz);
         this.state = "walk";
-        // --- 近接攻撃 ---
-        if (distH < 1.4 && Math.abs(dy) < 2 && this.attackCooldown <= 0) {
+
+        if (this.def.ranged) {
+          // --- スケルトン: 距離を保ちつつ弓を撃つ ---
+          if (distH < 5) this.yaw += Math.PI;          // 近すぎたら後退
+          else if (distH < 12) this.state = "idle";    // 射程内では足を止める
+          if (distH < 15 && Math.abs(dy) < 6 && this.attackCooldown <= 0 && mgr) {
+            this.attackCooldown = 2.2;
+            mgr.shootArrow(this, player);
+          }
+        } else if (this.def.creeper) {
+          // --- クリーパー: 接近して自爆 ---
+          if (this.fuse == null && distH < 2.4 && Math.abs(dy) < 2) {
+            this.fuse = 1.3;
+            if (mgr) mgr.hissRequest = true;
+          }
+          if (this.fuse != null && distH > 5) this.fuse = null; // 離れたら解除
+          if (this.fuse != null) {
+            this.state = "idle";
+            this.fuse -= dt;
+            if (this.fuse <= 0) {
+              if (mgr) mgr.explosions.push({ pos: [...this.pos] });
+              this.health = 0;
+            }
+          }
+        } else if (distH < 1.4 && Math.abs(dy) < 2 && this.attackCooldown <= 0) {
+          // --- ゾンビ: 近接攻撃 ---
           this.attackCooldown = 1.1;
           player.takeDamage(3);
           // ノックバック
@@ -136,6 +198,8 @@ class Mob {
           player.vel[2] += (dz / d) * 6;
           player.vel[1] = Math.max(player.vel[1], 3.5);
         }
+      } else if (this.def.creeper) {
+        this.fuse = null;
       }
     }
 
@@ -254,12 +318,65 @@ class MobManager {
     this.maxAnimals = 12;
     this.maxZombies = 8;
     this.deaths = [];        // 今フレーム死んだモブ (演出は main 側)
+    this.explosions = [];    // クリーパーの爆発 (処理は main 側)
+    this.arrows = [];        // スケルトンの矢
     this.groanRequest = false;
+    this.hissRequest = false;
+    this.shootRequest = false;
+  }
+
+  shootArrow(mob, player) {
+    const from = [mob.pos[0], mob.pos[1] + 1.4, mob.pos[2]];
+    const dx = player.pos[0] - from[0];
+    const dy = (player.pos[1] + 1.1) - from[1];
+    const dz = player.pos[2] - from[2];
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const SPEED = 17;
+    this.arrows.push({
+      pos: from,
+      vel: [
+        (dx / len) * SPEED + (Math.random() - 0.5) * 1.2,
+        (dy / len) * SPEED + 1.4,   // 少し山なりに
+        (dz / len) * SPEED + (Math.random() - 0.5) * 1.2,
+      ],
+      life: 3,
+    });
+    this.shootRequest = true;
+  }
+
+  updateArrows(dt, player) {
+    for (let i = this.arrows.length - 1; i >= 0; i--) {
+      const a = this.arrows[i];
+      a.life -= dt;
+      if (a.life <= 0) { this.arrows.splice(i, 1); continue; }
+      a.vel[1] -= 7 * dt;
+      a.pos[0] += a.vel[0] * dt;
+      a.pos[1] += a.vel[1] * dt;
+      a.pos[2] += a.vel[2] * dt;
+      // プレイヤー命中
+      const dx = a.pos[0] - player.pos[0];
+      const dz = a.pos[2] - player.pos[2];
+      const dy = a.pos[1] - player.pos[1];
+      if (!player.dead && Math.abs(dx) < 0.5 && Math.abs(dz) < 0.5 && dy > -0.2 && dy < 1.9) {
+        player.takeDamage(3);
+        player.vel[0] += a.vel[0] * 0.12;
+        player.vel[2] += a.vel[2] * 0.12;
+        this.arrows.splice(i, 1);
+        continue;
+      }
+      // ブロック命中
+      if (this.world.isSolidAt(Math.floor(a.pos[0]), Math.floor(a.pos[1]), Math.floor(a.pos[2]))) {
+        this.arrows.splice(i, 1);
+      }
+    }
   }
 
   update(dt, player, daylight) {
     this.deaths.length = 0;
     this.groanRequest = false;
+    this.hissRequest = false;
+    this.shootRequest = false;
+    this.updateArrows(dt, player);
     const playerPos = player.pos;
 
     // --- スポーン ---
@@ -280,7 +397,7 @@ class MobManager {
       }
       // 遠くのモブは間引いて更新
       if (dx * dx + dz * dz > 48 * 48 && Math.random() < 0.5) continue;
-      m.update(dt, this.world, player, daylight);
+      m.update(dt, this.world, player, daylight, this);
 
       if (m.health <= 0) {
         this.deaths.push({ pos: [...m.pos], type: m.type });
@@ -314,9 +431,11 @@ class MobManager {
     if (y + 1 <= WATER_LEVEL) return;
 
     if (daylight < 0.3) {
-      // 夜: ゾンビ
+      // 夜: 敵モブ (ゾンビ / スケルトン / クリーパー)
       if (this.count(true) >= this.maxZombies) return;
-      this.mobs.push(new Mob("zombie", x + 0.5, y + 1.01, z + 0.5));
+      const r = Math.random();
+      const type = r < 0.45 ? "zombie" : r < 0.75 ? "skeleton" : "creeper";
+      this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
     } else if (daylight > 0.5) {
       // 昼: 動物 (草の上のみ)
       if (this.count(false) >= this.maxAnimals) return;
@@ -358,6 +477,8 @@ class MobManager {
       const sin = Math.sin(m.yaw), cos = Math.cos(m.yaw);
       const bobY = Math.abs(m.bob) * 0.04;
       const hurtT = m.hurt > 0 ? 0.55 : 0;
+      // クリーパーの導火線: 白く点滅
+      const flashT = (m.fuse != null && Math.sin(m.fuse * 24) > 0) ? 0.75 : 0;
       for (let pi = 0; pi < m.def.parts.length; pi++) {
         const p = m.def.parts[pi];
         let [ox, oy, oz, w, h, d, r, g, b] = p;
@@ -367,6 +488,11 @@ class MobManager {
           g *= 1 - hurtT;
           b *= 1 - hurtT;
         }
+        if (flashT > 0) {
+          r = r + (1 - r) * flashT;
+          g = g + (1 - g) * flashT;
+          b = b + (1 - b) * flashT;
+        }
         // 脚は歩行時に前後へ振る
         const isLeg = oy === 0;
         if (isLeg && m.bob !== 0) {
@@ -375,6 +501,13 @@ class MobManager {
         }
         pushBox(verts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, r, g, b);
       }
+    }
+
+    // 矢: 速度方向を向いた細い棒
+    for (const a of this.arrows) {
+      const yaw = Math.atan2(a.vel[0], a.vel[2]);
+      pushBox(verts, a.pos, Math.sin(yaw), Math.cos(yaw),
+        -0.035, -0.035, -0.3, 0.07, 0.07, 0.6, 0.5, 0.4, 0.28);
     }
     return new Float32Array(verts);
   }

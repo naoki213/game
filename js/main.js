@@ -673,6 +673,45 @@
     }
   }
 
+  // ---------------- 爆発 (クリーパー) ----------------
+
+  function explode(x, y, z) {
+    const R = 2.6;
+    for (let by = Math.floor(y - R); by <= Math.floor(y + R); by++) {
+      for (let bz = Math.floor(z - R); bz <= Math.floor(z + R); bz++) {
+        for (let bx = Math.floor(x - R); bx <= Math.floor(x + R); bx++) {
+          const d = Math.hypot(bx + 0.5 - x, by + 0.5 - y, bz + 0.5 - z);
+          if (d > R) continue;
+          const id = world.getBlock(bx, by, bz);
+          if (id === B.AIR || id === B.WATER || id === B.BEDROCK) continue;
+          if (!isFinite(BLOCKS[id].hardness)) continue;
+          world.setBlock(bx, by, bz, B.AIR);
+          // 一部のブロックはアイテム化して飛び散る
+          if (gameMode === "survival" && Math.random() < 0.3 &&
+              BLOCKS[id].drops !== null && BLOCKS[id].drops !== B.AIR) {
+            items.spawn(BLOCKS[id].drops, bx, by, bz);
+          }
+        }
+      }
+    }
+    // プレイヤーへのダメージとノックバック
+    const pdx = player.pos[0] - x;
+    const pdy = (player.pos[1] + 0.9) - y;
+    const pdz = player.pos[2] - z;
+    const pd = Math.hypot(pdx, pdy, pdz);
+    if (pd < 7) {
+      player.takeDamage(Math.ceil((1 - pd / 7) * 15));
+      const k = ((1 - pd / 7) * 12) / (pd || 1);
+      player.vel[0] += pdx * k;
+      player.vel[1] += Math.abs(pdy * k) * 0.5 + 4;
+      player.vel[2] += pdz * k;
+    }
+    spawnPuff(x, y - 0.5, z, [0.5, 0.47, 0.42]);
+    spawnPuff(x, y + 0.5, z, [0.75, 0.6, 0.3]);
+    spawnPuff(x, y, z, [0.35, 0.33, 0.3]);
+    sound.explosion();
+  }
+
   // ---------------- 落下ブロック (砂の重力) ----------------
 
   const fallingBlocks = [];   // {id, pos, vel, phase, spin:false, scale:1}
@@ -1174,6 +1213,12 @@
         }
       }
       if (mobs.groanRequest) sound.groan();
+      if (mobs.hissRequest) sound.hiss();
+      if (mobs.shootRequest) sound.bow();
+      for (const ex of mobs.explosions) {
+        explode(ex.pos[0], ex.pos[1] + 0.8, ex.pos[2]);
+      }
+      mobs.explosions.length = 0;
 
       updateSurvivalUI(dt);
 
