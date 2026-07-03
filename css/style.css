@@ -490,6 +490,77 @@ body.touch .controls { display: none; }
   #craft-list { max-height: 120px; }
 }
 
+/* ---- chest ---- */
+#chest-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 24, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+#chest-modal.hidden { display: none; }
+
+#chest-inner {
+  background: rgba(20, 26, 40, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  padding: 18px 22px;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+#chest-inner h2 {
+  color: #eee;
+  font-size: 17px;
+  margin-bottom: 10px;
+}
+
+#chest-inner .hint { font-size: 12px; font-weight: normal; color: #9ab; }
+
+#chest-inner h3 {
+  color: #bcd;
+  font-size: 13px;
+  margin: 10px 0 6px;
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 56px);
+  gap: 6px;
+  min-height: 60px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+}
+
+.item-grid .empty-note {
+  grid-column: 1 / -1;
+  color: #678;
+  font-size: 12px;
+  align-self: center;
+  text-align: center;
+}
+
+.item-grid .inv-item { width: 56px; height: 56px; }
+.item-grid .inv-item canvas { width: 30px; height: 30px; }
+
+/* ---- sleep fade ---- */
+#sleep-overlay {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s;
+  z-index: 9;
+}
+
+#sleep-overlay.show { opacity: 1; }
+
 /* ---- crafting ---- */
 #craft-section {
   margin-top: 16px;

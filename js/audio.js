@@ -8,6 +8,40 @@ class Sound {
     this.ctx = null;
     this.musicTimer = null;
     this.musicGain = null;
+    this.rainSrc = null;
+    this.rainGain = null;
+  }
+
+  // 雨音ループの開始 / 停止
+  startRain() {
+    const ctx = this.ensure();
+    if (!ctx || this.rainSrc) return;
+    const dur = 2;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 1.5);
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+    this.rainSrc = src;
+    this.rainGain = gain;
+  }
+
+  stopRain() {
+    if (!this.rainSrc || !this.ctx) return;
+    const src = this.rainSrc;
+    this.rainGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.5);
+    setTimeout(() => { try { src.stop(); } catch (e) { /* ignore */ } }, 1600);
+    this.rainSrc = null;
+    this.rainGain = null;
   }
 
   // ブラウザの自動再生制限のため, 最初のユーザー操作後に初期化する

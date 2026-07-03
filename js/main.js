@@ -363,6 +363,8 @@
     { out: B.STONE, outN: 2, in: [[B.COBBLE, 2]] },
     { out: B.BRICK, outN: 2, in: [[B.STONE, 2]] },
     { out: B.TNT, outN: 2, in: [[B.SAND, 4], [B.COAL_ORE, 1]] },
+    { out: B.CHEST, outN: 1, in: [[B.PLANK, 8]] },
+    { out: B.BED, outN: 1, in: [[B.WOOL, 3], [B.PLANK, 3]] },
     // 装飾ブロック
     { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
     { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
@@ -518,14 +520,20 @@
 
   document.addEventListener("pointerlockchange", () => {
     paused = document.pointerLockElement !== canvas;
-    // インベントリを開いている間はポーズ画面を出さない
-    overlay.classList.toggle("hidden", !paused || inventoryOpen);
+    // インベントリ / チェストを開いている間はポーズ画面を出さない
+    overlay.classList.toggle("hidden", !paused || inventoryOpen || chestOpen);
     if (paused) {
       keys.clear();
       heldButtons.clear();
-    } else if (inventoryOpen) {
-      inventoryOpen = false;
-      inventoryEl.classList.add("hidden");
+    } else {
+      if (inventoryOpen) {
+        inventoryOpen = false;
+        inventoryEl.classList.add("hidden");
+      }
+      if (chestOpen) {
+        chestOpen = false;
+        chestModalEl.classList.add("hidden");
+      }
     }
   });
 
@@ -538,9 +546,13 @@
   });
 
   document.addEventListener("keydown", (e) => {
-    // インベントリが開いている間は E / Esc で閉じるだけ
+    // インベントリ / チェストが開いている間は E / Esc で閉じるだけ
     if (inventoryOpen) {
       if (e.code === "KeyE" || e.code === "Escape") closeInventory();
+      return;
+    }
+    if (chestOpen) {
+      if (e.code === "KeyE" || e.code === "Escape") closeChest();
       return;
     }
     if (paused) return;
@@ -650,7 +662,7 @@
 
   // ---------------- 破壊パーティクル ----------------
 
-  const MAX_PARTICLES = 400;
+  const MAX_PARTICLES = 900;
   const particles = [];                                  // {pos, vel, life}
   const particleData = new Float32Array(MAX_PARTICLES * 6); // [x,y,z,r,g,b]
 
@@ -698,8 +710,9 @@
       const nx = p.pos[0] + p.vel[0] * dt;
       const ny = p.pos[1] + p.vel[1] * dt;
       const nz = p.pos[2] + p.vel[2] * dt;
-      // 地面で跳ねずに止まる
+      // 地面で跳ねずに止まる (雨粒は着地で消える)
       if (world.isSolidAt(Math.floor(nx), Math.floor(ny), Math.floor(nz))) {
+        if (p.rain) { particles.splice(i, 1); continue; }
         p.vel = [0, 0, 0];
       } else {
         p.pos = [nx, ny, nz];
@@ -716,6 +729,179 @@
       particleData[o + 4] = p.col[1];
       particleData[o + 5] = p.col[2];
     }
+  }
+
+  // ---------------- 天候 (雨) ----------------
+
+  let raining = false;
+  let weatherTimer = 90 + Math.random() * 180;
+  let rainAccum = 0;
+
+  function updateWeather(dt) {
+    weatherTimer -= dt;
+    if (weatherTimer <= 0) {
+      raining = !raining;
+      weatherTimer = raining ? 50 + Math.random() * 80 : 120 + Math.random() * 240;
+      showToast(raining ? "雨が降ってきた" : "雨が上がった");
+      if (raining) sound.startRain();
+      else sound.stopRain();
+    }
+    if (!raining) return;
+
+    // プレイヤー周辺に雨粒を撒く
+    rainAccum += dt * 110;
+    const eye = player.eyePos();
+    while (rainAccum >= 1) {
+      rainAccum -= 1;
+      if (particles.length >= MAX_PARTICLES - 30) break; // 破壊パーティクル用に余裕を残す
+      const ang = Math.random() * Math.PI * 2;
+      const r = Math.random() * 14;
+      particles.push({
+        pos: [eye[0] + Math.cos(ang) * r, eye[1] + 5 + Math.random() * 9, eye[2] + Math.sin(ang) * r],
+        vel: [1.2, -22, 0],
+        life: 1.1,
+        col: [0.45, 0.55, 0.85],
+        rain: true,
+      });
+    }
+  }
+
+  // ---------------- チェスト ----------------
+
+  const chests = new Map();   // "x,y,z" -> Map(itemId -> count)
+  let chestsDirty = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem("mcjs_chests_" + seed));
+    if (saved && typeof saved === "object") {
+      for (const key of Object.keys(saved)) {
+        const m = new Map();
+        for (const [id, n] of saved[key]) {
+          if (getDef(id) && n > 0) m.set(id, n);
+        }
+        chests.set(key, m);
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  const chestModalEl = document.getElementById("chest-modal");
+  const chestGridEl = document.getElementById("chest-grid");
+  const chestInvGridEl = document.getElementById("chest-inv-grid");
+  let chestOpen = false;
+  let chestKey = null;
+
+  function chestAt(key) {
+    let c = chests.get(key);
+    if (!c) { c = new Map(); chests.set(key, c); }
+    return c;
+  }
+
+  function makeItemCell(id, n, onClick) {
+    const el = document.createElement("div");
+    el.className = "inv-item";
+    const icon = document.createElement("canvas");
+    icon.width = icon.height = 48;
+    drawBlockIcon(icon, id, atlas);
+    const label = document.createElement("span");
+    label.textContent = getDef(id).jp;
+    const badge = document.createElement("span");
+    badge.className = "count";
+    badge.textContent = String(n);
+    el.append(icon, label, badge);
+    el.addEventListener("click", onClick);
+    return el;
+  }
+
+  function renderChestUI() {
+    const chest = chestAt(chestKey);
+    chestGridEl.innerHTML = "";
+    chestInvGridEl.innerHTML = "";
+
+    let any = false;
+    for (const [id, n] of chest) {
+      if (n <= 0) continue;
+      any = true;
+      chestGridEl.appendChild(makeItemCell(id, n, () => {
+        // チェスト → 持ち物 (全部)
+        chest.delete(id);
+        addItem(id, n);
+        chestsDirty = true;
+        sound.pickup();
+        renderChestUI();
+      }));
+    }
+    if (!any) {
+      const note = document.createElement("div");
+      note.className = "empty-note";
+      note.textContent = "(空っぽ)";
+      chestGridEl.appendChild(note);
+    }
+
+    let anyInv = false;
+    for (const [id, n] of invCounts) {
+      if (n <= 0) continue;
+      anyInv = true;
+      chestInvGridEl.appendChild(makeItemCell(id, n, () => {
+        // 持ち物 → チェスト (全部)
+        invCounts.set(id, 0);
+        invDirty = true;
+        chest.set(id, (chest.get(id) || 0) + n);
+        chestsDirty = true;
+        updateHotbarCounts();
+        sound.place();
+        renderChestUI();
+      }));
+    }
+    if (!anyInv) {
+      const note = document.createElement("div");
+      note.className = "empty-note";
+      note.textContent = "(何も持っていない)";
+      chestInvGridEl.appendChild(note);
+    }
+  }
+
+  function openChest(pos) {
+    chestKey = pos.join(",");
+    chestOpen = true;
+    chestModalEl.classList.remove("hidden");
+    renderChestUI();
+    document.exitPointerLock();
+  }
+
+  function closeChest() {
+    chestOpen = false;
+    chestModalEl.classList.add("hidden");
+    canvas.requestPointerLock();
+  }
+
+  // ---------------- ベッド (睡眠 / リスポーン地点) ----------------
+
+  const sleepOverlayEl = document.getElementById("sleep-overlay");
+  let sleeping = false;
+  try {
+    const sp = JSON.parse(localStorage.getItem("mcjs_spawn_" + seed));
+    if (Array.isArray(sp) && sp.length === 3 && sp.every(Number.isFinite)) {
+      player.spawnPoint = sp;
+    }
+  } catch (e) { /* ignore */ }
+
+  function trySleep(pos) {
+    if (sleeping) return;
+    const daylight = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
+    player.spawnPoint = [pos[0] + 0.5, pos[1] + 1, pos[2] + 0.5];
+    localStorage.setItem("mcjs_spawn_" + seed, JSON.stringify(player.spawnPoint));
+    if (daylight > 0.3) {
+      showToast("リスポーン地点を設定した (眠れるのは夜だけ)");
+      return;
+    }
+    sleeping = true;
+    sleepOverlayEl.classList.add("show");
+    showToast("おやすみなさい…");
+    setTimeout(() => {
+      timeOfDay = 0.165; // 朝
+      sleepOverlayEl.classList.remove("show");
+      sleeping = false;
+      showToast("朝になった (リスポーン地点を設定)");
+    }, 1400);
   }
 
   // ---------------- 爆発 (クリーパー / TNT) ----------------
@@ -868,6 +1054,18 @@
       // 道具の消耗 (硬いブロックのみ)
       if (tool && block.hardness >= 0.3) damageTool(tool.id);
     }
+    // チェストを壊したら中身をばらまく
+    if (hit.id === B.CHEST) {
+      const key = hit.pos.join(",");
+      const c = chests.get(key);
+      if (c) {
+        for (const [id, n] of c) {
+          if (n > 0) items.spawn(id, hit.pos[0], hit.pos[1], hit.pos[2], n);
+        }
+        chests.delete(key);
+        chestsDirty = true;
+      }
+    }
     // 上に乗っていた植生 / 松明も壊す
     const [bx, by, bz] = hit.pos;
     const above = world.getBlock(bx, by + 1, bz);
@@ -894,6 +1092,12 @@
       sound.bow();
       damageTool(tool.id);
       return;
+    }
+    // チェスト / ベッドは右クリックで開く・眠る (スニーク中は通常設置)
+    const hitFirst = player.raycast();
+    if (hitFirst && !player.sneaking) {
+      if (hitFirst.id === B.CHEST) { openChest(hitFirst.pos); return; }
+      if (hitFirst.id === B.BED) { trySleep(hitFirst.pos); return; }
     }
     // 食料: 食べる
     const heldDef = getDef(HOTBAR_BLOCKS[selectedSlot]);
@@ -1237,8 +1441,19 @@
     horizon = mix3(horizon, [0.96, 0.52, 0.28], sunset * 0.6);
     zenith = mix3(zenith, [0.45, 0.3, 0.42], sunset * 0.25);
 
-    let fog = horizon.slice();
+    let effectiveDaylight = daylight;
     let fogEnd = RENDER_DIST * CHUNK_SIZE - 6;
+
+    // 雨: 空が灰色になり, 暗く, 視界が悪くなる
+    if (raining) {
+      const grey = [0.5, 0.53, 0.58];
+      zenith = mix3(zenith, grey, 0.55 * daylight + 0.1);
+      horizon = mix3(horizon, grey, 0.55 * daylight + 0.1);
+      effectiveDaylight *= 0.8;
+      fogEnd *= 0.82;
+    }
+
+    let fog = horizon.slice();
     let fogStart = fogEnd * 0.55;
 
     // 水中
@@ -1248,7 +1463,7 @@
       fogEnd = 16;
     }
 
-    return { sunDir, daylight, zenith, horizon, fog, fogStart, fogEnd, fov };
+    return { sunDir, daylight: effectiveDaylight, zenith, horizon, fog, fogStart, fogEnd, fov };
   }
 
   // ---------------- ゲームループ ----------------
@@ -1300,8 +1515,8 @@
       }
 
       // アイテムドロップの回収
-      items.update(dt, player, (id) => {
-        addItem(id);
+      items.update(dt, player, (id, n) => {
+        addItem(id, n);
         sound.pickup();
       });
       updateFallingBlocks(dt);
@@ -1311,9 +1526,11 @@
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
       updateParticles(dt);
 
-      // モブ更新 (夜はゾンビ, 昼は動物が湧く)
+      updateWeather(dt);
+
+      // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
-      mobs.update(dt, player, daylightNow);
+      mobs.update(dt, player, raining ? daylightNow * 0.45 : daylightNow);
       for (const death of mobs.deaths) {
         const def = MOB_TYPES[death.type];
         const col = def.parts[0];
@@ -1451,6 +1668,17 @@
           localStorage.setItem("mcjs_tooldur_" + seed, JSON.stringify([...toolDur]));
         } catch (e) { /* 容量超過などは無視 */ }
       }
+      if (chestsDirty) {
+        chestsDirty = false;
+        try {
+          const obj = {};
+          for (const [key, m] of chests) {
+            const arr = [...m].filter(([, n]) => n > 0);
+            if (arr.length > 0) obj[key] = arr;
+          }
+          localStorage.setItem("mcjs_chests_" + seed, JSON.stringify(obj));
+        } catch (e) { /* ignore */ }
+      }
     }
   }
 
@@ -1466,6 +1694,8 @@
     seed,
     selectSlot,
     setTime: (t) => { timeOfDay = ((t % 1) + 1) % 1; },
+    setRain: (r) => { raining = r; weatherTimer = 9999; },
+    get raining() { return raining; },
     action: doAction,
   };
 

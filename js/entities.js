@@ -604,10 +604,11 @@ class ItemManager {
     this.items = [];   // {id, pos, vel, phase, age}
   }
 
-  spawn(blockId, x, y, z) {
+  spawn(blockId, x, y, z, n = 1) {
     if (this.items.length > 120) this.items.shift();
     this.items.push({
       id: blockId,
+      n,
       pos: [x + 0.5, y + 0.3, z + 0.5],
       vel: [(Math.random() - 0.5) * 2.2, 2.5 + Math.random() * 1.5, (Math.random() - 0.5) * 2.2],
       phase: Math.random() * Math.PI * 2,
@@ -633,7 +634,7 @@ class ItemManager {
         // 回収は水平距離ベース (アイテムは地面に転がっているため)
         if (d2h < 0.9 * 0.9 && py > -1.2 && py < 2.0) {
           this.items.splice(i, 1);
-          onPickup(it.id);
+          onPickup(it.id, it.n || 1);
           continue;
         }
         if (d2 < 2.5 * 2.5) {

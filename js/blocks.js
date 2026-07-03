@@ -33,6 +33,8 @@ const B = {
   DIAMOND_BLOCK: 25,
   TNT: 26,
   GRAVEL: 27,
+  CHEST: 28,
+  BED: 29,
 };
 
 // 道具・素材アイテム (ID 100 以降はブロックではなく設置不可)
@@ -107,6 +109,9 @@ const TILE = {
   TNT_SIDE: 48,
   TNT_TOP: 49,
   GRAVEL: 50,
+  CHEST_SIDE: 51,
+  CHEST_TOP: 52,
+  BED_TOP: 53,
 };
 
 // 各ブロックの属性
@@ -179,6 +184,8 @@ BLOCKS[B.TORCH].torch = true;   // 専用の小型モデルで描画
 defBlock(B.WOOL, "wool", "羊毛", [TILE.WOOL, TILE.WOOL, TILE.WOOL], { hardness: 0.8 });
 defBlock(B.TNT, "tnt", "TNT", [TILE.TNT_TOP, TILE.TNT_SIDE, TILE.TNT_TOP], { hardness: 0.1 });
 defBlock(B.GRAVEL, "gravel", "砂利", [TILE.GRAVEL, TILE.GRAVEL, TILE.GRAVEL], { hardness: 0.7 });
+defBlock(B.CHEST, "chest", "チェスト", [TILE.CHEST_TOP, TILE.CHEST_SIDE, TILE.CHEST_TOP], { hardness: 1.2 });
+defBlock(B.BED, "bed", "ベッド", [TILE.BED_TOP, TILE.PLANK, TILE.PLANK], { hardness: 0.5 });
 defBlock(B.GOLD_ORE, "gold_ore", "金鉱石", [TILE.GOLD_ORE, TILE.GOLD_ORE, TILE.GOLD_ORE],
   { hardness: 2.6, pickable: true, minTier: 3 });
 defBlock(B.DIAMOND_ORE, "diamond_ore", "ダイヤモンド鉱石", [TILE.DIAMOND_ORE, TILE.DIAMOND_ORE, TILE.DIAMOND_ORE],

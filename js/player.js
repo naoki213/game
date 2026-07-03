@@ -219,7 +219,9 @@ class Player {
     this.dead = false;
     this.vel = [0, 0, 0];
     this.flying = false;
-    this.spawn(8.5, 8.5);
+    // ベッドで設定したリスポーン地点があればそこへ
+    if (this.spawnPoint) this.spawn(this.spawnPoint[0], this.spawnPoint[2]);
+    else this.spawn(8.5, 8.5);
   }
 
   // AABB を 1 軸だけ動かして衝突解決

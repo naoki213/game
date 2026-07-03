@@ -374,6 +374,29 @@ function buildTextureAtlas(seed) {
     return px(128, 122, 115, jitter(1, 0.12));
   });
 
+  // --- チェスト ---
+  paintTile(TILE.CHEST_SIDE, (x, y) => {
+    const frame = x === 0 || y === 0 || x === 15 || y === 15;
+    if (frame) return px(95, 70, 40, jitter(1, 0.06));
+    // 留め金
+    if (x >= 7 && x <= 8 && y >= 5 && y <= 9) return px(160, 160, 165, jitter(1, 0.08));
+    const lid = y === 5;
+    return px(155, 115, 65, jitter(lid ? 0.75 : 1, 0.07));
+  });
+  paintTile(TILE.CHEST_TOP, (x, y) => {
+    const frame = x === 0 || y === 0 || x === 15 || y === 15;
+    return px(frame ? 95 : 155, frame ? 70 : 115, frame ? 40 : 65, jitter(1, 0.07));
+  });
+
+  // --- ベッド (上面: 枕 + 赤い毛布) ---
+  paintTile(TILE.BED_TOP, (x, y) => {
+    const frame = x === 0 || x === 15;
+    if (frame) return px(120, 90, 55, 1);
+    if (y <= 4) return px(235, 235, 235, jitter(1, 0.04));   // 枕
+    if (y === 5) return px(160, 30, 30, 1);                  // 毛布の縁
+    return px(200, 45, 45, jitter(1, 0.06));                 // 毛布
+  });
+
   // --- 羊毛 (もこもこの白) ---
   paintTile(TILE.WOOL, (x, y) => {
     const swirl = Math.sin(x * 1.9 + y * 0.7) * Math.sin(y * 1.7 - x * 0.5);
