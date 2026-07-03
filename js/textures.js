@@ -6,7 +6,7 @@
 
 const TILE_PX = 16;
 const ATLAS_COLS = 8;
-const ATLAS_ROWS = 4;
+const ATLAS_ROWS = 6;
 
 // 各タイルの平均色 [r,g,b] (0..1) — 破壊パーティクルの色に使う
 const TILE_AVG_COLORS = [];
@@ -255,6 +255,75 @@ function buildTextureAtlas(seed) {
     return [0, 0, 0, 0];
   });
 
+  // --- 金鉱石 / ダイヤモンド鉱石 ---
+  {
+    const spots = makeSpots(rand, 4);
+    paintTile(TILE.GOLD_ORE, (x, y) =>
+      spots(x, y) ? px(250, 215, 80, jitter(1, 0.1)) : px(127, 127, 127, jitter(1, 0.09)));
+  }
+  {
+    const spots = makeSpots(rand, 4);
+    paintTile(TILE.DIAMOND_ORE, (x, y) =>
+      spots(x, y) ? px(110, 235, 235, jitter(1, 0.1)) : px(127, 127, 127, jitter(1, 0.09)));
+  }
+
+  // --- 金ブロック / ダイヤモンドブロック ---
+  paintTile(TILE.GOLD_BLOCK, (x, y) => {
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    return px(250, 210, 70, jitter(border ? 0.8 : 1, 0.07));
+  });
+  paintTile(TILE.DIAMOND_BLOCK, (x, y) => {
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    return px(100, 225, 220, jitter(border ? 0.8 : 1, 0.07));
+  });
+
+  // --- 道具 (ピッケル / 剣) ---
+  const WOOD_COL = [140, 105, 60];
+  const toolMats = [
+    [TILE.PICK_WOOD, TILE.SWORD_WOOD, [168, 130, 80]],
+    [TILE.PICK_STONE, TILE.SWORD_STONE, [140, 140, 140]],
+    [TILE.PICK_IRON, TILE.SWORD_IRON, [225, 225, 230]],
+    [TILE.PICK_DIAMOND, TILE.SWORD_DIAMOND, [95, 230, 225]],
+  ];
+  for (const [pickTile, swordTile, mat] of toolMats) {
+    // ピッケル: 斜めの柄 + 上部のアーチ状ヘッド
+    paintTile(pickTile, (x, y) => {
+      if (y === 2 && x >= 4 && x <= 11) return px(mat[0], mat[1], mat[2], jitter(1, 0.06));
+      if (y === 3 && ((x >= 2 && x <= 4) || (x >= 11 && x <= 13))) return px(mat[0], mat[1], mat[2], 1);
+      if (y === 4 && ((x >= 1 && x <= 2) || (x >= 13 && x <= 14))) return px(mat[0], mat[1], mat[2], 0.9);
+      if (y === 5 && (x === 1 || x === 14)) return px(mat[0], mat[1], mat[2], 0.85);
+      if (y >= 4 && y <= 13 && Math.abs(x - (15 - y)) <= 0.5) return px(WOOD_COL[0], WOOD_COL[1], WOOD_COL[2], jitter(1, 0.08));
+      return [0, 0, 0, 0];
+    });
+    // 剣: 斜めの刃 + つば + 柄
+    paintTile(swordTile, (x, y) => {
+      if (y >= 1 && y <= 9 && Math.abs(x - (13 - y)) <= 1) {
+        const edge = x - (13 - y) === -1;
+        return px(mat[0], mat[1], mat[2], edge ? 1.08 : 0.9);
+      }
+      if (y === 10 && x >= 1 && x <= 5) return px(90, 70, 45, 1);   // つば
+      if (y >= 11 && y <= 13 && x === 13 - y + 1) return px(WOOD_COL[0], WOOD_COL[1], WOOD_COL[2], 1); // 柄
+      return [0, 0, 0, 0];
+    });
+  }
+
+  // --- 素材アイテム (インゴット / ダイヤ) ---
+  const ingot = (col) => (x, y) => {
+    if (y >= 6 && y <= 10 && x >= 3 && x <= 12) {
+      const corner = (y === 6 || y === 10) && (x === 3 || x === 12);
+      if (corner) return [0, 0, 0, 0];
+      return px(col[0], col[1], col[2], jitter(y === 7 ? 1.15 : 1, 0.05));
+    }
+    return [0, 0, 0, 0];
+  };
+  paintTile(TILE.INGOT_IRON, ingot([220, 220, 225]));
+  paintTile(TILE.INGOT_GOLD, ingot([250, 205, 60]));
+  paintTile(TILE.GEM_DIAMOND, (x, y) => {
+    const d = Math.abs(x - 7.5) + Math.abs(y - 7.5);
+    if (d < 5.5) return px(110, 235, 230, jitter(y < 8 ? 1.1 : 0.85, 0.06));
+    return [0, 0, 0, 0];
+  });
+
   // --- 羊毛 (もこもこの白) ---
   paintTile(TILE.WOOL, (x, y) => {
     const swirl = Math.sin(x * 1.9 + y * 0.7) * Math.sin(y * 1.7 - x * 0.5);
@@ -304,16 +373,16 @@ function drawBlockIcon(canvas, blockId, atlas) {
   ctx.clearRect(0, 0, s, s);
   ctx.imageSmoothingEnabled = false;
 
-  const block = BLOCKS[blockId];
+  const block = getDef(blockId);
   const srcTile = (tile) => {
     const tx = (tile % ATLAS_COLS) * TILE_PX;
     const ty = Math.floor(tile / ATLAS_COLS) * TILE_PX;
     return [tx, ty];
   };
 
-  // X 字植生 / 松明はタイルをそのまま描く
-  if (block.cross || block.torch) {
-    const [tx, ty] = srcTile(block.tiles[0]);
+  // アイテム / X 字植生 / 松明はタイルをそのまま描く
+  if (!block.tiles || block.cross || block.torch) {
+    const [tx, ty] = srcTile(block.tiles ? block.tiles[0] : block.tile);
     ctx.drawImage(atlas, tx, ty, TILE_PX, TILE_PX, s * 0.08, s * 0.08, s * 0.84, s * 0.84);
     return;
   }

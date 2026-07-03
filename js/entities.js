@@ -338,8 +338,8 @@ class MobManager {
   }
 
   // 叩いてダメージ + ノックバック
-  punch(mob, dir) {
-    mob.health -= 4;
+  punch(mob, dir, damage = 2) {
+    mob.health -= damage;
     mob.hurt = 0.35;
     mob.vel[0] += dir[0] * 7;
     mob.vel[2] += dir[2] * 7;

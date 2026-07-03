@@ -42,6 +42,40 @@
     }
   } catch (e) { /* 壊れたデータは無視 */ }
 
+  // 道具の耐久値 (アイテム ID → 残り耐久)。壊れたら所持数 -1
+  const toolDur = new Map();
+  try {
+    const saved = JSON.parse(localStorage.getItem("mcjs_tooldur_" + seed));
+    if (Array.isArray(saved)) for (const [id, d] of saved) toolDur.set(id, d);
+  } catch (e) { /* ignore */ }
+
+  function heldTool() {
+    const id = HOTBAR_BLOCKS[selectedSlot];
+    const def = getDef(id);
+    if (!def || !def.tool) return null;
+    // サバイバルでは所持していないと使えない
+    if (gameMode === "survival" && (invCounts.get(id) || 0) <= 0) return null;
+    return { id, ...def.tool };
+  }
+
+  function damageTool(id) {
+    if (gameMode !== "survival") return;
+    const def = getDef(id);
+    if (!def || !def.tool) return;
+    const cur = toolDur.has(id) ? toolDur.get(id) : def.tool.durability;
+    if (cur <= 1) {
+      // 道具が壊れる
+      invCounts.set(id, Math.max(0, (invCounts.get(id) || 0) - 1));
+      toolDur.delete(id);
+      sound.blip(180, 0.18, "sawtooth", 0.25);
+      showToast(def.jp + " が壊れた!");
+    } else {
+      toolDur.set(id, cur - 1);
+    }
+    invDirty = true;
+    updateHotbarCounts();
+  }
+
   function addItem(id, n = 1) {
     invCounts.set(id, (invCounts.get(id) || 0) + n);
     invDirty = true;
@@ -77,7 +111,7 @@
   try {
     const savedBar = JSON.parse(localStorage.getItem("mcjs_hotbar"));
     if (Array.isArray(savedBar) && savedBar.length === HOTBAR_BLOCKS.length &&
-        savedBar.every((id) => BLOCKS[id] && id !== B.AIR)) {
+        savedBar.every((id) => getDef(id) && id !== B.AIR)) {
       savedBar.forEach((id, i) => { HOTBAR_BLOCKS[i] = id; });
     }
   } catch (e) { /* 壊れたデータは無視 */ }
@@ -92,24 +126,44 @@
     key.textContent = String(i + 1);
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = BLOCKS[blockId].jp;
+    name.textContent = getDef(blockId).jp;
     const count = document.createElement("span");
     count.className = "count";
-    slot.append(icon, key, name, count);
+    const durbar = document.createElement("span");
+    durbar.className = "durbar";
+    durbar.innerHTML = "<i></i>";
+    slot.append(icon, key, name, count, durbar);
     hotbarEl.appendChild(slot);
     slotEls.push(slot);
   });
 
-  // サバイバルでは所持数を表示し, 持っていないブロックは薄くする
+  // サバイバルでは所持数・耐久値を表示し, 持っていないものは薄くする
   function updateHotbarCounts() {
     for (let i = 0; i < HOTBAR_BLOCKS.length; i++) {
+      const id = HOTBAR_BLOCKS[i];
+      const def = getDef(id);
       const countEl = slotEls[i].querySelector(".count");
       const iconEl = slotEls[i].querySelector("canvas");
+      const durEl = slotEls[i].querySelector(".durbar");
+
+      // 耐久バー (道具のみ, ダメージがあるときだけ表示)
+      let showDur = false;
+      if (def && def.tool && gameMode === "survival" && toolDur.has(id)) {
+        const ratio = toolDur.get(id) / def.tool.durability;
+        if (ratio < 1) {
+          showDur = true;
+          const bar = durEl.querySelector("i");
+          bar.style.width = (ratio * 100).toFixed(0) + "%";
+          bar.style.background = ratio > 0.5 ? "#5ad25a" : ratio > 0.2 ? "#e8c33a" : "#e04f3a";
+        }
+      }
+      durEl.style.display = showDur ? "block" : "none";
+
       if (gameMode === "creative") {
         countEl.textContent = "";
         iconEl.style.opacity = "1";
       } else {
-        const c = invCounts.get(HOTBAR_BLOCKS[i]) || 0;
+        const c = invCounts.get(id) || 0;
         countEl.textContent = c > 0 ? String(c) : "";
         iconEl.style.opacity = c > 0 ? "1" : "0.35";
       }
@@ -221,8 +275,11 @@
   const inventoryGrid = document.getElementById("inventory-grid");
   let inventoryOpen = false;
 
-  for (const block of BLOCKS) {
-    if (!block || block.id === B.AIR || block.id === B.WATER || block.id === B.BEDROCK) continue;
+  const gridDefs = [
+    ...BLOCKS.filter((b) => b && b.id !== B.AIR && b.id !== B.WATER && b.id !== B.BEDROCK),
+    ...Object.values(ITEMS),
+  ];
+  for (const block of gridDefs) {
     const item = document.createElement("div");
     item.className = "inv-item";
     item.dataset.blockId = String(block.id);
@@ -251,9 +308,24 @@
     { out: B.PLANK, outN: 4, in: [[B.LOG, 1]] },
     { out: B.TORCH, outN: 4, in: [[B.PLANK, 2]] },
     { out: B.TORCH, outN: 8, in: [[B.COAL_ORE, 1], [B.PLANK, 1]] },
+    // 道具
+    { out: I.WOOD_PICK, outN: 1, in: [[B.PLANK, 3]] },
+    { out: I.STONE_PICK, outN: 1, in: [[B.COBBLE, 3], [B.PLANK, 2]] },
+    { out: I.IRON_PICK, outN: 1, in: [[I.IRON_INGOT, 3], [B.PLANK, 2]] },
+    { out: I.DIAMOND_PICK, outN: 1, in: [[I.DIAMOND, 3], [B.PLANK, 2]] },
+    { out: I.WOOD_SWORD, outN: 1, in: [[B.PLANK, 2]] },
+    { out: I.STONE_SWORD, outN: 1, in: [[B.COBBLE, 2], [B.PLANK, 1]] },
+    { out: I.IRON_SWORD, outN: 1, in: [[I.IRON_INGOT, 2], [B.PLANK, 1]] },
+    { out: I.DIAMOND_SWORD, outN: 1, in: [[I.DIAMOND, 2], [B.PLANK, 1]] },
+    // 精錬 (木材を燃料に)
+    { out: I.IRON_INGOT, outN: 1, in: [[B.IRON_ORE, 1], [B.PLANK, 1]] },
+    { out: I.GOLD_INGOT, outN: 1, in: [[B.GOLD_ORE, 1], [B.PLANK, 1]] },
     { out: B.GLASS, outN: 2, in: [[B.SAND, 2]] },
     { out: B.STONE, outN: 2, in: [[B.COBBLE, 2]] },
     { out: B.BRICK, outN: 2, in: [[B.STONE, 2]] },
+    // 装飾ブロック
+    { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
+    { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
     { out: B.GLOWSTONE, outN: 1, in: [[B.TORCH, 4], [B.GLASS, 1]] },
   ];
 
@@ -278,6 +350,15 @@
       }
       invDirty = true;
       addItem(recipe.out, recipe.outN);
+      // 道具はホットバーに自動セット (空きが優先, なければ選択枠)
+      const outDef = getDef(recipe.out);
+      if (outDef.tool && !HOTBAR_BLOCKS.includes(recipe.out)) {
+        HOTBAR_BLOCKS[selectedSlot] = recipe.out;
+        drawBlockIcon(slotEls[selectedSlot].querySelector("canvas"), recipe.out, atlas);
+        slotEls[selectedSlot].querySelector(".name").textContent = outDef.jp;
+        localStorage.setItem("mcjs_hotbar", JSON.stringify(HOTBAR_BLOCKS));
+        updateHotbarCounts();
+      }
       sound.pickup();
       refreshCraftUI();
       refreshInventoryCounts();
@@ -296,9 +377,9 @@
       const parts = recipe.in.map(([id, n]) => {
         const have = invCounts.get(id) || 0;
         const cls = have >= n ? "" : ' class="lack"';
-        return `<span${cls}>${BLOCKS[id].jp} ×${n} (所持 ${have})</span>`;
+        return `<span${cls}>${getDef(id).jp} ×${n} (所持 ${have})</span>`;
       });
-      desc.innerHTML = `${BLOCKS[recipe.out].jp} ×${recipe.outN} ← ` + parts.join(" + ");
+      desc.innerHTML = `${getDef(recipe.out).jp} ×${recipe.outN} ← ` + parts.join(" + ");
       btn.disabled = !canCraft(recipe);
     }
   }
@@ -637,28 +718,39 @@
     }
   }
 
-  // モブが視線上にいれば叩く。叩いたら true
+  // モブが視線上にいれば叩く。叩いたら true (剣でダメージ増加)
   function tryPunch() {
     const hit = player.raycast();
     const fwd = player.forward();
     const mob = mobs.pick(player.eyePos(), fwd, hit ? hit.t : REACH);
     if (mob) {
-      mobs.punch(mob, fwd);
+      const tool = heldTool();
+      const damage = tool ? tool.damage : 2;
+      mobs.punch(mob, fwd, damage);
       sound.thud();
+      if (tool && tool.kind === "sword") damageTool(tool.id);
       return true;
     }
     return false;
   }
 
-  // ブロックを実際に破壊する (ドロップ・上に乗った植生の処理込み)
+  // ブロックを実際に破壊する (ドロップ・道具の消耗・上に乗った植生の処理込み)
   function breakBlockAt(hit) {
     const block = BLOCKS[hit.id];
     if (!isFinite(block.hardness)) return;
+    const tool = heldTool();
     if (!world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR)) return;
     spawnBreakParticles(hit.pos[0], hit.pos[1], hit.pos[2], hit.id);
     sound.break_();
-    if (gameMode === "survival" && block.drops !== null && block.drops !== B.AIR) {
-      items.spawn(block.drops, hit.pos[0], hit.pos[1], hit.pos[2]);
+    if (gameMode === "survival") {
+      // 階層不足のピッケルではドロップしない (本家準拠)
+      const tier = tool && tool.kind === "pick" ? tool.tier : 0;
+      const canDrop = block.minTier === 0 || tier >= block.minTier;
+      if (canDrop && block.drops !== null && block.drops !== B.AIR) {
+        items.spawn(block.drops, hit.pos[0], hit.pos[1], hit.pos[2]);
+      }
+      // 道具の消耗 (硬いブロックのみ)
+      if (tool && block.hardness >= 0.3) damageTool(tool.id);
     }
     // 上に乗っていた植生 / 松明も壊す
     const [bx, by, bz] = hit.pos;
@@ -681,6 +773,7 @@
     const cur = world.getBlock(px, py, pz);
     if (cur !== B.AIR && cur !== B.WATER) return;
     const id = HOTBAR_BLOCKS[selectedSlot];
+    if (!BLOCKS[id]) return; // 道具・素材は設置できない
     if (isSolid(id) && player.intersectsBlock(px, py, pz)) return;
     // 松明と植生は下が固体ブロックのときだけ置ける
     if ((BLOCKS[id].torch || BLOCKS[id].cross) && !world.isSolidAt(px, py - 1, pz)) return;
@@ -737,17 +830,24 @@
       return;
     }
 
-    // サバイバル: 硬さに応じて掘り進める
+    // サバイバル: 硬さと道具に応じて掘り進める
     const key = hit.pos.join(",");
     if (key !== breakTargetKey) {
       breakTargetKey = key;
       breakTargetPos = hit.pos;
       breakProgress = 0;
     }
-    const hard = BLOCKS[hit.id].hardness;
+    const block = BLOCKS[hit.id];
+    let hard = block.hardness;
     if (!isFinite(hard)) {
       breakProgress = 0;
       return;
+    }
+    // 石系ブロックはピッケルで加速, 素手だと非常に遅い
+    if (block.pickable) {
+      const tool = heldTool();
+      if (tool && tool.kind === "pick") hard /= tool.speed;
+      else hard *= 3.2;
     }
     breakProgress += dt / hard;
     if (breakProgress >= 1) {
@@ -1185,6 +1285,7 @@
         invDirty = false;
         try {
           localStorage.setItem("mcjs_inv_" + seed, JSON.stringify([...invCounts]));
+          localStorage.setItem("mcjs_tooldur_" + seed, JSON.stringify([...toolDur]));
         } catch (e) { /* 容量超過などは無視 */ }
       }
     }

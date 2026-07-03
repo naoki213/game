@@ -579,14 +579,14 @@ class Renderer {
     if (mesh) return mesh;
 
     const gl = this.gl;
-    const block = BLOCKS[blockId];
+    const block = getDef(blockId);
     const verts = [];
     const indices = [];
     let count = 0;
 
-    if (block.cross || block.torch) {
-      // X 字植生 / 松明: 2 枚の対角クアッド (原点中心)
-      const uv = tileUV(block.tiles[0]);
+    if (!block.tiles || block.cross || block.torch) {
+      // アイテム / X 字植生 / 松明: 2 枚の対角クアッド (原点中心)
+      const uv = tileUV(block.tiles ? block.tiles[0] : block.tile);
       const quads = [
         [[-0.5, 0.5, -0.5], [-0.5, -0.5, -0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5]],
         [[0.5, 0.5, -0.5], [0.5, -0.5, -0.5], [-0.5, -0.5, 0.5], [-0.5, 0.5, 0.5]],

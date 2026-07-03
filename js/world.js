@@ -130,10 +130,12 @@ class World {
             id = sandy ? B.SAND : B.DIRT;
           } else {
             id = B.STONE;
-            // 鉱石
+            // 鉱石 (深いほど貴重な鉱石が出る)
             const r = hash3(wx, y, wz, seed);
             if (y < 42 && r < 0.014) id = B.COAL_ORE;
             else if (y < 26 && r >= 0.014 && r < 0.021) id = B.IRON_ORE;
+            else if (y < 18 && r >= 0.021 && r < 0.0242) id = B.GOLD_ORE;
+            else if (y < 13 && r >= 0.0242 && r < 0.0262) id = B.DIAMOND_ORE;
           }
           chunk.set(lx, y, lz, id);
         }
