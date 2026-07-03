@@ -1763,6 +1763,9 @@
     horizon = mix3(horizon, [0.96, 0.52, 0.28], sunset * 0.6);
     zenith = mix3(zenith, [0.45, 0.3, 0.42], sunset * 0.25);
 
+    // 太陽光の色温度 (正午は白, 朝夕は暖色)
+    const sunColor = mix3([1.02, 1.0, 0.96], [1.25, 0.85, 0.6], sunset * 0.85);
+
     let effectiveDaylight = daylight;
     let fogEnd = RENDER_DIST * CHUNK_SIZE - 6;
 
@@ -1785,7 +1788,7 @@
       fogEnd = 16;
     }
 
-    return { sunDir, daylight: effectiveDaylight, zenith, horizon, fog, fogStart, fogEnd, fov };
+    return { sunDir, daylight: effectiveDaylight, zenith, horizon, fog, fogStart, fogEnd, fov, sunColor };
   }
 
   // ---------------- ゲームループ ----------------

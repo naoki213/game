@@ -87,11 +87,11 @@ function buildTextureAtlas(seed) {
     return px(219, 207, 163, v);
   });
 
-  // --- 水 (半透明はシェーダ側で処理, ここは色のみ) ---
+  // --- 水 (半透明・反射はシェーダ側で処理, ここは深めの色のみ) ---
   paintTile(TILE.WATER, (x, y) => {
-    const wave = Math.sin((x + y * 2) * 0.8) * 0.06;
-    const v = 1 + wave + (rand() * 2 - 1) * 0.03;
-    return px(52, 95, 218, v);
+    const wave = Math.sin((x + y * 2) * 0.8) * 0.05;
+    const v = 1 + wave + (rand() * 2 - 1) * 0.02;
+    return px(38, 82, 196, v);
   });
 
   // --- 原木側面 (縦の樹皮) ---

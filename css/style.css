@@ -204,6 +204,15 @@ html, body {
 
 #toast.show { opacity: 1; }
 
+/* ---- vignette (映画的な周辺減光) ---- */
+#vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center,
+    transparent 58%, rgba(0, 0, 10, 0.28) 100%);
+  pointer-events: none;
+}
+
 /* ---- hurt flash ---- */
 #hurt-overlay {
   position: absolute;

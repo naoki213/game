@@ -7,50 +7,117 @@ const WORLD_VS = `
 precision mediump float;
 attribute vec3 aPos;
 attribute vec2 aUV;
-attribute float aShade;
+attribute float aShade;   // AOシェード + 法線インデックス*4 をパック
 attribute float aSky;
 attribute float aBlock;
 uniform mat4 uMVP;
 uniform vec3 uCamPos;
+uniform vec3 uSunDir;
 uniform float uDaylight;
+uniform float uWave;      // 1 = 水 (波アニメーション)
+uniform float uTime;
 varying vec2 vUV;
 varying float vLight;
 varying float vWarm;
+varying float vSkyShare;  // 光のうちスカイライト由来の割合 (太陽の色温度用)
 varying float vDist;
+varying vec3 vWorldPos;
 void main() {
-  gl_Position = uMVP * vec4(aPos, 1.0);
+  vec3 pos = aPos;
+  // 水面の波
+  if (uWave > 0.5) {
+    pos.y += sin(pos.x * 1.1 + uTime * 1.8) * 0.045
+           + cos(pos.z * 0.9 + uTime * 1.4) * 0.045;
+  }
+  gl_Position = uMVP * vec4(pos, 1.0);
   vUV = aUV;
-  // スカイライトは昼夜で変動, ブロックライトは常に一定
-  float sky = aSky * mix(0.13, 1.0, uDaylight);
-  float br = max(max(sky, aBlock), 0.045);
-  vLight = aShade * br;
-  // ブロックライト優勢の場所は暖色にする
-  vWarm = clamp(aBlock - sky, 0.0, 1.0);
-  vDist = distance(aPos.xz, uCamPos.xz);
+  vWorldPos = pos;
+
+  // aShade から法線インデックスと AO シェードを取り出す
+  float idx = floor(aShade * 0.25 + 0.001);
+  float shade = aShade - idx * 4.0;
+
+  // 面の法線 (idx 6 = 植生など方向なし)
+  vec3 N = vec3(0.0);
+  if (idx < 0.5) N = vec3(1.0, 0.0, 0.0);
+  else if (idx < 1.5) N = vec3(-1.0, 0.0, 0.0);
+  else if (idx < 2.5) N = vec3(0.0, 1.0, 0.0);
+  else if (idx < 3.5) N = vec3(0.0, -1.0, 0.0);
+  else if (idx < 4.5) N = vec3(0.0, 0.0, 1.0);
+  else if (idx < 5.5) N = vec3(0.0, 0.0, -1.0);
+
+  // 太陽方向のディレクショナルライト (影MOD風の面ごとの陰影)
+  float diff = idx > 5.5 ? 0.55 : max(dot(N, uSunDir), 0.0);
+  float direct = 0.5 + 0.62 * diff;
+
+  float dayFactor = mix(0.13, 1.0, uDaylight);
+  float skyTerm = aSky * dayFactor * direct;
+  float br = max(max(skyTerm, aBlock), 0.045);
+  vLight = shade * br;
+  vSkyShare = skyTerm / max(skyTerm + aBlock, 0.001);
+  vWarm = clamp(aBlock - skyTerm, 0.0, 1.0);
+  vDist = distance(pos.xz, uCamPos.xz);
 }`;
 
 const WORLD_FS = `
 precision mediump float;
 uniform sampler2D uTex;
 uniform vec3 uFogColor;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform vec3 uCamPos;
 uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uDaylight;
 uniform float uAlpha;
+uniform float uWave;
+uniform float uTime;
 varying vec2 vUV;
 varying float vLight;
 varying float vWarm;
+varying float vSkyShare;
 varying float vDist;
+varying vec3 vWorldPos;
 void main() {
   vec4 tex = texture2D(uTex, vUV);
   if (uAlpha >= 1.0 && tex.a < 0.5) discard;
-  // 夜はわずかに青みがかり, 発光ブロックの近くは暖色になる
-  vec3 nightTint = mix(vec3(0.85, 0.9, 1.15), vec3(1.0), uDaylight);
-  vec3 tint = mix(nightTint, vec3(1.12, 1.0, 0.82), vWarm);
+
+  // 夜は青く, 発光ブロックの近くは暖色, 太陽光は色温度つき
+  vec3 nightTint = mix(vec3(0.8, 0.88, 1.2), vec3(1.0), uDaylight);
+  vec3 tint = mix(nightTint, vec3(1.15, 1.0, 0.8), vWarm);
+  tint *= mix(vec3(1.0), uSunColor, vSkyShare);
   vec3 col = tex.rgb * vLight * tint;
+  float alpha = tex.a * uAlpha;
+
+  // 水: 太陽の鏡面反射 + フレネルで角度により透け方が変わる
+  if (uWave > 0.5) {
+    vec3 V = normalize(uCamPos - vWorldPos);
+    vec3 N = normalize(vec3(
+      sin(vWorldPos.x * 1.4 + uTime * 1.9) * 0.10,
+      1.0,
+      cos(vWorldPos.z * 1.2 + uTime * 1.5) * 0.10));
+    float spec = pow(max(dot(reflect(-uSunDir, N), V), 0.0), 90.0);
+    col += vec3(1.0, 0.95, 0.8) * spec * 1.2 * uDaylight;
+    float fres = pow(1.0 - max(dot(V, N), 0.0), 2.5);
+    alpha = uAlpha * mix(0.82, 1.5, fres);
+    alpha = min(alpha, 0.95);
+    // 空の色を少し映り込ませる
+    col = mix(col, uFogColor * 1.1, fres * 0.45 * uDaylight);
+  }
+
+  // フォグ + 太陽方向の大気散乱 (夕日が霞に滲む)
+  vec3 viewDir = normalize(vWorldPos - uCamPos);
+  float sunAmt = pow(max(dot(viewDir, uSunDir), 0.0), 10.0);
+  vec3 fogCol = mix(uFogColor, vec3(1.0, 0.75, 0.5), sunAmt * 0.65 * uDaylight);
   float fog = clamp((vDist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
-  col = mix(col, uFogColor, fog * fog);
-  gl_FragColor = vec4(col, tex.a * uAlpha);
+  col = mix(col, fogCol, fog * fog);
+
+  // 軽いトーンマッピング (コントラストと彩度をわずかに強調)
+  col = col * 1.06 - 0.015;
+  float grey = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(grey), col, 1.08);
+
+  gl_FragColor = vec4(col, alpha);
 }`;
 
 const SKY_VS = `
@@ -359,10 +426,14 @@ class Renderer {
     gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.mvp);
     gl.uniform3fv(pw.uniforms.uCamPos, camPos);
     gl.uniform3fv(pw.uniforms.uFogColor, env.fog);
+    gl.uniform3fv(pw.uniforms.uSunDir, env.sunDir);
+    gl.uniform3fv(pw.uniforms.uSunColor, env.sunColor || [1, 1, 1]);
     gl.uniform1f(pw.uniforms.uFogStart, env.fogStart);
     gl.uniform1f(pw.uniforms.uFogEnd, env.fogEnd);
     gl.uniform1f(pw.uniforms.uDaylight, env.daylight);
     gl.uniform1f(pw.uniforms.uAlpha, 1.0);
+    gl.uniform1f(pw.uniforms.uWave, 0);
+    gl.uniform1f(pw.uniforms.uTime, time);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.atlas);
     gl.uniform1i(pw.uniforms.uTex, 0);
@@ -422,6 +493,7 @@ class Renderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(pw.uniforms.uAlpha, 0.62);
+    gl.uniform1f(pw.uniforms.uWave, 1);
     gl.disable(gl.CULL_FACE); // 水面は下からも見えるように
     for (let i = visible.length - 1; i >= 0; i--) {
       const m = visible[i].mesh.water;
@@ -431,6 +503,7 @@ class Renderer {
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
       drawCalls++;
     }
+    gl.uniform1f(pw.uniforms.uWave, 0);
     gl.enable(gl.CULL_FACE);
 
     // --- 破壊パーティクル (点スプライト) ---
@@ -498,7 +571,7 @@ class Renderer {
           c[2] === 1 ? 1 + e : -e,
           lerp(uv.u0, uv.u1, face.uvs[ci][0]),
           lerp(uv.v0, uv.v1, face.uvs[ci][1]),
-          1.0, 1.0, 1.0
+          25.0, 1.0, 1.0
         );
       }
       indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
@@ -594,7 +667,7 @@ class Renderer {
       const quadUV = [[uv.u0, uv.v0], [uv.u0, uv.v1], [uv.u1, uv.v1], [uv.u1, uv.v0]];
       for (const q of quads) {
         for (let ci = 0; ci < 4; ci++) {
-          verts.push(q[ci][0], q[ci][1], q[ci][2], quadUV[ci][0], quadUV[ci][1], 1.0, 1.0, 0.0);
+          verts.push(q[ci][0], q[ci][1], q[ci][2], quadUV[ci][0], quadUV[ci][1], 25.0, 1.0, 0.0);
         }
         indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
         indices.push(count + 2, count + 1, count, count + 3, count + 2, count);
@@ -603,7 +676,7 @@ class Renderer {
     } else {
       const blk = block.emissive ? 1.0 : 0.0;
       const hgt = block.height || 1; // ハーフブロックは低く表示
-      for (const face of FACES) {
+      FACES.forEach((face, fi) => {
         const tile = face.dir[1] === 1 ? block.tiles[0]
           : face.dir[1] === -1 ? block.tiles[2] : block.tiles[1];
         const uv = tileUV(tile);
@@ -613,12 +686,12 @@ class Renderer {
             c[0] - 0.5, c[1] * hgt - 0.5, c[2] - 0.5,
             lerp(uv.u0, uv.u1, face.uvs[ci][0]),
             lerp(uv.v0, uv.v1, face.uvs[ci][1]),
-            face.shade, 1.0, blk
+            fi * 4 + face.shade, 1.0, blk
           );
         }
         indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
         count += 4;
-      }
+      });
     }
 
     const vbo = gl.createBuffer();

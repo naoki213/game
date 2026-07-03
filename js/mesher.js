@@ -257,7 +257,7 @@ function buildChunkMesh(world, chunk) {
             const uvs = [[qu0, qv0], [qu0, qv1], [qu1, qv1], [qu1, qv0]];
             for (let ci = 0; ci < 4; ci++) {
               opaque.verts.push(q.c[ci][0], q.c[ci][1], q.c[ci][2],
-                uvs[ci][0], uvs[ci][1], 1.0, 1.0, 1.0);
+                uvs[ci][0], uvs[ci][1], 25.0, 1.0, 1.0);
             }
             opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
             opaque.count += 4;
@@ -280,8 +280,9 @@ function buildChunkMesh(world, chunk) {
           for (const q of quads) {
             const vi = opaque.count;
             for (let ci = 0; ci < 4; ci++) {
+              // 24 + shade = 法線インデックス 6 (方向なし)
               opaque.verts.push(q[ci][0], q[ci][1], q[ci][2],
-                quadUV[ci][0], quadUV[ci][1], 0.95, sky, blk);
+                quadUV[ci][0], quadUV[ci][1], 24.95, sky, blk);
             }
             // 両面 (表裏の三角形を両方積む)
             opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
@@ -375,7 +376,7 @@ function buildChunkMesh(world, chunk) {
               oz + lz + c[2],
               lerp(uv.u0, uv.u1, face.uvs[ci][0]),
               lerp(uv.v0, uv.v1, face.uvs[ci][1] === 0 ? sideVTop : face.uvs[ci][1]),
-              shades[ci],
+              f * 4 + shades[ci],   // 法線インデックスをパック
               skys[ci],
               blks[ci]
             );
