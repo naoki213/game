@@ -602,6 +602,7 @@ class Renderer {
       }
     } else {
       const blk = block.emissive ? 1.0 : 0.0;
+      const hgt = block.height || 1; // ハーフブロックは低く表示
       for (const face of FACES) {
         const tile = face.dir[1] === 1 ? block.tiles[0]
           : face.dir[1] === -1 ? block.tiles[2] : block.tiles[1];
@@ -609,7 +610,7 @@ class Renderer {
         for (let ci = 0; ci < 4; ci++) {
           const c = face.corners[ci];
           verts.push(
-            c[0] - 0.5, c[1] - 0.5, c[2] - 0.5,
+            c[0] - 0.5, c[1] * hgt - 0.5, c[2] - 0.5,
             lerp(uv.u0, uv.u1, face.uvs[ci][0]),
             lerp(uv.v0, uv.v1, face.uvs[ci][1]),
             face.shade, 1.0, blk

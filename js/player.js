@@ -143,6 +143,7 @@ class Player {
 
     // --- 軸ごとの衝突解決 ---
     const sneakGuard = this.sneaking && this.onGround;
+    this._wasGrounded = this.onGround;   // 自動ステップ判定用 (リセット前の値)
     this.onGround = false;
     for (const axis of [0, 2]) {
       const old = this.pos[axis];
@@ -247,8 +248,20 @@ class Player {
     for (let y = y0; y <= y1; y++) {
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
-          if (!this.world.isSolidAt(x, y, z)) continue;
+          const bh = this.world.blockHeightAt(x, y, z);
+          if (bh === 0) continue;
+          const blockTop = y + bh;
+          // ハーフブロックの上半分は空: AABB が実体と重ならなければ無視
+          if (this.pos[1] >= blockTop - 1e-6) continue;
+
           // 衝突: 移動方向に応じて押し戻す
+          if (axis === 0 || axis === 2) {
+            // 低い段差 (ハーフブロック) は自動で登る
+            if (this._wasGrounded && bh < 1 && blockTop - this.pos[1] <= 0.55) {
+              this.pos[1] = blockTop + 1e-4;
+              continue;
+            }
+          }
           if (axis === 0) {
             this.pos[0] = delta > 0
               ? x - PLAYER_HALF_W - 1e-4
@@ -263,7 +276,7 @@ class Player {
             if (delta > 0) {
               this.pos[1] = y - PLAYER_HEIGHT - 1e-4;
             } else {
-              this.pos[1] = y + 1 + 1e-4;
+              this.pos[1] = blockTop + 1e-4;
               this.onGround = true;
               // 着地速度を記録 (落下ダメージ用)
               this.landImpact = Math.max(this.landImpact, -this.vel[1]);

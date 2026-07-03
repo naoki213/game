@@ -293,6 +293,7 @@ function buildChunkMesh(world, chunk) {
 
         const isWater = id === B.WATER;
         const target = isWater ? water : opaque;
+        const blockTop = block.height;   // ハーフブロック = 0.5
         // 水面: 上が空気なら少し低くして水面らしく
         const topOffset = (isWater && getNb(lx, y + 1, lz) !== B.WATER) ? -0.125 : 0;
 
@@ -300,7 +301,11 @@ function buildChunkMesh(world, chunk) {
           const face = FACES[f];
           const [dx, dy, dz] = face.dir;
           const nbId = getNb(lx + dx, y + dy, lz + dz);
-          if (!shouldDrawFace(id, nbId)) continue;
+          if (!shouldDrawFace(id, nbId)) {
+            // ハーフブロック: 上面は常に描く (上のブロックとの間に隙間がある)。
+            // 底面も下が不透明ブロックでなければ描く
+            if (!(blockTop < 1 && (f === 2 || (f === 3 && !isOpaque(nbId))))) continue;
+          }
           // 水中から見た水側面は省略 (上面のみ描く)
           if (isWater && f !== 2 && nbId !== B.AIR && !BLOCKS[nbId].opaque) continue;
 
@@ -358,17 +363,18 @@ function buildChunkMesh(world, chunk) {
             blks[ci] = bSum / n / 15;
           }
 
-          // 頂点を追加
+          // 頂点を追加 (ハーフブロックは高さと側面 UV を圧縮)
+          const sideVTop = (blockTop < 1 && f !== 2 && f !== 3) ? 1 - blockTop : 0;
           const vi = target.count;
           for (let ci = 0; ci < 4; ci++) {
             const c = face.corners[ci];
-            const cy = c[1] === 1 ? 1 + topOffset : 0;
+            const cy = c[1] === 1 ? blockTop + topOffset : 0;
             target.verts.push(
               ox + lx + c[0],
               y + cy,
               oz + lz + c[2],
               lerp(uv.u0, uv.u1, face.uvs[ci][0]),
-              lerp(uv.v0, uv.v1, face.uvs[ci][1]),
+              lerp(uv.v0, uv.v1, face.uvs[ci][1] === 0 ? sideVTop : face.uvs[ci][1]),
               shades[ci],
               skys[ci],
               blks[ci]

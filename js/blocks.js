@@ -35,6 +35,8 @@ const B = {
   GRAVEL: 27,
   CHEST: 28,
   BED: 29,
+  STONE_SLAB: 30,
+  PLANK_SLAB: 31,
 };
 
 // 道具・素材アイテム (ID 100 以降はブロックではなく設置不可)
@@ -124,6 +126,7 @@ const TILE = {
 //   drops: 破壊時にドロップするブロック ID (undefined = 自分自身, null = なし)
 //   pickable: ピッケルで加速する石系ブロック (素手だと非常に遅い)
 //   minTier: ドロップに必要なピッケル階層 (0=素手可 1=木 2=石 3=鉄)
+//   height: ブロックの高さ (ハーフブロック = 0.5, 通常 = 1)
 const BLOCKS = [];
 
 function defBlock(id, name, jp, tiles, opts = {}) {
@@ -140,6 +143,7 @@ function defBlock(id, name, jp, tiles, opts = {}) {
     drops: opts.drops !== undefined ? opts.drops : id,
     pickable: !!opts.pickable,
     minTier: opts.minTier || 0,
+    height: opts.height || 1,
   };
 }
 
@@ -186,6 +190,10 @@ defBlock(B.TNT, "tnt", "TNT", [TILE.TNT_TOP, TILE.TNT_SIDE, TILE.TNT_TOP], { har
 defBlock(B.GRAVEL, "gravel", "砂利", [TILE.GRAVEL, TILE.GRAVEL, TILE.GRAVEL], { hardness: 0.7 });
 defBlock(B.CHEST, "chest", "チェスト", [TILE.CHEST_TOP, TILE.CHEST_SIDE, TILE.CHEST_TOP], { hardness: 1.2 });
 defBlock(B.BED, "bed", "ベッド", [TILE.BED_TOP, TILE.PLANK, TILE.PLANK], { hardness: 0.5 });
+defBlock(B.STONE_SLAB, "stone_slab", "石ハーフブロック", [TILE.STONE, TILE.STONE, TILE.STONE],
+  { hardness: 1.4, pickable: true, minTier: 1, opaque: false, height: 0.5 });
+defBlock(B.PLANK_SLAB, "plank_slab", "木材ハーフブロック", [TILE.PLANK, TILE.PLANK, TILE.PLANK],
+  { hardness: 1.0, opaque: false, height: 0.5 });
 defBlock(B.GOLD_ORE, "gold_ore", "金鉱石", [TILE.GOLD_ORE, TILE.GOLD_ORE, TILE.GOLD_ORE],
   { hardness: 2.6, pickable: true, minTier: 3 });
 defBlock(B.DIAMOND_ORE, "diamond_ore", "ダイヤモンド鉱石", [TILE.DIAMOND_ORE, TILE.DIAMOND_ORE, TILE.DIAMOND_ORE],

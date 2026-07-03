@@ -237,6 +237,16 @@ class World {
     return isSolid(chunk.get(wx & 15, wy, wz & 15));
   }
 
+  // 当たり判定用の実効高さ (0 = 非固体, ハーフブロック = 0.5)
+  blockHeightAt(wx, wy, wz) {
+    if (wy < 0) return 1;
+    if (wy >= CHUNK_H) return 0;
+    const chunk = this.chunks.get(World.key(wx >> 4, wz >> 4));
+    if (!chunk || !chunk.generated) return 1;
+    const b = BLOCKS[chunk.get(wx & 15, wy, wz & 15)];
+    return b.solid ? b.height : 0;
+  }
+
   setBlock(wx, wy, wz, id) {
     if (wy < 0 || wy >= CHUNK_H) return false;
     const cx = wx >> 4, cz = wz >> 4;

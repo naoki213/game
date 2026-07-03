@@ -365,6 +365,8 @@
     { out: B.TNT, outN: 2, in: [[B.SAND, 4], [B.COAL_ORE, 1]] },
     { out: B.CHEST, outN: 1, in: [[B.PLANK, 8]] },
     { out: B.BED, outN: 1, in: [[B.WOOL, 3], [B.PLANK, 3]] },
+    { out: B.STONE_SLAB, outN: 4, in: [[B.STONE, 2]] },
+    { out: B.PLANK_SLAB, outN: 4, in: [[B.PLANK, 2]] },
     // 装飾ブロック
     { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
     { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
@@ -455,8 +457,13 @@
   function closeInventory() {
     inventoryOpen = false;
     inventoryEl.classList.add("hidden");
-    canvas.requestPointerLock();
+    if (!isTouch) canvas.requestPointerLock();
   }
+
+  // モーダルの背景タップで閉じる (スマホ向け)
+  inventoryEl.addEventListener("click", (e) => {
+    if (e.target === inventoryEl) closeInventory();
+  });
 
   // ---------------- 入力 ----------------
 
@@ -731,6 +738,68 @@
     }
   }
 
+  // ---------------- 葉の腐敗 (木を切ると葉が枯れる) ----------------
+
+  const leafDecay = [];         // {x, y, z, t}
+  const LEAF_SCAN_R = 4;
+  const LEAF_QUEUE_MAX = 400;
+  const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+
+  function queueLeafDecayAround(x, y, z) {
+    for (let dy = -LEAF_SCAN_R; dy <= LEAF_SCAN_R; dy++) {
+      for (let dz = -LEAF_SCAN_R; dz <= LEAF_SCAN_R; dz++) {
+        for (let dx = -LEAF_SCAN_R; dx <= LEAF_SCAN_R; dx++) {
+          if (leafDecay.length >= LEAF_QUEUE_MAX) return;
+          if (world.getBlock(x + dx, y + dy, z + dz) === B.LEAVES) {
+            leafDecay.push({ x: x + dx, y: y + dy, z: z + dz, t: 0.6 + Math.random() * 2.5 });
+          }
+        }
+      }
+    }
+  }
+
+  // 葉づたいに距離4以内へ原木があるか (BFS)
+  function hasLogNearby(x, y, z) {
+    const visited = new Set([x + "," + y + "," + z]);
+    const queue = [[x, y, z, 0]];
+    while (queue.length) {
+      const [cx, cy, cz, d] = queue.shift();
+      if (d >= LEAF_SCAN_R) continue;
+      for (const [ox, oy, oz] of DIRS6) {
+        const nx = cx + ox, ny = cy + oy, nz = cz + oz;
+        const key = nx + "," + ny + "," + nz;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        const id = world.getBlock(nx, ny, nz);
+        if (id === B.LOG) return true;
+        if (id === B.LEAVES) queue.push([nx, ny, nz, d + 1]);
+      }
+    }
+    return false;
+  }
+
+  function updateLeafDecay(dt) {
+    let budget = 5; // フレームあたりの枯れ処理数
+    for (let i = leafDecay.length - 1; i >= 0; i--) {
+      const l = leafDecay[i];
+      l.t -= dt;
+      if (l.t > 0 || budget <= 0) continue;
+      budget--;
+      leafDecay.splice(i, 1);
+      if (world.getBlock(l.x, l.y, l.z) !== B.LEAVES) continue;
+      if (hasLogNearby(l.x, l.y, l.z)) continue;
+      world.setBlock(l.x, l.y, l.z, B.AIR);
+      spawnBreakParticles(l.x, l.y, l.z, B.LEAVES);
+      // 隣の葉も連鎖して枯れる
+      for (const [ox, oy, oz] of DIRS6) {
+        if (leafDecay.length >= LEAF_QUEUE_MAX) break;
+        if (world.getBlock(l.x + ox, l.y + oy, l.z + oz) === B.LEAVES) {
+          leafDecay.push({ x: l.x + ox, y: l.y + oy, z: l.z + oz, t: 0.4 + Math.random() * 1.5 });
+        }
+      }
+    }
+  }
+
   // ---------------- 天候 (雨) ----------------
 
   let raining = false;
@@ -870,8 +939,12 @@
   function closeChest() {
     chestOpen = false;
     chestModalEl.classList.add("hidden");
-    canvas.requestPointerLock();
+    if (!isTouch) canvas.requestPointerLock();
   }
+
+  chestModalEl.addEventListener("click", (e) => {
+    if (e.target === chestModalEl) closeChest();
+  });
 
   // ---------------- ベッド (睡眠 / リスポーン地点) ----------------
 
@@ -1076,6 +1149,8 @@
     }
     // 上の砂は支えを失って落下する
     checkFalling(bx, by + 1, bz);
+    // 原木を切ったら周囲の葉が枯れ始める
+    if (hit.id === B.LOG) queueLeafDecayAround(bx, by, bz);
   }
 
   // 右クリック / タップでの設置 (弓を持っていれば射撃)
@@ -1228,6 +1303,14 @@
       keys.clear();
       heldButtons.clear();
       updateRotateOverlay();
+    });
+
+    // --- インベントリボタン (🎒) ---
+    document.getElementById("btn-inventory").addEventListener("click", () => {
+      if (paused) return;
+      if (chestOpen) { closeChest(); return; }
+      if (inventoryOpen) closeInventory();
+      else openInventory();
     });
 
     // --- ジャンプ / 飛行 / 下降ボタン ---
@@ -1521,6 +1604,7 @@
       });
       updateFallingBlocks(dt);
       updatePrimedTNT(dt);
+      updateLeafDecay(dt);
       bowCooldown = Math.max(0, bowCooldown - dt);
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;

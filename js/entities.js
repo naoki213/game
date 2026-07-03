@@ -313,7 +313,10 @@ class Mob {
     for (let y = y0; y <= y1; y++) {
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
-          if (!world.isSolidAt(x, y, z)) continue;
+          const bh = world.blockHeightAt(x, y, z);
+          if (bh === 0) continue;
+          const blockTop = y + bh;
+          if (this.pos[1] >= blockTop - 1e-6) continue; // ハーフの上は素通り
           if (axis === 0) {
             this.pos[0] = delta > 0 ? x - hw - 1e-4 : x + 1 + hw + 1e-4;
             this.vel[0] = 0;
@@ -324,7 +327,7 @@ class Mob {
             if (delta > 0) {
               this.pos[1] = y - h - 1e-4;
             } else {
-              this.pos[1] = y + 1 + 1e-4;
+              this.pos[1] = blockTop + 1e-4;
               this.onGround = true;
             }
             this.vel[1] = 0;

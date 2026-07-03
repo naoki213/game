@@ -325,6 +325,17 @@ html, body {
   width: 46px;
   height: 46px;
   font-size: 18px;
+  z-index: 6; /* モーダルより前面 (開いたまま閉じられるように) */
+}
+
+#btn-inventory {
+  position: absolute;
+  top: 14px;
+  right: calc(70px + env(safe-area-inset-right, 0px));
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+  z-index: 6;
 }
 
 /* ---- inventory ---- */
