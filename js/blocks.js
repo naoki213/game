@@ -623,7 +623,7 @@ defBlock(B.STEEL, "steel", "スチールパネル", [TILE.STEEL, TILE.STEEL, TIL
 defBlock(B.HAZARD, "hazard", "危険ストライプ", [TILE.HAZARD, TILE.HAZARD, TILE.HAZARD], deco);
 defBlock(B.PILLAR, "pillar", "白い柱", [TILE.MARBLE, TILE.PILLAR, TILE.MARBLE], deco);
 defBlock(B.CLOUD, "cloud", "雲ブロック", [TILE.CLOUD, TILE.CLOUD, TILE.CLOUD],
-  { hardness: 0.3 });
+  { hardness: 0.3, emissive: true }); // ほんのり光り, 下から見ても暗くならない
 
 // --- 農地 (クワで耕した土, 上面がわずかに低い) ---
 defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],

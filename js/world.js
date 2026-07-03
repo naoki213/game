@@ -523,14 +523,76 @@ class World {
     set(mx, Y + 1, mz - 1, B.PLANK_SLAB);
 
     // --- 虹のアーチ (北の道をまたぐ) ---
+    // x 方向と y 方向の両方から走査して, 円弧が途切れないようにする
     const ax = CX, az = CZ - 18;
     for (let i = 0; i < 6; i++) {
       const r = 10 - i;
+      const id = WOOL_ID_BASE + i; // 赤→橙→黄→黄緑→緑→空色
       for (let dx = -r; dx <= r; dx++) {
         const yy = Math.round(Math.sqrt(Math.max(0, r * r - dx * dx)));
-        set(ax + dx, Y + yy, az, WOOL_ID_BASE + i); // 赤→橙→黄→黄緑→緑→空色
+        set(ax + dx, Y + yy, az, id);
+      }
+      for (let yy = 1; yy <= r; yy++) {
+        const dxx = Math.round(Math.sqrt(Math.max(0, r * r - yy * yy)));
+        set(ax + dxx, Y + yy, az, id);
+        set(ax - dxx, Y + yy, az, id);
       }
     }
+
+    // --- 公園 (南西, 池 + ガゼボ + 花壇) ---
+    const gx = CX - 17, gz = CZ + 15;
+    // 池 (縁は大理石)
+    fill(gx - 4, Y, gz - 3, gx - 1, Y, gz, B.WATER);
+    for (let x = gx - 5; x <= gx; x++) {
+      set(x, Y, gz - 4, B.MARBLE); set(x, Y, gz + 1, B.MARBLE);
+    }
+    for (let z = gz - 4; z <= gz + 1; z++) {
+      set(gx - 5, Y, z, B.MARBLE); set(gx, Y, z, B.MARBLE);
+    }
+    // わらぶき屋根のガゼボ
+    const hx = gx + 5, hz = gz - 1;
+    for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) {
+      fill(hx + dx, Y + 1, hz + dz, hx + dx, Y + 3, hz + dz, B.LOG);
+    }
+    fill(hx - 3, Y + 4, hz - 3, hx + 3, Y + 4, hz + 3, B.THATCH);
+    fill(hx - 1, Y + 5, hz - 1, hx + 1, Y + 5, hz + 1, B.THATCH);
+    set(hx, Y + 4, hz, B.GLOWSTONE); // 天井灯
+    // ベンチ (ハーフブロック)
+    fill(hx - 1, Y + 1, hz - 2, hx + 1, Y + 1, hz - 2, B.PLANK_SLAB);
+    fill(hx - 1, Y + 1, hz + 2, hx + 1, Y + 1, hz + 2, B.PLANK_SLAB);
+    // 花壇と木
+    for (let i = 0; i < 14; i++) {
+      const fx = gx - 6 + ((i * 7) % 13), fz = gz + 3 + ((i * 5) % 4);
+      set(fx, Y + 1, fz, i % 2 ? B.FLOWER_RED : B.FLOWER_YELLOW);
+    }
+    for (const [tx, tz] of [[gx - 7, gz - 6], [gx - 12, gz + 3]]) {
+      fill(tx, Y + 1, tz, tx, Y + 4, tz, B.LOG);
+      fill(tx - 2, Y + 4, tz - 2, tx + 2, Y + 5, tz + 2, B.LEAVES);
+      fill(tx - 1, Y + 6, tz - 1, tx + 1, Y + 6, tz + 1, B.LEAVES);
+      set(tx, Y + 4, tz, B.LOG); set(tx, Y + 5, tz, B.LOG);
+    }
+
+    // --- CLAUDE ネオンサイン (南の道の突き当たり, 北向き) ---
+    const GLYPHS = {
+      C: ["###", "#..", "#..", "#..", "###"],
+      L: ["#..", "#..", "#..", "#..", "###"],
+      A: ["###", "#.#", "###", "#.#", "#.#"],
+      U: ["#.#", "#.#", "#.#", "#.#", "###"],
+      D: ["##.", "#.#", "#.#", "#.#", "##."],
+      E: ["###", "#..", "###", "#..", "###"],
+    };
+    const sz2 = CZ + 23, sx0 = CX - 11;
+    fill(sx0 - 1, Y + 3, sz2, sx0 + 23, Y + 9, sz2, B.DARK_BRICK); // 看板の下地
+    fill(sx0 - 1, Y + 1, sz2, sx0 - 1, Y + 2, sz2, B.STEEL);       // 支柱
+    fill(sx0 + 23, Y + 1, sz2, sx0 + 23, Y + 2, sz2, B.STEEL);
+    // 北 (広場側) から読めるように x を反転して描く
+    "CLAUDE".split("").forEach((ch, li) => {
+      const g = GLYPHS[ch];
+      for (let row = 0; row < 5; row++)
+        for (let col = 0; col < 3; col++)
+          if (g[row][col] === "#")
+            set(sx0 + 22 - (li * 4 + col), Y + 8 - row, sz2, NEON_ID_BASE + 5); // 黄ネオン
+    });
 
     // --- 雲の島 (上空に浮かぶ小さな展望台) ---
     fill(CX - 2, Y + 18, CZ + 24, CX + 2, Y + 18, CZ + 28, B.CLOUD);
