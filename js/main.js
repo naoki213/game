@@ -133,6 +133,11 @@
     durbar.className = "durbar";
     durbar.innerHTML = "<i></i>";
     slot.append(icon, key, name, count, durbar);
+    // タップ / クリックでスロット選択 (スマホの手持ち切替)
+    slot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectSlot(i);
+    });
     hotbarEl.appendChild(slot);
     slotEls.push(slot);
   });
@@ -501,21 +506,36 @@
     }
   }
 
-  // インベントリのブロック一覧にも所持数を表示 (サバイバル)
+  // インベントリのブロック一覧: サバイバルでは持っている物だけを表示
+  let invEmptyNote = null;
+
   function refreshInventoryCounts() {
     const els = inventoryGrid.querySelectorAll(".inv-item");
+    let visible = 0;
     els.forEach((el) => {
       const id = parseInt(el.dataset.blockId, 10);
       const badge = el.querySelector(".count");
       if (gameMode === "creative") {
         badge.textContent = "";
         el.style.opacity = "1";
+        el.style.display = "";
+        visible++;
       } else {
         const c = invCounts.get(id) || 0;
         badge.textContent = c > 0 ? String(c) : "";
-        el.style.opacity = c > 0 ? "1" : "0.45";
+        el.style.display = c > 0 ? "" : "none";
+        el.style.opacity = "1";
+        if (c > 0) visible++;
       }
     });
+    // 何も持っていないときの案内
+    if (!invEmptyNote) {
+      invEmptyNote = document.createElement("div");
+      invEmptyNote.className = "empty-note";
+      invEmptyNote.textContent = "(まだ何も持っていない — ブロックを掘って集めよう)";
+      inventoryGrid.appendChild(invEmptyNote);
+    }
+    invEmptyNote.style.display = visible === 0 ? "" : "none";
   }
 
   function openInventory() {

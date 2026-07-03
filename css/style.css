@@ -50,7 +50,10 @@ html, body {
   background: rgba(0, 0, 0, 0.45);
   border: 2px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
+  pointer-events: auto;   /* タップでスロット選択できるように */
 }
+
+.slot { cursor: pointer; }
 
 .slot {
   width: 52px;
@@ -548,12 +551,13 @@ body.touch .controls { display: none; }
   border-radius: 6px;
 }
 
-.item-grid .empty-note {
+.empty-note {
   grid-column: 1 / -1;
   color: #678;
   font-size: 12px;
   align-self: center;
   text-align: center;
+  padding: 12px 0;
 }
 
 .item-grid .inv-item { width: 56px; height: 56px; }
