@@ -135,11 +135,33 @@ html, body {
   padding: 0 4px;
 }
 
-#hearts, #bubbles {
+#hearts, #bubbles, #hunger {
   display: flex;
   gap: 1px;
   font-size: 18px;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+#right-bars {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+/* 満腹度: 灰色ベース + 色付きの重ね (兄弟要素で構成) */
+.food { position: relative; }
+
+.food .base {
+  filter: grayscale(1) brightness(0.45);
+}
+
+.food .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .heart {
@@ -575,6 +597,19 @@ body.touch .controls { display: none; }
 
 #play-btn:hover { filter: brightness(1.1); }
 #play-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #235818; }
+
+#mode-btn {
+  margin-top: 14px;
+  font-size: 14px;
+  padding: 8px 22px;
+  cursor: pointer;
+  color: #dfe8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+}
+
+#mode-btn:hover { background: rgba(255, 255, 255, 0.18); }
 
 .controls {
   margin: 24px auto 0;

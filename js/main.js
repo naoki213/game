@@ -203,6 +203,24 @@
     bubbleEls.push(b);
   }
 
+  // 満腹度ゲージ (肉アイコン 10 個)
+  const hungerEl = document.getElementById("hunger");
+  const foodFills = [];
+  for (let i = 0; i < 10; i++) {
+    const f = document.createElement("span");
+    f.className = "food";
+    const base = document.createElement("span");
+    base.className = "base";
+    base.textContent = "🍖";
+    const fill = document.createElement("span");
+    fill.className = "fill";
+    fill.textContent = "🍖";
+    f.append(base, fill);
+    hungerEl.appendChild(f);
+    foodFills.push(fill);
+  }
+  let lastFood = -1;
+
   let lastHealth = -1, lastAir = -1;
   let deathTimer = 0;
 
@@ -219,9 +237,10 @@
   }
 
   function applyModeUI() {
-    // クリエイティブでは体力 / 酸素を表示しない (本家準拠)
+    // クリエイティブでは体力 / 酸素 / 満腹度を表示しない (本家準拠)
     statusBarsEl.style.visibility = gameMode === "creative" ? "hidden" : "visible";
     updateHotbarCounts();
+    updateModeBtn();
   }
 
   function setMode(m) {
@@ -230,9 +249,18 @@
     player.creative = m === "creative";
     if (m === "survival") player.flying = false;
     applyModeUI();
-    showToast(m === "survival" ? "サバイバルモード (G で切替)" : "クリエイティブモード (G で切替)");
+    showToast(m === "survival" ? "サバイバルモード" : "クリエイティブモード");
   }
 
+  // ポーズ画面のモード切替ボタン (スマホでも切替できるように)
+  const modeBtn = document.getElementById("mode-btn");
+  modeBtn.addEventListener("click", () => {
+    setMode(gameMode === "survival" ? "creative" : "survival");
+  });
+  function updateModeBtn() {
+    modeBtn.textContent =
+      "モード: " + (gameMode === "survival" ? "サバイバル" : "クリエイティブ") + " (押して切替)";
+  }
   applyModeUI();
 
   function updateSurvivalUI(dt) {
@@ -252,6 +280,16 @@
         bubbleEls[i].classList.toggle("empty", i >= airCount);
       }
     }
+    // 満腹度 (0.5 刻み)
+    const foodHalf = Math.round(player.food * 2) / 2;
+    if (foodHalf !== lastFood) {
+      lastFood = foodHalf;
+      for (let i = 0; i < 10; i++) {
+        const v = player.food - i * 2;
+        foodFills[i].style.width = v >= 2 ? "100%" : v >= 1 ? "50%" : "0";
+      }
+    }
+
     hurtOverlayEl.style.opacity = Math.min(player.hurtFlash * 2.2, 1);
 
     // 死亡 → 少し置いてリスポーン
@@ -324,6 +362,7 @@
     { out: B.GLASS, outN: 2, in: [[B.SAND, 2]] },
     { out: B.STONE, outN: 2, in: [[B.COBBLE, 2]] },
     { out: B.BRICK, outN: 2, in: [[B.STONE, 2]] },
+    { out: B.TNT, outN: 2, in: [[B.SAND, 4], [B.COAL_ORE, 1]] },
     // 装飾ブロック
     { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
     { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
@@ -590,8 +629,13 @@
     if (e.button === 0) {
       swingTimer = 0;
       if (tryPunch()) return;
+      const hit = player.raycast();
+      if (hit && hit.id === B.TNT) {
+        igniteTNT(hit.pos[0], hit.pos[1], hit.pos[2]);
+        actionCooldown = ACTION_REPEAT;
+        return;
+      }
       if (gameMode === "creative") {
-        const hit = player.raycast();
         if (hit) breakBlockAt(hit);
         actionCooldown = ACTION_REPEAT;
       }
@@ -674,10 +718,35 @@
     }
   }
 
-  // ---------------- 爆発 (クリーパー) ----------------
+  // ---------------- 爆発 (クリーパー / TNT) ----------------
 
-  function explode(x, y, z) {
-    const R = 2.6;
+  const primedTNT = [];   // 点火済み TNT {id, pos, fuse, spin:false, scale:1}
+
+  function igniteTNT(x, y, z, fuse = 1.5) {
+    world.setBlock(x, y, z, B.AIR);
+    primedTNT.push({
+      id: B.TNT,
+      pos: [x + 0.5, y, z + 0.5],
+      fuse,
+      phase: 0,
+      spin: false,
+      scale: 1,
+    });
+    sound.hiss();
+  }
+
+  function updatePrimedTNT(dt) {
+    for (let i = primedTNT.length - 1; i >= 0; i--) {
+      const t = primedTNT[i];
+      t.fuse -= dt;
+      if (t.fuse <= 0) {
+        primedTNT.splice(i, 1);
+        explode(t.pos[0], t.pos[1] + 0.5, t.pos[2], 3.4); // TNT はクリーパーより強力
+      }
+    }
+  }
+
+  function explode(x, y, z, R = 2.6) {
     for (let by = Math.floor(y - R); by <= Math.floor(y + R); by++) {
       for (let bz = Math.floor(z - R); bz <= Math.floor(z + R); bz++) {
         for (let bx = Math.floor(x - R); bx <= Math.floor(x + R); bx++) {
@@ -686,6 +755,11 @@
           const id = world.getBlock(bx, by, bz);
           if (id === B.AIR || id === B.WATER || id === B.BEDROCK) continue;
           if (!isFinite(BLOCKS[id].hardness)) continue;
+          // TNT は誘爆する (少し遅れて連鎖)
+          if (id === B.TNT) {
+            igniteTNT(bx, by, bz, 0.3 + Math.random() * 0.5);
+            continue;
+          }
           world.setBlock(bx, by, bz, B.AIR);
           // 一部のブロックはアイテム化して飛び散る
           if (gameMode === "survival" && Math.random() < 0.3 &&
@@ -716,23 +790,25 @@
   // ---------------- 落下ブロック (砂の重力) ----------------
 
   const fallingBlocks = [];   // {id, pos, vel, phase, spin:false, scale:1}
+  const GRAVITY_BLOCKS = new Set([B.SAND, B.GRAVEL]);
 
-  // セル (x,y,z) の砂が支えを失っていたら落下エンティティ化する
+  // セル (x,y,z) の砂 / 砂利が支えを失っていたら落下エンティティ化する
   function checkFalling(x, y, z) {
     if (y <= 0 || y >= CHUNK_H) return;
-    if (world.getBlock(x, y, z) !== B.SAND) return;
+    const id = world.getBlock(x, y, z);
+    if (!GRAVITY_BLOCKS.has(id)) return;
     const below = world.getBlock(x, y - 1, z);
     if (isSolid(below)) return;
     if (!world.setBlock(x, y, z, B.AIR)) return;
     fallingBlocks.push({
-      id: B.SAND,
+      id,
       pos: [x + 0.5, y, z + 0.5],
       vel: 0,
       phase: 0,
       spin: false,
       scale: 1,
     });
-    // 上に積まれた砂も連鎖して落ちる
+    // 上に積まれた分も連鎖して落ちる
     checkFalling(x, y + 1, z);
   }
 
@@ -749,10 +825,10 @@
         const landY = Math.floor(f.pos[1] - 0.02) + 1;
         fallingBlocks.splice(i, 1);
         const cur = world.getBlock(cx, landY, cz);
-        if ((cur === B.AIR || cur === B.WATER) && world.setBlock(cx, landY, cz, B.SAND)) {
+        if ((cur === B.AIR || cur === B.WATER) && world.setBlock(cx, landY, cz, f.id)) {
           sound.thud();
         } else if (gameMode === "survival") {
-          items.spawn(B.SAND, cx, landY, cz); // 置けなければアイテム化
+          items.spawn(f.id, cx, landY, cz); // 置けなければアイテム化
         }
       }
     }
@@ -819,6 +895,19 @@
       damageTool(tool.id);
       return;
     }
+    // 食料: 食べる
+    const heldDef = getDef(HOTBAR_BLOCKS[selectedSlot]);
+    if (heldDef && heldDef.food) {
+      if (gameMode !== "survival") return;
+      if (player.food >= player.maxFood - 0.5) {
+        showToast("お腹がいっぱいだ");
+        return;
+      }
+      if (!consumeItem(heldDef.id)) return;
+      player.food = Math.min(player.maxFood, player.food + heldDef.food);
+      sound.eat();
+      return;
+    }
     const hit = player.raycast();
     if (!hit) return;
     const [px, py, pz] = hit.prev;
@@ -844,7 +933,9 @@
     if (button === 0) {
       if (tryPunch()) return;
       const hit = player.raycast();
-      if (hit) breakBlockAt(hit);
+      if (!hit) return;
+      if (hit.id === B.TNT) igniteTNT(hit.pos[0], hit.pos[1], hit.pos[2]);
+      else breakBlockAt(hit);
     } else if (button === 2) {
       placeAction();
     }
@@ -868,6 +959,16 @@
     if (!hit) {
       breakTargetKey = null;
       breakProgress = 0;
+      return;
+    }
+
+    // TNT は叩くと点火する (両モード)
+    if (hit.id === B.TNT) {
+      igniteTNT(hit.pos[0], hit.pos[1], hit.pos[2]);
+      breakTargetKey = null;
+      breakProgress = 0;
+      actionCooldown = ACTION_REPEAT;
+      swingTimer = 0;
       return;
     }
 
@@ -1204,6 +1305,7 @@
         sound.pickup();
       });
       updateFallingBlocks(dt);
+      updatePrimedTNT(dt);
       bowCooldown = Math.max(0, bowCooldown - dt);
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;
@@ -1236,10 +1338,10 @@
 
       updateSurvivalUI(dt);
 
-      // 歩行ボビングと足音
+      // 歩行ボビングと足音 (周波数は歩行1.5Hz程度に抑える)
       const hSpeed = Math.hypot(player.vel[0], player.vel[2]);
       if (player.onGround && hSpeed > 0.5) {
-        bobPhase += hSpeed * dt * 2.2;
+        bobPhase += hSpeed * dt * 0.35;
         bobAmount = Math.min(bobAmount + dt * 4, 1);
         if (!player.inWater) {
           stepAccum += hSpeed * dt;
@@ -1272,7 +1374,7 @@
     });
 
     const camPos = player.eyePos();
-    camPos[1] += Math.sin(bobPhase * Math.PI * 2) * 0.055 * bobAmount;
+    camPos[1] += Math.sin(bobPhase * Math.PI * 2) * 0.05 * bobAmount;
 
     const drawCalls = renderer.render({
       camPos,
@@ -1284,7 +1386,9 @@
       time: elapsed,
       particles: { data: particleData, count: particles.length },
       entities: mobs.buildVertexData(),
-      items: fallingBlocks.length > 0 ? items.items.concat(fallingBlocks) : items.items,
+      items: (fallingBlocks.length > 0 || primedTNT.length > 0)
+        ? items.items.concat(fallingBlocks, primedTNT)
+        : items.items,
       crack: (gameMode === "survival" && breakProgress > 0.02 && breakTargetPos)
         ? { pos: breakTargetPos, stage: Math.min(4, (breakProgress * 5) | 0) }
         : null,

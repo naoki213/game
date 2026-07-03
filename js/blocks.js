@@ -31,6 +31,8 @@ const B = {
   DIAMOND_ORE: 23,
   GOLD_BLOCK: 24,
   DIAMOND_BLOCK: 25,
+  TNT: 26,
+  GRAVEL: 27,
 };
 
 // 道具・素材アイテム (ID 100 以降はブロックではなく設置不可)
@@ -47,6 +49,9 @@ const I = {
   GOLD_INGOT: 109,
   DIAMOND: 110,
   BOW: 111,
+  PORK: 112,
+  BEEF: 113,
+  CHICKEN_MEAT: 114,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -96,6 +101,12 @@ const TILE = {
   INGOT_GOLD: 42,
   GEM_DIAMOND: 43,
   BOW: 44,
+  PORK: 45,
+  BEEF: 46,
+  CHICKEN_MEAT: 47,
+  TNT_SIDE: 48,
+  TNT_TOP: 49,
+  GRAVEL: 50,
 };
 
 // 各ブロックの属性
@@ -166,6 +177,8 @@ defBlock(B.TORCH, "torch", "松明", [TILE.TORCH, TILE.TORCH, TILE.TORCH],
   { opaque: false, solid: false, emissive: true, hardness: 0.05 });
 BLOCKS[B.TORCH].torch = true;   // 専用の小型モデルで描画
 defBlock(B.WOOL, "wool", "羊毛", [TILE.WOOL, TILE.WOOL, TILE.WOOL], { hardness: 0.8 });
+defBlock(B.TNT, "tnt", "TNT", [TILE.TNT_TOP, TILE.TNT_SIDE, TILE.TNT_TOP], { hardness: 0.1 });
+defBlock(B.GRAVEL, "gravel", "砂利", [TILE.GRAVEL, TILE.GRAVEL, TILE.GRAVEL], { hardness: 0.7 });
 defBlock(B.GOLD_ORE, "gold_ore", "金鉱石", [TILE.GOLD_ORE, TILE.GOLD_ORE, TILE.GOLD_ORE],
   { hardness: 2.6, pickable: true, minTier: 3 });
 defBlock(B.DIAMOND_ORE, "diamond_ore", "ダイヤモンド鉱石", [TILE.DIAMOND_ORE, TILE.DIAMOND_ORE, TILE.DIAMOND_ORE],
@@ -180,8 +193,8 @@ defBlock(B.DIAMOND_BLOCK, "diamond_block", "ダイヤモンドブロック", [TI
 
 const ITEMS = {};
 
-function defItem(id, name, jp, tile, tool = null) {
-  ITEMS[id] = { id, name, jp, tile, tool };
+function defItem(id, name, jp, tile, tool = null, food = 0) {
+  ITEMS[id] = { id, name, jp, tile, tool, food };
 }
 
 defItem(I.WOOD_PICK, "wood_pick", "木のピッケル", TILE.PICK_WOOD,
@@ -205,6 +218,9 @@ defItem(I.BOW, "bow", "弓", TILE.BOW,
 defItem(I.IRON_INGOT, "iron_ingot", "鉄インゴット", TILE.INGOT_IRON);
 defItem(I.GOLD_INGOT, "gold_ingot", "金インゴット", TILE.INGOT_GOLD);
 defItem(I.DIAMOND, "diamond", "ダイヤモンド", TILE.GEM_DIAMOND);
+defItem(I.PORK, "pork", "豚肉", TILE.PORK, null, 8);
+defItem(I.BEEF, "beef", "牛肉", TILE.BEEF, null, 8);
+defItem(I.CHICKEN_MEAT, "chicken_meat", "鶏肉", TILE.CHICKEN_MEAT, null, 6);
 
 // ブロック / アイテムを問わず定義を引く
 function getDef(id) {

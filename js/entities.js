@@ -7,9 +7,55 @@
 // 種族定義: parts は [ox, oy, oz, w, h, d, r, g, b]
 // (エンティティ原点=足元中心, 単位はブロック, +Z が正面)
 const MOB_TYPES = {
+  cow: {
+    speed: 1.1,
+    halfW: 0.45, height: 1.35,
+    health: 8,
+    drops: 113, dropN: 2,   // 牛肉
+    parts: [
+      // 胴体
+      [-0.45, 0.55, -0.6, 0.9, 0.55, 1.2, 0.42, 0.30, 0.22],
+      // 頭
+      [-0.22, 0.78, 0.55, 0.44, 0.42, 0.4, 0.46, 0.34, 0.26],
+      // 鼻先
+      [-0.13, 0.8, 0.93, 0.26, 0.2, 0.06, 0.82, 0.78, 0.72],
+      // 角 x2
+      [-0.26, 1.16, 0.6, 0.08, 0.12, 0.08, 0.85, 0.82, 0.75],
+      [0.18, 1.16, 0.6, 0.08, 0.12, 0.08, 0.85, 0.82, 0.75],
+      // 脚 x4
+      [-0.38, 0, -0.5, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
+      [0.16, 0, -0.5, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
+      [-0.38, 0, 0.26, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
+      [0.16, 0, 0.26, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
+    ],
+  },
+  spider: {
+    speed: 2.9,
+    halfW: 0.6, height: 0.9,
+    health: 8,
+    hostile: true,
+    noBurn: true,
+    dayNeutral: true,       // 昼は襲ってこない
+    attack: 2,
+    parts: [
+      // 平たい胴体
+      [-0.5, 0.22, -0.55, 1.0, 0.45, 0.9, 0.16, 0.14, 0.16],
+      // 頭
+      [-0.3, 0.26, 0.35, 0.6, 0.42, 0.42, 0.21, 0.18, 0.21],
+      // 赤い目 x2
+      [-0.18, 0.48, 0.74, 0.1, 0.08, 0.05, 0.9, 0.15, 0.15],
+      [0.08, 0.48, 0.74, 0.1, 0.08, 0.05, 0.9, 0.15, 0.15],
+      // 脚 x4 (左右に張り出す)
+      [-0.85, 0, -0.35, 0.3, 0.28, 0.16, 0.13, 0.11, 0.13],
+      [0.55, 0, -0.35, 0.3, 0.28, 0.16, 0.13, 0.11, 0.13],
+      [-0.85, 0, 0.15, 0.3, 0.28, 0.16, 0.13, 0.11, 0.13],
+      [0.55, 0, 0.15, 0.3, 0.28, 0.16, 0.13, 0.11, 0.13],
+    ],
+  },
   pig: {
     speed: 1.4,
     halfW: 0.4, height: 0.9,
+    drops: 112, dropN: 2,   // 豚肉
     parts: [
       // 胴体
       [-0.4, 0.35, -0.5, 0.8, 0.5, 1.0, 0.93, 0.62, 0.66],
@@ -100,6 +146,7 @@ const MOB_TYPES = {
   chicken: {
     speed: 1.6,
     halfW: 0.25, height: 0.7,
+    drops: 114, dropN: 1,   // 鶏肉
     parts: [
       // 体
       [-0.22, 0.25, -0.3, 0.44, 0.4, 0.55, 0.96, 0.94, 0.90],
@@ -160,7 +207,8 @@ class Mob {
       const dy = player.pos[1] - this.pos[1];
       const dz = player.pos[2] - this.pos[2];
       const distH = Math.hypot(dx, dz);
-      if (!player.dead && distH < 28 && Math.abs(dy) < 12) {
+      const passive = this.def.dayNeutral && daylight > 0.5; // クモは昼は中立
+      if (!player.dead && !passive && distH < 28 && Math.abs(dy) < 12) {
         chasing = true;
         this.yaw = Math.atan2(dx, dz);
         this.state = "walk";
@@ -189,9 +237,9 @@ class Mob {
             }
           }
         } else if (distH < 1.4 && Math.abs(dy) < 2 && this.attackCooldown <= 0) {
-          // --- ゾンビ: 近接攻撃 ---
+          // --- 近接攻撃 (ゾンビ / クモ) ---
           this.attackCooldown = 1.1;
-          player.takeDamage(3);
+          player.takeDamage(this.def.attack || 3);
           // ノックバック
           const d = distH || 1;
           player.vel[0] += (dx / d) * 6;
@@ -466,10 +514,10 @@ class MobManager {
     if (y + 1 <= WATER_LEVEL) return;
 
     if (daylight < 0.3) {
-      // 夜: 敵モブ (ゾンビ / スケルトン / クリーパー)
+      // 夜: 敵モブ (ゾンビ / スケルトン / クリーパー / クモ)
       if (this.count(true) >= this.maxZombies) return;
       const r = Math.random();
-      const type = r < 0.45 ? "zombie" : r < 0.75 ? "skeleton" : "creeper";
+      const type = r < 0.35 ? "zombie" : r < 0.6 ? "skeleton" : r < 0.8 ? "creeper" : "spider";
       this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
     } else if (daylight > 0.5) {
       // 昼: 動物 (草の上のみ)

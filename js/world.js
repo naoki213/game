@@ -136,6 +136,7 @@ class World {
             else if (y < 26 && r >= 0.014 && r < 0.021) id = B.IRON_ORE;
             else if (y < 18 && r >= 0.021 && r < 0.0242) id = B.GOLD_ORE;
             else if (y < 13 && r >= 0.0242 && r < 0.0262) id = B.DIAMOND_ORE;
+            else if (r >= 0.03 && r < 0.037) id = B.GRAVEL; // 砂利ポケット
           }
           chunk.set(lx, y, lz, id);
         }

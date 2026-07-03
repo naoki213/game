@@ -6,7 +6,7 @@
 
 const TILE_PX = 16;
 const ATLAS_COLS = 8;
-const ATLAS_ROWS = 6;
+const ATLAS_ROWS = 8;
 
 // 各タイルの平均色 [r,g,b] (0..1) — 破壊パーティクルの色に使う
 const TILE_AVG_COLORS = [];
@@ -334,6 +334,44 @@ function buildTextureAtlas(seed) {
     // 弦: 対角線
     if (Math.abs(x - y) <= 0 && x >= 3 && x <= 12) return px(230, 230, 225, 1);
     return [0, 0, 0, 0];
+  });
+
+  // --- 食料 (豚肉 / 牛肉 / 鶏肉) ---
+  const meat = (main, dark, boneY) => (x, y) => {
+    const dx = x - 8, dy = y - 8;
+    if (dx * dx * 0.7 + dy * dy < 26) {
+      const edge = dx * dx * 0.7 + dy * dy > 17;
+      return px(edge ? dark[0] : main[0], edge ? dark[1] : main[1], edge ? dark[2] : main[2], jitter(1, 0.06));
+    }
+    if (boneY && y >= boneY && y <= boneY + 1 && x >= 11 && x <= 14) return px(240, 235, 225, 1);
+    return [0, 0, 0, 0];
+  };
+  paintTile(TILE.PORK, meat([235, 150, 150], [190, 100, 100], 0));
+  paintTile(TILE.BEEF, meat([170, 70, 55], [120, 45, 35], 0));
+  paintTile(TILE.CHICKEN_MEAT, meat([225, 185, 130], [185, 140, 90], 4));
+
+  // --- TNT ---
+  paintTile(TILE.TNT_SIDE, (x, y) => {
+    if (y >= 6 && y <= 9) {
+      // 白帯に "TNT"
+      const letters = (y === 7 || y === 8) && (x % 3 !== 0);
+      return letters ? px(40, 30, 30, 1) : px(230, 225, 215, 1);
+    }
+    const stripe = (x % 4 < 2) ? 1 : 0.85;
+    return px(200, 55, 45, jitter(stripe, 0.06));
+  });
+  paintTile(TILE.TNT_TOP, (x, y) => {
+    const dx = Math.abs(x - 7.5), dy = Math.abs(y - 7.5);
+    if (dx < 2 && dy < 2) return px(60, 50, 45, 1); // 導火線
+    return px(200, 55, 45, jitter((x + y) % 2 ? 1 : 0.88, 0.05));
+  });
+
+  // --- 砂利 ---
+  paintTile(TILE.GRAVEL, () => {
+    const v = rand();
+    if (v < 0.25) return px(105, 100, 95, jitter(1, 0.1));
+    if (v < 0.5) return px(150, 143, 135, jitter(1, 0.1));
+    return px(128, 122, 115, jitter(1, 0.12));
   });
 
   // --- 羊毛 (もこもこの白) ---

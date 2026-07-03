@@ -33,6 +33,9 @@ class Player {
     this.health = 20;
     this.maxAir = 10;          // 秒
     this.air = 10;
+    this.maxFood = 20;         // 満腹度
+    this.food = 20;
+    this.starveTimer = 0;
     this.dead = false;
     this.hurtFlash = 0;        // ダメージ演出の残り時間
     this.time = 0;             // 内部時計
@@ -133,6 +136,7 @@ class Player {
       if (input.jump && this.onGround) {
         this.vel[1] = JUMP_SPEED;
         this.onGround = false;
+        if (!this.creative) this.food = Math.max(0, this.food - 0.12);
       }
       this.vel[1] = Math.max(this.vel[1], -50);
     }
@@ -172,12 +176,31 @@ class Player {
       this.drownTimer = 0;
     }
 
-    // --- 自然回復 (6 秒間ダメージなしで 2.5 秒ごとに +1) ---
-    if (this.health < this.maxHealth && this.time - this.lastDamageTime > 6) {
+    // --- 満腹度の消費と飢餓 ---
+    if (!this.creative) {
+      const moving = Math.hypot(this.vel[0], this.vel[2]) > 0.5;
+      let drain = 0.012;                        // 基礎代謝
+      if (input.sprint && moving) drain += 0.05; // ダッシュは腹が減る
+      this.food = Math.max(0, this.food - drain * dt);
+      if (this.food <= 0) {
+        this.starveTimer += dt;
+        if (this.starveTimer >= 4) {
+          this.starveTimer -= 4;
+          if (this.health > 1) this.takeDamage(1); // 飢餓では死なない
+        }
+      } else {
+        this.starveTimer = 0;
+      }
+    }
+
+    // --- 自然回復 (満腹度が高く 6 秒間ダメージなしのとき, 食料を消費して回復) ---
+    if (this.health < this.maxHealth && this.time - this.lastDamageTime > 6 &&
+        (this.creative || this.food >= 18)) {
       this.regenTimer += dt;
       if (this.regenTimer >= 2.5) {
         this.regenTimer -= 2.5;
         this.health++;
+        if (!this.creative) this.food = Math.max(0, this.food - 0.6);
       }
     } else if (this.health >= this.maxHealth) {
       this.regenTimer = 0;
@@ -192,6 +215,7 @@ class Player {
   respawn() {
     this.health = this.maxHealth;
     this.air = this.maxAir;
+    this.food = this.maxFood;
     this.dead = false;
     this.vel = [0, 0, 0];
     this.flying = false;

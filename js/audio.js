@@ -73,6 +73,15 @@ class Sound {
     osc.stop(ctx.currentTime + 0.6);
   }
 
+  // 食べる音 (もぐもぐ)
+  eat() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => this.blip(160 + Math.random() * 60, 0.08, "square", 0.12), i * 130);
+    }
+  }
+
   // 弓を放つ音
   bow() {
     this.blip(700, 0.1, "triangle", 0.15);
