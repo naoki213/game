@@ -61,7 +61,43 @@ const B = {
   STONE_BRICK_SLAB: 64,
   BRICK_SLAB: 65,
   SANDSTONE_SLAB: 66,
+  // 67-74 色付きガラス, 75-76 原木, 77 ジャック・オ・ランタン,
+  // 78-79 鉄/石炭ブロック, 80-85 テラコッタ, 86-98 カーペット
+  BIRCH_LOG: 75,
+  DARK_LOG: 76,
+  JACK_O_LANTERN: 77,
+  IRON_BLOCK: 78,
+  COAL_BLOCK: 79,
 };
+
+// 色付きガラス (8 色, ID 67-74 / タイル 90-97)
+const SGLASS_ID_BASE = 67;
+const SGLASS_TILE_BASE = 90;
+const SGLASS_COLORS = [
+  ["red", "赤のガラス", [210, 60, 60]],
+  ["yellow", "黄のガラス", [230, 210, 70]],
+  ["green", "緑のガラス", [90, 170, 80]],
+  ["lightblue", "空色のガラス", [120, 190, 230]],
+  ["blue", "青のガラス", [70, 90, 200]],
+  ["purple", "紫のガラス", [150, 80, 190]],
+  ["pink", "桃色のガラス", [235, 150, 190]],
+  ["black", "黒のガラス", [55, 55, 60]],
+];
+
+// テラコッタ (6 色, ID 80-85 / タイル 103-108)
+const TERRA_ID_BASE = 80;
+const TERRA_TILE_BASE = 103;
+const TERRA_COLORS = [
+  ["white", "白のテラコッタ", [205, 180, 165]],
+  ["orange", "橙のテラコッタ", [160, 85, 40]],
+  ["red", "赤のテラコッタ", [140, 60, 45]],
+  ["brown", "茶のテラコッタ", [95, 62, 45]],
+  ["cyan", "青緑のテラコッタ", [85, 92, 92]],
+  ["gray", "灰のテラコッタ", [58, 42, 36]],
+];
+
+// カーペット (白 + 羊毛 12 色, ID 86-98, タイルは羊毛を流用)
+const CARPET_ID_BASE = 86;
 
 // 色付き羊毛 (建築の彩り用)
 const WOOL_ID_BASE = 42;
@@ -184,6 +220,13 @@ const TILE = {
   DARK_BRICK: 87,
   BIRCH_PLANK: 88,
   DARK_PLANK: 89,
+  // 90-97 色付きガラス
+  BIRCH_LOG_SIDE: 98,
+  DARK_LOG_SIDE: 99,
+  JACK_O_FACE: 100,
+  IRON_BLOCK: 101,
+  COAL_BLOCK: 102,
+  // 103-108 テラコッタ
 };
 
 // 各ブロックの属性
@@ -315,6 +358,49 @@ defBlock(B.BIRCH_PLANK, "birch_plank", "白樺の木材",
   [TILE.BIRCH_PLANK, TILE.BIRCH_PLANK, TILE.BIRCH_PLANK], { hardness: 1.2 });
 defBlock(B.DARK_PLANK, "dark_plank", "ダークオークの木材",
   [TILE.DARK_PLANK, TILE.DARK_PLANK, TILE.DARK_PLANK], { hardness: 1.2 });
+
+// --- 色付きガラス (ディザ半透明) ---
+SGLASS_COLORS.forEach(([name, jp], i) => {
+  const t = SGLASS_TILE_BASE + i;
+  defBlock(SGLASS_ID_BASE + i, "glass_" + name, jp, [t, t, t],
+    { opaque: false, hardness: 0.35, drops: null });
+});
+
+// --- 原木バリエーション ---
+defBlock(B.BIRCH_LOG, "birch_log", "白樺の原木",
+  [TILE.LOG_TOP, TILE.BIRCH_LOG_SIDE, TILE.LOG_TOP], { hardness: 1.3 });
+defBlock(B.DARK_LOG, "dark_log", "ダークオークの原木",
+  [TILE.LOG_TOP, TILE.DARK_LOG_SIDE, TILE.LOG_TOP], { hardness: 1.3 });
+
+// --- ジャック・オ・ランタン (光源) ---
+defBlock(B.JACK_O_LANTERN, "jack_o_lantern", "ジャック・オ・ランタン",
+  [TILE.PUMPKIN_TOP, TILE.JACK_O_FACE, TILE.PUMPKIN_TOP],
+  { hardness: 0.8, emissive: true });
+
+// --- 鉱物ブロック ---
+defBlock(B.IRON_BLOCK, "iron_block", "鉄ブロック",
+  [TILE.IRON_BLOCK, TILE.IRON_BLOCK, TILE.IRON_BLOCK],
+  { hardness: 2.4, pickable: true, minTier: 2 });
+defBlock(B.COAL_BLOCK, "coal_block", "石炭ブロック",
+  [TILE.COAL_BLOCK, TILE.COAL_BLOCK, TILE.COAL_BLOCK],
+  { hardness: 2.0, pickable: true, minTier: 1 });
+
+// --- テラコッタ 6 色 ---
+TERRA_COLORS.forEach(([name, jp], i) => {
+  const t = TERRA_TILE_BASE + i;
+  defBlock(TERRA_ID_BASE + i, "terracotta_" + name, jp, [t, t, t],
+    { hardness: 1.6, pickable: true, minTier: 1 });
+});
+
+// --- カーペット (高さ 1/16 の極薄ブロック, 羊毛タイルを流用) ---
+defBlock(CARPET_ID_BASE, "carpet_white", "白のカーペット",
+  [TILE.WOOL, TILE.WOOL, TILE.WOOL],
+  { hardness: 0.2, opaque: false, height: 0.0625 });
+WOOL_COLORS.forEach(([name, jp], i) => {
+  const t = WOOL_TILE_BASE + i;
+  defBlock(CARPET_ID_BASE + 1 + i, "carpet_" + name, jp.replace("の羊毛", "のカーペット"),
+    [t, t, t], { hardness: 0.2, opaque: false, height: 0.0625 });
+});
 
 // --- ハーフブロック追加 ---
 defBlock(B.STONE_BRICK_SLAB, "stone_brick_slab", "石レンガハーフ",

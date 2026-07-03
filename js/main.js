@@ -397,6 +397,31 @@
   WOOL_COLORS.forEach((_, i) => {
     RECIPES.push({ out: WOOL_ID_BASE + i, outN: 1, in: [[B.WOOL, 1]] });
   });
+  // 色付きガラス: ガラス 1 + 対応する色の羊毛 1
+  SGLASS_COLORS.forEach(([name], i) => {
+    const wi = WOOL_COLORS.findIndex(([wn]) => wn === name);
+    RECIPES.push({
+      out: SGLASS_ID_BASE + i, outN: 1,
+      in: [[B.GLASS, 1], [WOOL_ID_BASE + (wi >= 0 ? wi : 0), 1]],
+    });
+  });
+  // テラコッタ: 土 1 + 砂 1 → 2
+  TERRA_COLORS.forEach((_, i) => {
+    RECIPES.push({ out: TERRA_ID_BASE + i, outN: 2, in: [[B.DIRT, 1], [B.SAND, 1]] });
+  });
+  // カーペット: 対応する羊毛 1 → 2
+  RECIPES.push({ out: CARPET_ID_BASE, outN: 2, in: [[B.WOOL, 1]] });
+  WOOL_COLORS.forEach((_, i) => {
+    RECIPES.push({ out: CARPET_ID_BASE + 1 + i, outN: 2, in: [[WOOL_ID_BASE + i, 1]] });
+  });
+  // 原木バリエーション / ランタン / 鉱物ブロック
+  RECIPES.push(
+    { out: B.BIRCH_LOG, outN: 1, in: [[B.LOG, 1]] },
+    { out: B.DARK_LOG, outN: 1, in: [[B.LOG, 1]] },
+    { out: B.JACK_O_LANTERN, outN: 1, in: [[B.PUMPKIN, 1], [B.TORCH, 1]] },
+    { out: B.IRON_BLOCK, outN: 1, in: [[I.IRON_INGOT, 4]] },
+    { out: B.COAL_BLOCK, outN: 1, in: [[B.COAL_ORE, 2]] },
+  );
 
   const craftSectionEl = document.getElementById("craft-section");
   const craftListEl = document.getElementById("craft-list");
@@ -1270,8 +1295,9 @@
     const id = HOTBAR_BLOCKS[selectedSlot];
     if (!BLOCKS[id]) return; // 道具・素材は設置できない
     if (isSolid(id) && player.intersectsBlock(px, py, pz)) return;
-    // 松明と植生は下が固体ブロックのときだけ置ける
-    if ((BLOCKS[id].torch || BLOCKS[id].cross) && !world.isSolidAt(px, py - 1, pz)) return;
+    // 松明・植生・カーペットは下が固体ブロックのときだけ置ける
+    if ((BLOCKS[id].torch || BLOCKS[id].cross || BLOCKS[id].height <= 0.1) &&
+        !world.isSolidAt(px, py - 1, pz)) return;
     if (!consumeItem(id)) return;
     if (world.setBlock(px, py, pz, id)) {
       sound.place();

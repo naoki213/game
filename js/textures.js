@@ -570,6 +570,61 @@ function buildTextureAtlas(seed) {
   paintTile(TILE.BIRCH_PLANK, plankPainter(215, 200, 160));
   paintTile(TILE.DARK_PLANK, plankPainter(95, 70, 45));
 
+  // --- 色付きガラス (枠 + 市松ディザで半透明に見せる) ---
+  SGLASS_COLORS.forEach(([, , c], i) => {
+    paintTile(SGLASS_TILE_BASE + i, (x, y) => {
+      const border = x === 0 || y === 0 || x === 15 || y === 15;
+      if (border) return px(c[0], c[1], c[2], 1);
+      if ((x + y) % 2 === 0) return [c[0], c[1], c[2], 255];
+      return [0, 0, 0, 0];
+    });
+  });
+
+  // --- 原木バリエーション (側面) ---
+  paintTile(TILE.BIRCH_LOG_SIDE, (x, y) => {
+    // 白樺: 白地に黒い横縞
+    const dash = (y * 5 + x * 2) % 13 < 2 && x % 4 < 2;
+    if (dash) return px(45, 45, 42, jitter(1, 0.1));
+    return px(216, 214, 200, jitter(1, 0.05));
+  });
+  paintTile(TILE.DARK_LOG_SIDE, (x) => {
+    const stripe = (x % 4 === 0 || x % 7 === 0) ? 0.72 : 1;
+    return px(62, 45, 28, jitter(stripe, 0.1));
+  });
+
+  // --- ジャック・オ・ランタンの顔 ---
+  paintTile(TILE.JACK_O_FACE, (x, y) => {
+    // 三角の目 (2つ)
+    const eye = (dxc, w) => y >= 4 && y <= 6 && Math.abs(x - dxc) <= (y - 4);
+    const eyes = eye(4, 2) || eye(11, 2);
+    // ギザギザの口
+    const mouth = y >= 9 && y <= 11 && x >= 3 && x <= 12 &&
+      !(y === 9 && x % 3 === 0) && !(y === 11 && x % 3 === 1);
+    if (eyes || mouth) return px(255, 220, 110, jitter(1, 0.05)); // 光る顔
+    const ridge = x % 4 === 0 ? 0.8 : 1;
+    return px(225, 130, 30, jitter(ridge, 0.07));
+  });
+
+  // --- 鉄ブロック / 石炭ブロック ---
+  paintTile(TILE.IRON_BLOCK, (x, y) => {
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    const rivet = (x === 2 || x === 13) && (y === 2 || y === 13);
+    if (rivet) return px(170, 170, 175, 1);
+    return px(border ? 185 : 220, border ? 185 : 220, border ? 190 : 225, jitter(1, 0.03));
+  });
+  paintTile(TILE.COAL_BLOCK, (x, y) => {
+    const sheen = Math.sin(x * 1.3 + y * 0.8) > 0.8;
+    return px(sheen ? 60 : 38, sheen ? 60 : 38, sheen ? 62 : 40, jitter(1, 0.12));
+  });
+
+  // --- テラコッタ (マットな土もの) ---
+  TERRA_COLORS.forEach(([, , c], i) => {
+    paintTile(TERRA_TILE_BASE + i, (x, y) => {
+      const band = y % 6 === 5 ? 0.92 : 1;
+      return px(c[0], c[1], c[2], jitter(band, 0.05));
+    });
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
