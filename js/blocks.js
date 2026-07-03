@@ -89,6 +89,20 @@ const B = {
   CLOUD: 162,
 };
 
+// コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
+const CONCRETE_ID_BASE = 163;
+const CONCRETE_TILE_BASE = 150;
+const CONCRETE_COLORS = [
+  ["white", "白コンクリート", [225, 227, 228]],
+  ["gray", "灰コンクリート", [125, 128, 132]],
+  ["black", "黒コンクリート", [42, 44, 48]],
+  ["red", "赤コンクリート", [185, 50, 48]],
+  ["orange", "橙コンクリート", [228, 120, 30]],
+  ["yellow", "黄コンクリート", [235, 200, 45]],
+  ["green", "緑コンクリート", [80, 160, 60]],
+  ["blue", "青コンクリート", [55, 90, 190]],
+];
+
 // ネオンブロック (発光 6 色, ID 140-145 / タイル 127-132)
 const NEON_ID_BASE = 140;
 const NEON_TILE_BASE = 127;
@@ -624,6 +638,12 @@ defBlock(B.HAZARD, "hazard", "危険ストライプ", [TILE.HAZARD, TILE.HAZARD,
 defBlock(B.PILLAR, "pillar", "白い柱", [TILE.MARBLE, TILE.PILLAR, TILE.MARBLE], deco);
 defBlock(B.CLOUD, "cloud", "雲ブロック", [TILE.CLOUD, TILE.CLOUD, TILE.CLOUD],
   { hardness: 0.3, emissive: true }); // ほんのり光り, 下から見ても暗くならない
+
+// コンクリート 8 色 (モダン建築向けのなめらかな単色)
+CONCRETE_COLORS.forEach(([name, jp], i) => {
+  const t = CONCRETE_TILE_BASE + i;
+  defBlock(CONCRETE_ID_BASE + i, "concrete_" + name, jp, [t, t, t], deco);
+});
 
 // --- 農地 (クワで耕した土, 上面がわずかに低い) ---
 defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],

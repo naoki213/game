@@ -454,6 +454,12 @@
     { out: B.PILLAR, outN: 2, in: [[B.MARBLE, 2]] },
     { out: B.CLOUD, outN: 2, in: [[B.WOOL, 2]] },
   );
+  // コンクリート (石 + 対応色の羊毛)。白のみ白羊毛 (B.WOOL) を使う
+  const CONCRETE_WOOL = [-1, 9, 10, 0, 1, 2, 4, 6]; // 白,灰,黒,赤,橙,黄,緑,青
+  CONCRETE_COLORS.forEach((_, i) => {
+    const wool = CONCRETE_WOOL[i] < 0 ? B.WOOL : WOOL_ID_BASE + CONCRETE_WOOL[i];
+    RECIPES.push({ out: CONCRETE_ID_BASE + i, outN: 4, in: [[B.STONE, 2], [wool, 1]] });
+  });
 
   // 追加の道具
   RECIPES.push(
@@ -763,9 +769,31 @@
     selectSlot(selectedSlot + (e.deltaY > 0 ? 1 : -1));
   }, { passive: true });
 
+  // ピックブロック (ミドルクリック): 見ているブロックをホットバーの選択枠へ
+  function pickBlock() {
+    const hit = player.raycast();
+    if (!hit) return;
+    const def = BLOCKS[hit.id];
+    if (!def) return;
+    if (gameMode === "survival" && (invCounts.get(hit.id) || 0) <= 0) {
+      showToast(def.jp + " はまだ持っていない");
+      return;
+    }
+    HOTBAR_BLOCKS[selectedSlot] = hit.id;
+    drawBlockIcon(slotEls[selectedSlot].querySelector("canvas"), hit.id, atlas);
+    slotEls[selectedSlot].querySelector(".name").textContent = def.jp;
+    localStorage.setItem("mcjs_hotbar", JSON.stringify(HOTBAR_BLOCKS));
+    updateHotbarCounts();
+  }
+
   canvas.addEventListener("mousedown", (e) => {
     if (paused) return;
     heldButtons.add(e.button);
+    if (e.button === 1) {
+      e.preventDefault();
+      pickBlock();
+      return;
+    }
     if (e.button === 0) {
       swingTimer = 0;
       if (tryPunch()) return;
@@ -2066,6 +2094,9 @@
     setRain: (r) => { raining = r; weatherTimer = 9999; },
     get raining() { return raining; },
     action: doAction,
+    pickBlock,
+    hotbar: HOTBAR_BLOCKS,
+    get slot() { return selectedSlot; },
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

@@ -809,6 +809,11 @@ function buildTextureAtlas(seed) {
     return px(248, 250, 253, jitter(1 + puff, 0.02));
   });
 
+  // コンクリート 8 色 (ほぼ均一な単色)
+  CONCRETE_COLORS.forEach(([, , [r, g, b]], i) => {
+    paintTile(CONCRETE_TILE_BASE + i, () => px(r, g, b, jitter(1, 0.02)));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
