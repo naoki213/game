@@ -284,6 +284,7 @@ function buildTextureAtlas(seed) {
     [TILE.PICK_STONE, TILE.SWORD_STONE, [140, 140, 140]],
     [TILE.PICK_IRON, TILE.SWORD_IRON, [225, 225, 230]],
     [TILE.PICK_DIAMOND, TILE.SWORD_DIAMOND, [95, 230, 225]],
+    [TILE.PICK_GOLD, TILE.SWORD_GOLD, [250, 205, 60]],
   ];
   for (const [pickTile, swordTile, mat] of toolMats) {
     // ピッケル: 斜めの柄 + 上部のアーチ状ヘッド
@@ -306,6 +307,78 @@ function buildTextureAtlas(seed) {
       return [0, 0, 0, 0];
     });
   }
+
+  // --- 斧 / シャベル / クワ (素材 4 種) ---
+  const toolMats2 = [
+    [[168, 130, 80], TILE.AXE_WOOD, TILE.SHOVEL_WOOD, TILE.HOE_WOOD],
+    [[140, 140, 140], TILE.AXE_STONE, TILE.SHOVEL_STONE, TILE.HOE_STONE],
+    [[225, 225, 230], TILE.AXE_IRON, TILE.SHOVEL_IRON, TILE.HOE_IRON],
+    [[95, 230, 225], TILE.AXE_DIAMOND, TILE.SHOVEL_DIAMOND, TILE.HOE_DIAMOND],
+  ];
+  const handle = (x, y) => y >= 3 && y <= 13 && Math.abs(x - (15 - y)) <= 0.5;
+  for (const [mat, axeT, shovelT, hoeT] of toolMats2) {
+    const m = (v = 1) => px(mat[0], mat[1], mat[2], jitter(v, 0.06));
+    // 斧: 柄の上端の左側に刃
+    paintTile(axeT, (x, y) => {
+      if (y >= 2 && y <= 6 && x >= 6 && x <= 11 && x - 6 >= (y - 2) - 3 && x <= 12 - Math.abs(y - 4)) return m();
+      if (y >= 1 && y <= 4 && x >= 9 && x <= 12) return m(0.95);
+      if (handle(x, y)) return px(140, 105, 60, jitter(1, 0.08));
+      return [0, 0, 0, 0];
+    });
+    // シャベル: 柄の上端に丸い刃先
+    paintTile(shovelT, (x, y) => {
+      const dx = x - 11.5, dy = y - 3.5;
+      if (dx * dx + dy * dy < 7 && y <= 6) return m();
+      if (handle(x, y)) return px(140, 105, 60, jitter(1, 0.08));
+      return [0, 0, 0, 0];
+    });
+    // クワ: 上端から横に伸びて折れ曲がる刃
+    paintTile(hoeT, (x, y) => {
+      if (y === 2 && x >= 6 && x <= 12) return m();
+      if (y >= 3 && y <= 5 && x >= 6 && x <= 7) return m(0.92);
+      if (handle(x, y)) return px(140, 105, 60, jitter(1, 0.08));
+      return [0, 0, 0, 0];
+    });
+  }
+
+  // --- ハサミ ---
+  paintTile(TILE.SHEARS, (x, y) => {
+    const blade1 = Math.abs(x - y) <= 1 && x >= 3 && x <= 12;
+    const blade2 = Math.abs(x - (15 - y)) <= 1 && x >= 3 && x <= 12;
+    if (blade1 || blade2) {
+      const isHandle = (blade1 && x >= 10) || (blade2 && x <= 5);
+      if (isHandle) return px(170, 60, 50, 1);
+      return px(210, 210, 215, jitter(1, 0.05));
+    }
+    return [0, 0, 0, 0];
+  });
+
+  // --- 釣竿 ---
+  paintTile(TILE.FISHING_ROD, (x, y) => {
+    if (y >= 2 && y <= 14 && Math.abs(x - (14 - y * 0.75)) <= 0.6) {
+      return px(140, 105, 60, jitter(1, 0.08));  // 竿
+    }
+    if (x === 13 && y >= 2 && y <= 9) return px(220, 220, 220, 1); // 糸
+    if (y === 10 && x >= 12 && x <= 13) return px(180, 180, 185, 1); // 針
+    return [0, 0, 0, 0];
+  });
+
+  // --- 魚 ---
+  paintTile(TILE.FISH, (x, y) => {
+    const dx = x - 6.5, dy = y - 8;
+    if (dx * dx * 0.6 + dy * dy < 8) {
+      return px(130, 160, 180, jitter(dy < 0 ? 1.05 : 0.9, 0.06)); // 体
+    }
+    if (x >= 10 && x <= 12 && Math.abs(dy) <= (x - 9)) return px(110, 140, 160, 1); // 尾びれ
+    if (x === 5 && y === 7) return [30, 30, 35, 255]; // 目
+    return [0, 0, 0, 0];
+  });
+
+  // --- 農地 (上面: 湿った土に畝) ---
+  paintTile(TILE.FARMLAND, (x, y) => {
+    const furrow = y % 4 === 1;
+    return px(furrow ? 70 : 100, furrow ? 45 : 68, furrow ? 30 : 45, jitter(1, 0.1));
+  });
 
   // --- 素材アイテム (インゴット / ダイヤ) ---
   const ingot = (col) => (x, y) => {

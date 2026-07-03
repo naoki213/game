@@ -422,6 +422,29 @@
     { out: B.IRON_BLOCK, outN: 1, in: [[I.IRON_INGOT, 4]] },
     { out: B.COAL_BLOCK, outN: 1, in: [[B.COAL_ORE, 2]] },
   );
+  // 追加の道具
+  RECIPES.push(
+    // 斧
+    { out: I.WOOD_AXE, outN: 1, in: [[B.PLANK, 3]] },
+    { out: I.STONE_AXE, outN: 1, in: [[B.COBBLE, 3], [B.PLANK, 2]] },
+    { out: I.IRON_AXE, outN: 1, in: [[I.IRON_INGOT, 3], [B.PLANK, 2]] },
+    { out: I.DIAMOND_AXE, outN: 1, in: [[I.DIAMOND, 3], [B.PLANK, 2]] },
+    // シャベル
+    { out: I.WOOD_SHOVEL, outN: 1, in: [[B.PLANK, 2]] },
+    { out: I.STONE_SHOVEL, outN: 1, in: [[B.COBBLE, 1], [B.PLANK, 2]] },
+    { out: I.IRON_SHOVEL, outN: 1, in: [[I.IRON_INGOT, 1], [B.PLANK, 2]] },
+    { out: I.DIAMOND_SHOVEL, outN: 1, in: [[I.DIAMOND, 1], [B.PLANK, 2]] },
+    // クワ
+    { out: I.WOOD_HOE, outN: 1, in: [[B.PLANK, 3]] },
+    { out: I.STONE_HOE, outN: 1, in: [[B.COBBLE, 2], [B.PLANK, 2]] },
+    { out: I.IRON_HOE, outN: 1, in: [[I.IRON_INGOT, 2], [B.PLANK, 2]] },
+    { out: I.DIAMOND_HOE, outN: 1, in: [[I.DIAMOND, 2], [B.PLANK, 2]] },
+    // 金の道具 / その他
+    { out: I.GOLD_PICK, outN: 1, in: [[I.GOLD_INGOT, 3], [B.PLANK, 2]] },
+    { out: I.GOLD_SWORD, outN: 1, in: [[I.GOLD_INGOT, 2], [B.PLANK, 1]] },
+    { out: I.SHEARS, outN: 1, in: [[I.IRON_INGOT, 2]] },
+    { out: I.FISHING_ROD, outN: 1, in: [[B.PLANK, 3], [B.WOOL, 1]] },
+  );
 
   const craftSectionEl = document.getElementById("craft-section");
   const craftListEl = document.getElementById("craft-list");
@@ -806,9 +829,14 @@
         for (let k = 0; k < 80; k++) {
           const i = (Math.random() * chunk.data.length) | 0;
           const id = chunk.data[i];
-          if ((id === B.WHEAT_0 || id === B.WHEAT_1) && Math.random() < 0.7) {
+          if (id === B.WHEAT_0 || id === B.WHEAT_1) {
             const lx = i & 15, lz = (i >> 4) & 15, ly = i >> 8;
-            world.setBlock(chunk.cx * 16 + lx, ly, chunk.cz * 16 + lz, id + 1);
+            // 農地の上なら2倍の速さで育つ
+            const below = ly > 0 ? chunk.get(lx, ly - 1, lz) : 0;
+            const p = below === B.FARMLAND ? 1.0 : 0.5;
+            if (Math.random() < p) {
+              world.setBlock(chunk.cx * 16 + lx, ly, chunk.cz * 16 + lz, id + 1);
+            }
           }
         }
       }
@@ -1242,6 +1270,33 @@
 
   // 右クリック / タップでの設置 (弓を持っていれば射撃)
   let bowCooldown = 0;
+  // 釣りの状態
+  let fishing = false;
+  let fishingTimer = 0;
+  let fishingPos = null;
+
+  function updateFishing(dt) {
+    if (!fishing) return;
+    // 動くと中断
+    if (Math.hypot(player.pos[0] - fishingPos[0], player.pos[2] - fishingPos[2]) > 1.2) {
+      fishing = false;
+      showToast("動いたので魚が逃げた");
+      return;
+    }
+    fishingTimer -= dt;
+    if (fishingTimer <= 0) {
+      fishing = false;
+      if (Math.random() < 0.75) {
+        addItem(I.FISH);
+        sound.pickup();
+        showToast("魚が釣れた! 🐟");
+        const tool = heldTool();
+        if (tool && tool.kind === "rod") damageTool(tool.id);
+      } else {
+        showToast("逃げられた…");
+      }
+    }
+  }
 
   function placeAction() {
     swingTimer = 0;
@@ -1255,6 +1310,65 @@
       damageTool(tool.id);
       return;
     }
+    // クワ: 草 / 土を耕して農地に
+    if (tool && tool.kind === "hoe") {
+      const hit = player.raycast();
+      if (hit && (hit.id === B.GRASS || hit.id === B.DIRT) &&
+          world.getBlock(hit.pos[0], hit.pos[1] + 1, hit.pos[2]) === B.AIR) {
+        world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.FARMLAND);
+        sound.step();
+        damageTool(tool.id);
+      }
+      return;
+    }
+    // ハサミ: ヒツジの毛刈り (殺さずに羊毛を得る)
+    if (tool && tool.kind === "shears") {
+      const hit = player.raycast();
+      const mob = mobs.pick(player.eyePos(), player.forward(), hit ? hit.t : REACH);
+      if (mob && mob.type === "sheep") {
+        if (mob.shearUntil && elapsed < mob.shearUntil) {
+          showToast("この羊はまだ毛が生えそろっていない");
+          return;
+        }
+        mob.shearUntil = elapsed + 90; // 毛が生えるまで90秒
+        items.spawn(B.WOOL, Math.floor(mob.pos[0]), Math.floor(mob.pos[1]), Math.floor(mob.pos[2]),
+          1 + (Math.random() < 0.5 ? 1 : 0));
+        sound.blip(600, 0.08, "square", 0.15);
+        damageTool(tool.id);
+      }
+      return;
+    }
+    // 釣竿: 水に向かって投げる
+    if (tool && tool.kind === "rod") {
+      if (fishing) {
+        // 引き上げ (早すぎると逃げる)
+        fishing = false;
+        showToast("何も釣れなかった…");
+        return;
+      }
+      // 視線の先に水があるか
+      const eye = player.eyePos();
+      const fwd = player.forward();
+      let foundWater = false;
+      for (let t = 1; t <= 9; t += 0.5) {
+        const id = world.getBlock(
+          Math.floor(eye[0] + fwd[0] * t),
+          Math.floor(eye[1] + fwd[1] * t),
+          Math.floor(eye[2] + fwd[2] * t));
+        if (id === B.WATER) { foundWater = true; break; }
+        if (id !== B.AIR) break;
+      }
+      if (!foundWater) {
+        showToast("水に向かって使おう");
+        return;
+      }
+      fishing = true;
+      fishingTimer = 3 + Math.random() * 5;
+      fishingPos = [...player.pos];
+      showToast("ウキを垂らした…");
+      sound.blip(400, 0.1, "sine", 0.15);
+      return;
+    }
     // チェスト / ベッドは右クリックで開く・眠る (スニーク中は通常設置)
     const hitFirst = player.raycast();
     if (hitFirst && !player.sneaking) {
@@ -1266,7 +1380,7 @@
     if (heldDef && heldDef.seeds) {
       if (!hitFirst) return;
       const [px, py, pz] = hitFirst.prev;
-      if ((hitFirst.id === B.GRASS || hitFirst.id === B.DIRT) &&
+      if ((hitFirst.id === B.GRASS || hitFirst.id === B.DIRT || hitFirst.id === B.FARMLAND) &&
           py === hitFirst.pos[1] + 1 &&
           world.getBlock(px, py, pz) === B.AIR) {
         if (!consumeItem(heldDef.id)) return;
@@ -1376,11 +1490,15 @@
       breakProgress = 0;
       return;
     }
-    // 石系ブロックはピッケルで加速, 素手だと非常に遅い
+    // 適した道具で加速: 石系はピッケル (素手は激遅), 木系は斧, 土系はシャベル
+    const tool = heldTool();
     if (block.pickable) {
-      const tool = heldTool();
       if (tool && tool.kind === "pick") hard /= tool.speed;
       else hard *= 3.2;
+    } else if (block.axeable && tool && tool.kind === "axe") {
+      hard /= tool.speed;
+    } else if (block.shovelable && tool && tool.kind === "shovel") {
+      hard /= tool.speed;
     }
     breakProgress += dt / hard;
     if (breakProgress >= 1) {
@@ -1707,6 +1825,7 @@
       updatePrimedTNT(dt);
       updateLeafDecay(dt);
       updateRandomTicks(dt);
+      updateFishing(dt);
       bowCooldown = Math.max(0, bowCooldown - dt);
 
       timeOfDay = (timeOfDay + dt / DAY_LENGTH) % 1;

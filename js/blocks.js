@@ -68,6 +68,7 @@ const B = {
   JACK_O_LANTERN: 77,
   IRON_BLOCK: 78,
   COAL_BLOCK: 79,
+  FARMLAND: 99,
 };
 
 // 色付きガラス (8 色, ID 67-74 / タイル 90-97)
@@ -137,6 +138,23 @@ const I = {
   SEEDS: 115,
   WHEAT: 116,
   BREAD: 117,
+  WOOD_AXE: 118,
+  STONE_AXE: 119,
+  IRON_AXE: 120,
+  DIAMOND_AXE: 121,
+  WOOD_SHOVEL: 122,
+  STONE_SHOVEL: 123,
+  IRON_SHOVEL: 124,
+  DIAMOND_SHOVEL: 125,
+  WOOD_HOE: 126,
+  STONE_HOE: 127,
+  IRON_HOE: 128,
+  DIAMOND_HOE: 129,
+  GOLD_PICK: 130,
+  GOLD_SWORD: 131,
+  SHEARS: 132,
+  FISHING_ROD: 133,
+  FISH: 134,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -227,6 +245,24 @@ const TILE = {
   IRON_BLOCK: 101,
   COAL_BLOCK: 102,
   // 103-108 テラコッタ
+  AXE_WOOD: 109,
+  AXE_STONE: 110,
+  AXE_IRON: 111,
+  AXE_DIAMOND: 112,
+  SHOVEL_WOOD: 113,
+  SHOVEL_STONE: 114,
+  SHOVEL_IRON: 115,
+  SHOVEL_DIAMOND: 116,
+  HOE_WOOD: 117,
+  HOE_STONE: 118,
+  HOE_IRON: 119,
+  HOE_DIAMOND: 120,
+  PICK_GOLD: 121,
+  SWORD_GOLD: 122,
+  SHEARS: 123,
+  FISHING_ROD: 124,
+  FISH: 125,
+  FARMLAND: 126,
 };
 
 // 各ブロックの属性
@@ -455,9 +491,63 @@ defItem(I.PORK, "pork", "豚肉", TILE.PORK, null, 8);
 defItem(I.BEEF, "beef", "牛肉", TILE.BEEF, null, 8);
 defItem(I.CHICKEN_MEAT, "chicken_meat", "鶏肉", TILE.CHICKEN_MEAT, null, 6);
 defItem(I.SEEDS, "seeds", "小麦の種", TILE.SEEDS);
-ITEMS[I.SEEDS].seeds = true;   // 土 / 草の上に植えられる
+ITEMS[I.SEEDS].seeds = true;   // 土 / 草 / 農地の上に植えられる
 defItem(I.WHEAT, "wheat", "小麦", TILE.WHEAT_ITEM);
 defItem(I.BREAD, "bread", "パン", TILE.BREAD, null, 10);
+
+// --- 斧 (木こりが速くなる) ---
+defItem(I.WOOD_AXE, "wood_axe", "木の斧", TILE.AXE_WOOD,
+  { kind: "axe", tier: 1, speed: 2.5, damage: 3, durability: 60 });
+defItem(I.STONE_AXE, "stone_axe", "石の斧", TILE.AXE_STONE,
+  { kind: "axe", tier: 2, speed: 4.5, damage: 4, durability: 130 });
+defItem(I.IRON_AXE, "iron_axe", "鉄の斧", TILE.AXE_IRON,
+  { kind: "axe", tier: 3, speed: 7, damage: 5, durability: 250 });
+defItem(I.DIAMOND_AXE, "diamond_axe", "ダイヤの斧", TILE.AXE_DIAMOND,
+  { kind: "axe", tier: 4, speed: 10, damage: 6, durability: 600 });
+
+// --- シャベル (土掘りが速くなる) ---
+defItem(I.WOOD_SHOVEL, "wood_shovel", "木のシャベル", TILE.SHOVEL_WOOD,
+  { kind: "shovel", tier: 1, speed: 2.5, damage: 2, durability: 60 });
+defItem(I.STONE_SHOVEL, "stone_shovel", "石のシャベル", TILE.SHOVEL_STONE,
+  { kind: "shovel", tier: 2, speed: 4.5, damage: 3, durability: 130 });
+defItem(I.IRON_SHOVEL, "iron_shovel", "鉄のシャベル", TILE.SHOVEL_IRON,
+  { kind: "shovel", tier: 3, speed: 7, damage: 3, durability: 250 });
+defItem(I.DIAMOND_SHOVEL, "diamond_shovel", "ダイヤのシャベル", TILE.SHOVEL_DIAMOND,
+  { kind: "shovel", tier: 4, speed: 10, damage: 4, durability: 600 });
+
+// --- クワ (土を耕して農地にする) ---
+defItem(I.WOOD_HOE, "wood_hoe", "木のクワ", TILE.HOE_WOOD,
+  { kind: "hoe", tier: 1, speed: 1, damage: 2, durability: 60 });
+defItem(I.STONE_HOE, "stone_hoe", "石のクワ", TILE.HOE_STONE,
+  { kind: "hoe", tier: 2, speed: 1, damage: 2, durability: 130 });
+defItem(I.IRON_HOE, "iron_hoe", "鉄のクワ", TILE.HOE_IRON,
+  { kind: "hoe", tier: 3, speed: 1, damage: 2, durability: 250 });
+defItem(I.DIAMOND_HOE, "diamond_hoe", "ダイヤのクワ", TILE.HOE_DIAMOND,
+  { kind: "hoe", tier: 4, speed: 1, damage: 2, durability: 600 });
+
+// --- 金の道具 (超高速だがすぐ壊れる) ---
+defItem(I.GOLD_PICK, "gold_pick", "金のピッケル", TILE.PICK_GOLD,
+  { kind: "pick", tier: 2, speed: 12, damage: 3, durability: 40 });
+defItem(I.GOLD_SWORD, "gold_sword", "金の剣", TILE.SWORD_GOLD,
+  { kind: "sword", tier: 2, speed: 1, damage: 5, durability: 40 });
+
+// --- ハサミ (ヒツジの毛刈り) / 釣竿 ---
+defItem(I.SHEARS, "shears", "ハサミ", TILE.SHEARS,
+  { kind: "shears", tier: 1, speed: 1, damage: 1, durability: 60 });
+defItem(I.FISHING_ROD, "fishing_rod", "釣竿", TILE.FISHING_ROD,
+  { kind: "rod", tier: 1, speed: 1, damage: 1, durability: 40 });
+defItem(I.FISH, "fish", "魚", TILE.FISH, null, 6);
+
+// --- 農地 (クワで耕した土, 上面がわずかに低い) ---
+defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],
+  { hardness: 0.6, opaque: false, height: 0.9375, drops: B.DIRT });
+
+// 道具の効くブロック分類
+[B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.PLANK, B.BIRCH_PLANK, B.DARK_PLANK,
+ B.PLANK_SLAB, B.BOOKSHELF, B.CHEST, B.BED, B.PUMPKIN, B.JACK_O_LANTERN,
+].forEach((id) => { BLOCKS[id].axeable = true; });
+[B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.FARMLAND,
+].forEach((id) => { BLOCKS[id].shovelable = true; });
 
 // ブロック / アイテムを問わず定義を引く
 function getDef(id) {
