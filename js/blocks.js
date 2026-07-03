@@ -69,7 +69,37 @@ const B = {
   IRON_BLOCK: 78,
   COAL_BLOCK: 79,
   FARMLAND: 99,
+  // 140 以降はオリジナル建築ブロック (100-139 はアイテム用)
+  MARBLE: 146,
+  MARBLE_BLACK: 147,
+  CHECKER: 148,
+  TATAMI: 149,
+  SHOJI: 150,
+  VERMILION: 151,
+  COPPER: 152,
+  COPPER_OXIDIZED: 153,
+  CRYSTAL: 154,
+  LAVA_BLOCK: 155,
+  ASPHALT: 156,
+  ROAD_LINE: 157,
+  THATCH: 158,
+  STEEL: 159,
+  HAZARD: 160,
+  PILLAR: 161,
+  CLOUD: 162,
 };
+
+// ネオンブロック (発光 6 色, ID 140-145 / タイル 127-132)
+const NEON_ID_BASE = 140;
+const NEON_TILE_BASE = 127;
+const NEON_COLORS = [
+  ["red", "赤ネオン", [255, 80, 80]],
+  ["blue", "青ネオン", [80, 130, 255]],
+  ["green", "緑ネオン", [90, 255, 120]],
+  ["pink", "ピンクネオン", [255, 110, 220]],
+  ["cyan", "水色ネオン", [80, 235, 255]],
+  ["yellow", "黄ネオン", [255, 235, 90]],
+];
 
 // 色付きガラス (8 色, ID 67-74 / タイル 90-97)
 const SGLASS_ID_BASE = 67;
@@ -263,6 +293,24 @@ const TILE = {
   FISHING_ROD: 124,
   FISH: 125,
   FARMLAND: 126,
+  // 127-132 ネオン
+  MARBLE: 133,
+  MARBLE_BLACK: 134,
+  CHECKER: 135,
+  TATAMI: 136,
+  SHOJI: 137,
+  VERMILION: 138,
+  COPPER: 139,
+  COPPER_OXIDIZED: 140,
+  CRYSTAL: 141,
+  LAVA_BLOCK: 142,
+  ASPHALT: 143,
+  ROAD_LINE: 144,
+  THATCH: 145,
+  STEEL: 146,
+  HAZARD: 147,
+  PILLAR: 148,
+  CLOUD: 149,
 };
 
 // 各ブロックの属性
@@ -538,6 +586,45 @@ defItem(I.FISHING_ROD, "fishing_rod", "釣竿", TILE.FISHING_ROD,
   { kind: "rod", tier: 1, speed: 1, damage: 1, durability: 40 });
 defItem(I.FISH, "fish", "魚", TILE.FISH, null, 6);
 
+// --- オリジナル建築ブロック ---
+
+// ネオン 6 色 (光源)
+NEON_COLORS.forEach(([name, jp], i) => {
+  const t = NEON_TILE_BASE + i;
+  defBlock(NEON_ID_BASE + i, "neon_" + name, jp, [t, t, t],
+    { hardness: 0.4, emissive: true });
+});
+
+const deco = { hardness: 1.6, pickable: true, minTier: 1 };
+defBlock(B.MARBLE, "marble", "大理石", [TILE.MARBLE, TILE.MARBLE, TILE.MARBLE], deco);
+defBlock(B.MARBLE_BLACK, "marble_black", "黒大理石",
+  [TILE.MARBLE_BLACK, TILE.MARBLE_BLACK, TILE.MARBLE_BLACK], deco);
+defBlock(B.CHECKER, "checker", "市松ブロック", [TILE.CHECKER, TILE.CHECKER, TILE.CHECKER], deco);
+defBlock(B.TATAMI, "tatami", "畳", [TILE.TATAMI, TILE.TATAMI, TILE.TATAMI], { hardness: 0.8 });
+defBlock(B.SHOJI, "shoji", "障子", [TILE.SHOJI, TILE.SHOJI, TILE.SHOJI],
+  { hardness: 0.4, opaque: false, drops: null });
+defBlock(B.VERMILION, "vermilion", "朱塗りブロック",
+  [TILE.VERMILION, TILE.VERMILION, TILE.VERMILION], { hardness: 1.2 });
+defBlock(B.COPPER, "copper", "銅ブロック", [TILE.COPPER, TILE.COPPER, TILE.COPPER], deco);
+defBlock(B.COPPER_OXIDIZED, "copper_oxidized", "緑青の銅",
+  [TILE.COPPER_OXIDIZED, TILE.COPPER_OXIDIZED, TILE.COPPER_OXIDIZED], deco);
+defBlock(B.CRYSTAL, "crystal", "クリスタル", [TILE.CRYSTAL, TILE.CRYSTAL, TILE.CRYSTAL],
+  { hardness: 0.8, opaque: false, emissive: true });
+defBlock(B.LAVA_BLOCK, "lava_block", "溶岩ブロック",
+  [TILE.LAVA_BLOCK, TILE.LAVA_BLOCK, TILE.LAVA_BLOCK],
+  { hardness: 1.6, pickable: true, minTier: 1, emissive: true });
+defBlock(B.ASPHALT, "asphalt", "アスファルト", [TILE.ASPHALT, TILE.ASPHALT, TILE.ASPHALT], deco);
+defBlock(B.ROAD_LINE, "road_line", "白線アスファルト",
+  [TILE.ROAD_LINE, TILE.ASPHALT, TILE.ASPHALT], deco);
+defBlock(B.THATCH, "thatch", "わらブロック", [TILE.THATCH, TILE.THATCH, TILE.THATCH],
+  { hardness: 0.6 });
+defBlock(B.STEEL, "steel", "スチールパネル", [TILE.STEEL, TILE.STEEL, TILE.STEEL],
+  { hardness: 2.2, pickable: true, minTier: 2 });
+defBlock(B.HAZARD, "hazard", "危険ストライプ", [TILE.HAZARD, TILE.HAZARD, TILE.HAZARD], deco);
+defBlock(B.PILLAR, "pillar", "白い柱", [TILE.MARBLE, TILE.PILLAR, TILE.MARBLE], deco);
+defBlock(B.CLOUD, "cloud", "雲ブロック", [TILE.CLOUD, TILE.CLOUD, TILE.CLOUD],
+  { hardness: 0.3 });
+
 // --- 農地 (クワで耕した土, 上面がわずかに低い) ---
 defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],
   { hardness: 0.6, opaque: false, height: 0.9375, drops: B.DIRT });
@@ -550,8 +637,9 @@ defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT]
 ].forEach((id) => { BLOCKS[id].shovelable = true; });
 
 // ブロック / アイテムを問わず定義を引く
+// (ブロック ID: 0-99 と 140-255, アイテム ID: 100-139)
 function getDef(id) {
-  return id >= 100 ? ITEMS[id] : BLOCKS[id];
+  return ITEMS[id] || BLOCKS[id];
 }
 
 // ホットバーに並ぶブロック (1–9 キー)

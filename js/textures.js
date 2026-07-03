@@ -6,7 +6,7 @@
 
 const TILE_PX = 16;
 const ATLAS_COLS = 8;
-const ATLAS_ROWS = 16;   // 128x256 (POT)
+const ATLAS_ROWS = 32;   // 128x512 (POT)
 
 // 各タイルの平均色 [r,g,b] (0..1) — 破壊パーティクルの色に使う
 const TILE_AVG_COLORS = [];
@@ -696,6 +696,117 @@ function buildTextureAtlas(seed) {
       const band = y % 6 === 5 ? 0.92 : 1;
       return px(c[0], c[1], c[2], jitter(band, 0.05));
     });
+  });
+
+  // --- オリジナル建築ブロック ---
+
+  // ネオン: 明るいコア + さらに明るい縁
+  NEON_COLORS.forEach(([, , c], i) => {
+    paintTile(NEON_TILE_BASE + i, (x, y) => {
+      const border = x === 0 || y === 0 || x === 15 || y === 15;
+      const v = border ? 1.15 : 1;
+      return px(c[0] * v, c[1] * v, c[2] * v, jitter(1, 0.02));
+    });
+  });
+
+  // 大理石 (白地に灰色の脈)
+  const marble = (base, vein) => (x, y) => {
+    const n = Math.sin(x * 0.7 + y * 1.3) + Math.sin(x * 1.4 - y * 0.5) * 0.7;
+    const isVein = Math.abs((n * 2.3) % 3 - 1.5) < 0.22;
+    if (isVein) return px(vein[0], vein[1], vein[2], jitter(1, 0.04));
+    return px(base[0], base[1], base[2], jitter(1, 0.02));
+  };
+  paintTile(TILE.MARBLE, marble([235, 233, 228], [175, 175, 178]));
+  paintTile(TILE.MARBLE_BLACK, marble([40, 40, 45], [110, 110, 118]));
+
+  // 市松
+  paintTile(TILE.CHECKER, (x, y) => {
+    const b = (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 0;
+    return px(b ? 235 : 35, b ? 233 : 35, b ? 228 : 40, jitter(1, 0.02));
+  });
+
+  // 畳 (編み目 + 縁)
+  paintTile(TILE.TATAMI, (x, y) => {
+    if (x <= 0 || x >= 15) return px(60, 70, 45, 1); // 縁
+    const weave = (x + (y % 2)) % 2 === 0 ? 1 : 0.9;
+    return px(150, 165, 105, jitter(weave, 0.04));
+  });
+
+  // 障子 (白い和紙 + 木の格子)
+  paintTile(TILE.SHOJI, (x, y) => {
+    const grid = x % 5 === 0 || y % 5 === 0;
+    if (grid) return px(120, 90, 55, 1);
+    return [245, 242, 232, 235];
+  });
+
+  // 朱塗り
+  paintTile(TILE.VERMILION, (x, y) => {
+    const sheen = (x + y) % 9 === 0 ? 1.1 : 1;
+    return px(205, 60, 40, jitter(sheen, 0.03));
+  });
+
+  // 銅 / 緑青の銅
+  paintTile(TILE.COPPER, (x, y) => {
+    const band = y % 4 === 3 ? 0.9 : 1;
+    return px(195, 115, 70, jitter(band, 0.05));
+  });
+  paintTile(TILE.COPPER_OXIDIZED, () => {
+    const v = rand();
+    if (v < 0.25) return px(120, 170, 140, jitter(1, 0.08));
+    return px(85, 155, 130, jitter(1, 0.06));
+  });
+
+  // クリスタル (ディザ半透明の光る紫)
+  paintTile(TILE.CRYSTAL, (x, y) => {
+    const facet = Math.abs(x - y) % 6 < 2 ? 1.15 : 1;
+    if ((x + y) % 2 === 0) return px(190 * facet, 130 * facet, 255, 255);
+    return [150, 90, 220, 140];
+  });
+
+  // 溶岩ブロック (光る亀裂)
+  paintTile(TILE.LAVA_BLOCK, (x, y) => {
+    const crack = Math.sin(x * 1.5 + y * 0.8) * Math.sin(y * 1.7 - x * 0.6) > 0.35;
+    if (crack) return px(255, 160, 40, jitter(1, 0.08));
+    return px(60, 30, 25, jitter(1, 0.12));
+  });
+
+  // アスファルト / 白線
+  paintTile(TILE.ASPHALT, () => px(55, 55, 58, jitter(1, 0.08)));
+  paintTile(TILE.ROAD_LINE, (x, y) => {
+    if (x >= 6 && x <= 9) return px(230, 230, 225, jitter(1, 0.03)); // 白線
+    return px(55, 55, 58, jitter(1, 0.08));
+  });
+
+  // わら
+  paintTile(TILE.THATCH, (x, y) => {
+    const strand = (x + y * 3) % 5 < 2 ? 0.88 : 1;
+    return px(200, 170, 90, jitter(strand, 0.07));
+  });
+
+  // スチールパネル
+  paintTile(TILE.STEEL, (x, y) => {
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    const rivet = (x === 3 || x === 12) && (y === 3 || y === 12);
+    if (rivet) return px(140, 145, 150, 1);
+    return px(border ? 75 : 100, border ? 78 : 105, border ? 82 : 110, jitter(1, 0.04));
+  });
+
+  // 危険ストライプ (黄と黒の斜め縞)
+  paintTile(TILE.HAZARD, (x, y) => {
+    const s = ((x + y) % 8) < 4;
+    return px(s ? 235 : 35, s ? 195 : 35, s ? 50 : 35, jitter(1, 0.04));
+  });
+
+  // 白い柱 (縦溝)
+  paintTile(TILE.PILLAR, (x) => {
+    const flute = x % 4 === 0 ? 0.82 : (x % 4 === 2 ? 1.06 : 1);
+    return px(228, 226, 220, jitter(flute, 0.02));
+  });
+
+  // 雲ブロック (ふわふわの白)
+  paintTile(TILE.CLOUD, (x, y) => {
+    const puff = Math.sin(x * 0.9 + 1) * Math.sin(y * 0.8 + 2) * 0.06;
+    return px(248, 250, 253, jitter(1 + puff, 0.02));
   });
 
   // --- 各タイルの平均色を計算 ---

@@ -99,7 +99,7 @@
     }
   }
   player.spawn(8.5, 8.5);
-  player.yaw = Math.PI * 0.25;
+  player.yaw = Math.PI / 2; // クロードの街 (東) を向いてスタート
 
   // ---------------- HUD (ホットバー) ----------------
 
@@ -427,6 +427,34 @@
     { out: B.IRON_BLOCK, outN: 1, in: [[I.IRON_INGOT, 4]] },
     { out: B.COAL_BLOCK, outN: 1, in: [[B.COAL_ORE, 2]] },
   );
+  // オリジナル建築ブロック
+  const NEON_WOOL = [0, 6, 4, 8, 5, 2]; // 赤,青,緑,桃,空色,黄 に対応する羊毛
+  NEON_COLORS.forEach((_, i) => {
+    RECIPES.push({
+      out: NEON_ID_BASE + i, outN: 2,
+      in: [[B.GLOWSTONE, 1], [WOOL_ID_BASE + NEON_WOOL[i], 1]],
+    });
+  });
+  RECIPES.push(
+    { out: B.MARBLE, outN: 2, in: [[B.STONE, 2]] },
+    { out: B.MARBLE_BLACK, outN: 2, in: [[B.STONE, 1], [B.COAL_ORE, 1]] },
+    { out: B.CHECKER, outN: 2, in: [[B.MARBLE, 1], [B.MARBLE_BLACK, 1]] },
+    { out: B.TATAMI, outN: 2, in: [[I.WHEAT, 2], [B.PLANK, 1]] },
+    { out: B.SHOJI, outN: 4, in: [[B.PLANK, 2], [B.WOOL, 1]] },
+    { out: B.VERMILION, outN: 4, in: [[B.PLANK, 2], [WOOL_ID_BASE, 1]] },
+    { out: B.COPPER, outN: 2, in: [[I.IRON_INGOT, 1], [WOOL_ID_BASE + 1, 1]] },
+    { out: B.COPPER_OXIDIZED, outN: 1, in: [[B.COPPER, 1]] },
+    { out: B.CRYSTAL, outN: 4, in: [[I.DIAMOND, 1], [B.GLASS, 2]] },
+    { out: B.LAVA_BLOCK, outN: 2, in: [[B.OBSIDIAN, 1], [B.COAL_ORE, 1]] },
+    { out: B.ASPHALT, outN: 4, in: [[B.GRAVEL, 2], [B.COAL_ORE, 1]] },
+    { out: B.ROAD_LINE, outN: 2, in: [[B.ASPHALT, 2]] },
+    { out: B.THATCH, outN: 2, in: [[I.WHEAT, 3]] },
+    { out: B.STEEL, outN: 4, in: [[I.IRON_INGOT, 2], [B.COAL_ORE, 1]] },
+    { out: B.HAZARD, outN: 4, in: [[WOOL_ID_BASE + 2, 1], [WOOL_ID_BASE + 10, 1]] },
+    { out: B.PILLAR, outN: 2, in: [[B.MARBLE, 2]] },
+    { out: B.CLOUD, outN: 2, in: [[B.WOOL, 2]] },
+  );
+
   // 追加の道具
   RECIPES.push(
     // 斧
