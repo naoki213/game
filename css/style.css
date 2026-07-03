@@ -369,6 +369,8 @@ html, body {
   border-radius: 10px;
   padding: 18px 22px;
   max-width: 640px;
+  max-height: 88vh;
+  overflow-y: auto;
 }
 
 #inventory-inner h2 {
@@ -387,6 +389,35 @@ html, body {
   display: grid;
   grid-template-columns: repeat(6, 64px);
   gap: 8px;
+}
+
+.inv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  background: rgba(20, 26, 40, 0.97);
+  padding: 6px 0;
+  z-index: 1;
+}
+
+.inv-tabs button {
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: #cde;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.inv-tabs button.active {
+  background: rgba(120, 200, 255, 0.3);
+  border-color: #8cf;
+  color: #fff;
 }
 
 .inv-item {

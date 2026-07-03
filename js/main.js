@@ -318,6 +318,45 @@
   const inventoryGrid = document.getElementById("inventory-grid");
   let inventoryOpen = false;
 
+  // カテゴリタブ (ブロックが多いので絞り込めるように)
+  const INV_CATS = [
+    ["all", "すべて"], ["nature", "自然"], ["build", "建材"],
+    ["color", "彩色"], ["original", "オリジナル"], ["tool", "道具"],
+  ];
+  let invFilter = "all";
+  const NATURE_IDS = new Set([
+    B.GRASS, B.DIRT, B.STONE, B.SAND, B.LOG, B.LEAVES, B.SNOW,
+    B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.GRAVEL,
+    B.TALL_GRASS, B.FLOWER_YELLOW, B.FLOWER_RED, B.WHEAT_0, B.WHEAT_1,
+    B.WHEAT_2, B.ICE, B.PUMPKIN, B.OBSIDIAN, B.BIRCH_LOG, B.DARK_LOG,
+    B.FARMLAND,
+  ]);
+  function invCategory(id) {
+    if (ITEMS[id]) return "tool";
+    if (id >= 140) return "original";
+    if (NATURE_IDS.has(id)) return "nature";
+    if (id === B.WOOL ||
+        (id >= WOOL_ID_BASE && id < WOOL_ID_BASE + WOOL_COLORS.length) ||
+        (id >= SGLASS_ID_BASE && id < SGLASS_ID_BASE + SGLASS_COLORS.length) ||
+        (id >= TERRA_ID_BASE && id < TERRA_ID_BASE + TERRA_COLORS.length) ||
+        (id >= CARPET_ID_BASE && id < CARPET_ID_BASE + 13)) return "color";
+    return "build";
+  }
+  const invTabsEl = document.createElement("div");
+  invTabsEl.className = "inv-tabs";
+  INV_CATS.forEach(([cat, jp]) => {
+    const btn = document.createElement("button");
+    btn.textContent = jp;
+    btn.className = cat === invFilter ? "active" : "";
+    btn.addEventListener("click", () => {
+      invFilter = cat;
+      invTabsEl.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+      refreshInventoryCounts();
+    });
+    invTabsEl.appendChild(btn);
+  });
+  inventoryGrid.parentNode.insertBefore(invTabsEl, inventoryGrid);
+
   const gridDefs = [
     ...BLOCKS.filter((b) => b && b.id !== B.AIR && b.id !== B.WATER && b.id !== B.BEDROCK),
     ...Object.values(ITEMS),
@@ -326,6 +365,7 @@
     const item = document.createElement("div");
     item.className = "inv-item";
     item.dataset.blockId = String(block.id);
+    item.dataset.cat = invCategory(block.id);
     const icon = document.createElement("canvas");
     icon.width = icon.height = 48;
     drawBlockIcon(icon, block.id, atlas);
@@ -549,6 +589,10 @@
     els.forEach((el) => {
       const id = parseInt(el.dataset.blockId, 10);
       const badge = el.querySelector(".count");
+      if (invFilter !== "all" && el.dataset.cat !== invFilter) {
+        el.style.display = "none";
+        return;
+      }
       if (gameMode === "creative") {
         badge.textContent = "";
         el.style.opacity = "1";
@@ -569,6 +613,9 @@
       invEmptyNote.textContent = "(まだ何も持っていない — ブロックを掘って集めよう)";
       inventoryGrid.appendChild(invEmptyNote);
     }
+    invEmptyNote.textContent = invFilter === "all"
+      ? "(まだ何も持っていない — ブロックを掘って集めよう)"
+      : "(このカテゴリに表示できるものがない)";
     invEmptyNote.style.display = visible === 0 ? "" : "none";
   }
 
