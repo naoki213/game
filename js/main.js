@@ -99,7 +99,6 @@
     }
   }
   player.spawn(8.5, 8.5);
-  player.yaw = Math.PI / 2; // クロードの街 (東) を向いてスタート
 
   // ---------------- HUD (ホットバー) ----------------
 
@@ -1035,18 +1034,6 @@
     }
   }
 
-  // ---------------- クロードの街 (入場メッセージ) ----------------
-
-  let townWelcomed = false;
-  function updateTownWelcome() {
-    if (townWelcomed) return;
-    const p = player.pos;
-    if (p[0] >= 22 && p[0] <= 88 && p[2] >= -24 && p[2] <= 36) {
-      townWelcomed = true;
-      showToast("🏰 クロードの街へようこそ!");
-    }
-  }
-
   // ---------------- 天候 (雨) ----------------
 
   let raining = false;
@@ -1977,7 +1964,6 @@
       updateParticles(dt);
 
       updateWeather(dt);
-      updateTownWelcome();
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
