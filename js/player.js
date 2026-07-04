@@ -118,6 +118,12 @@ class Player {
     this.sneaking = input.sneak && !this.flying && !this.inWater;
     if (this.sneaking) speed *= 0.35;
 
+    // ソウルサンドの上は歩きにくい (本家準拠)
+    if (this.onGround && !this.flying &&
+        this.world.getBlock(Math.floor(this.pos[0]), Math.floor(this.pos[1] - 0.05), Math.floor(this.pos[2])) === B.SOUL_SAND) {
+      speed *= 0.5;
+    }
+
     // 水平速度は即応 (地上) / 少し慣性 (空中)
     const accel = this.onGround || this.flying ? 20 : 6;
     this.vel[0] = lerp(this.vel[0], dx * speed, Math.min(accel * dt, 1));

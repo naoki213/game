@@ -551,6 +551,8 @@
     { out: I.FLINT_AND_STEEL, outN: 1, in: [[I.IRON_INGOT, 1], [I.FLINT, 1]] },
     { out: B.QUARTZ, outN: 1, in: [[I.NETHER_QUARTZ, 1]] },
     { out: B.NETHER_BRICK, outN: 2, in: [[B.NETHERRACK, 2], [B.COAL_ORE, 1]] },
+    // ナビゲーション
+    { out: I.COMPASS, outN: 1, in: [[I.IRON_INGOT, 4]] },
   );
 
   const craftSectionEl = document.getElementById("craft-section");
@@ -1199,6 +1201,17 @@
 
   function trySleep(pos) {
     if (sleeping) return;
+    // ネザー / ジ・エンドでベッドに入ると爆発する (本家準拠)
+    if (world.isInNether(pos[0], pos[2]) || world.isInEnd(pos[0], pos[2])) {
+      world.setBlock(pos[0], pos[1], pos[2], B.AIR);
+      explode(pos[0] + 0.5, pos[1] + 0.5, pos[2] + 0.5, 3.2);
+      spawnPuff(pos[0] + 0.5, pos[1] + 0.5, pos[2] + 0.5, [1, 0.6, 0.2]);
+      sound.blip(90, 0.6, "sawtooth", 0.4);
+      showToast("💥 ここでは眠れない…!");
+      const dx = player.pos[0] - pos[0], dy = player.pos[1] - pos[1], dz = player.pos[2] - pos[2];
+      if (Math.hypot(dx, dy, dz) < 4) player.takeDamage(6);
+      return;
+    }
     const daylight = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
     player.spawnPoint = [pos[0] + 0.5, pos[1] + 1, pos[2] + 0.5];
     localStorage.setItem("mcjs_spawn_" + seed, JSON.stringify(player.spawnPoint));
@@ -1462,6 +1475,16 @@
       }
     }
     return coords;
+  }
+
+  // プレイヤーから見た目標地点の 8 方位と概算距離を返す ([方角, 距離])
+  function compassBearing(tx, tz) {
+    const dx = tx - player.pos[0], dz = tz - player.pos[2];
+    const dist = Math.round(Math.hypot(dx, dz));
+    let ang = Math.atan2(dx, dz);
+    if (ang < 0) ang += Math.PI * 2;
+    const dirs = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"];
+    return [dirs[Math.round(ang / (Math.PI / 4)) % 8], dist];
   }
 
   function tryActivateEndPortal() {
@@ -1789,15 +1812,18 @@
         tryActivateEndPortal();
       } else {
         if (!consumeItem(I.EYE_OF_ENDER)) return;
-        const dx = STRONGHOLD.x - player.pos[0], dz = STRONGHOLD.z - player.pos[2];
-        const dist = Math.round(Math.hypot(dx, dz));
-        let ang = Math.atan2(dx, dz);
-        if (ang < 0) ang += Math.PI * 2;
-        const dirs = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"];
-        const dir = dirs[Math.round(ang / (Math.PI / 4)) % 8];
+        const [dir, dist] = compassBearing(STRONGHOLD.x, STRONGHOLD.z);
         sound.blip(500, 0.2, "sine", 0.18);
         showToast(`エンダーアイが ${dir} の方角へ輝きながら飛んでいった… (残り約${dist}ブロック)`);
       }
+      return;
+    }
+    // コンパス: スポーン地点 (ベッドがあればそこ) の方角と距離を表示 (消費しない)
+    if (heldDef && heldDef.id === I.COMPASS) {
+      const sp = player.spawnPoint || [8.5, 0, 8.5];
+      const [dir, dist] = compassBearing(sp[0], sp[2]);
+      sound.blip(600, 0.12, "sine", 0.12);
+      showToast(`🧭 スポーン地点は ${dir} の方角, 約${dist}ブロック先`);
       return;
     }
     // 種: 土 / 草ブロックの上面に植える

@@ -218,8 +218,11 @@ const I = {
   // ネザー関連
   FLINT: 138,
   FLINT_AND_STEEL: 139,
-  NETHER_QUARTZ: 140,
-  BLAZE_ROD: 141,
+  // 100-139 のアイテム区画が埋まったため, ブロック側で未使用の 183 以降を使う
+  // (140-145 はネオンブロックの ID と衝突するため使用しない)
+  NETHER_QUARTZ: 183,
+  BLAZE_ROD: 184,
+  COMPASS: 185,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -365,6 +368,7 @@ const TILE = {
   FLINT_AND_STEEL: 172,
   NETHER_QUARTZ: 173,
   BLAZE_ROD: 174,
+  COMPASS: 175,
 };
 
 // 各ブロックの属性
@@ -651,6 +655,7 @@ defItem(I.FLINT_AND_STEEL, "flint_and_steel", "火打ち石と鉄", TILE.FLINT_A
   { kind: "flint_and_steel", tier: 1, speed: 1, damage: 1, durability: 32 });
 defItem(I.NETHER_QUARTZ, "nether_quartz", "ネザー水晶", TILE.NETHER_QUARTZ);
 defItem(I.BLAZE_ROD, "blaze_rod", "ブレイズロッド", TILE.BLAZE_ROD);
+defItem(I.COMPASS, "compass", "コンパス", TILE.COMPASS);
 
 // --- オリジナル建築ブロック ---
 

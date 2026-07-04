@@ -958,6 +958,18 @@ function buildTextureAtlas(seed) {
     return px(235, 195, 90, jitter(band, 0.06));
   });
 
+  // コンパス (円形の文字盤 + 赤/白の針)
+  paintTile(TILE.COMPASS, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    if (d > 6.5) return [0, 0, 0, 0];
+    if (d > 5.5) return px(120, 105, 80, jitter(1, 0.05)); // 縁 (真鍮)
+    // 針: 上半分が赤 (北), 下半分が白
+    if (Math.abs(dx) < 1.1 && Math.abs(dy) < 5) {
+      return dy < 0 ? px(210, 40, 35, 1) : px(230, 228, 220, 1);
+    }
+    return px(224, 214, 190, jitter(1, 0.04)); // 文字盤
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
