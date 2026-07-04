@@ -1011,6 +1011,26 @@ function buildTextureAtlas(seed) {
     return px(232, 226, 208, jitter(1, 0.05));
   });
 
+  // バケツ (空 / 水入り / マグマ入り): 台形の胴体 + 持ち手, 中身は上部に覗く
+  const bucketShape = (x, y, contents) => {
+    const t = (y - 5) / 8;
+    const halfW = 4.5 - t * 1.8;
+    const cx = 7.5;
+    if (y >= 5 && y <= 13 && Math.abs(x - cx) <= halfW) {
+      const edge = Math.abs(x - cx) > halfW - 1;
+      if (contents && y >= 6 && y <= 9 && !edge) return px(contents[0], contents[1], contents[2], jitter(1, 0.08));
+      if (y <= 6) return px(210, 210, 215, 1); // 縁
+      if (edge) return px(150, 150, 158, jitter(1, 0.05));
+      return px(180, 180, 188, jitter(1, 0.06));
+    }
+    if (y >= 1 && y <= 4 && (Math.abs(x - 4) < 1 || Math.abs(x - 11) < 1)) return px(120, 120, 128, 1);
+    if (y === 1 && x >= 4 && x <= 11) return px(120, 120, 128, 1);
+    return [0, 0, 0, 0];
+  };
+  paintTile(TILE.BUCKET, (x, y) => bucketShape(x, y, null));
+  paintTile(TILE.WATER_BUCKET, (x, y) => bucketShape(x, y, [50, 90, 210]));
+  paintTile(TILE.LAVA_BUCKET, (x, y) => bucketShape(x, y, [255, 140, 30]));
+
   // --- モブの模様入りスキン ---
 
   // ゾンビの肌 (緑, まだらな腐敗の斑点)

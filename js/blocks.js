@@ -228,6 +228,10 @@ const I = {
   BLAZE_ROD: 184,
   COMPASS: 185,
   BONE: 188,   // 186-187 は B.WITHER_SKULL / B.NETHER_STAR で使用済み
+  // 189-212 は階段ブロック (B側) で使用済みのため 213 以降を使う
+  BUCKET: 213,
+  WATER_BUCKET: 214,
+  LAVA_BUCKET: 215,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -409,6 +413,10 @@ const TILE = {
   MOB_WITHER_SKELETON_FACE: 206,
   MOB_CHICKEN_FACE: 207,
   MOB_BLAZE_FACE: 208,
+  // バケツ (アイテムアイコン用)
+  BUCKET: 209,
+  WATER_BUCKET: 210,
+  LAVA_BUCKET: 211,
 };
 
 // 各ブロックの属性
@@ -697,6 +705,14 @@ defItem(I.NETHER_QUARTZ, "nether_quartz", "ネザー水晶", TILE.NETHER_QUARTZ)
 defItem(I.BLAZE_ROD, "blaze_rod", "ブレイズロッド", TILE.BLAZE_ROD);
 defItem(I.COMPASS, "compass", "コンパス", TILE.COMPASS);
 defItem(I.BONE, "bone", "ホネ", TILE.BONE);
+
+// --- バケツ: 空バケツで水/マグマの発生源をすくうと入り数バケツになり,
+// 使うと中身を設置して空バケツに戻る (main.js の placeAction 参照) ---
+defItem(I.BUCKET, "bucket", "バケツ", TILE.BUCKET, { kind: "bucket" });
+defItem(I.WATER_BUCKET, "water_bucket", "水入りバケツ", TILE.WATER_BUCKET,
+  { kind: "fluid_bucket", fluid: B.WATER });
+defItem(I.LAVA_BUCKET, "lava_bucket", "マグマ入りバケツ", TILE.LAVA_BUCKET,
+  { kind: "fluid_bucket", fluid: B.LAVA_BLOCK });
 
 // --- オリジナル建築ブロック ---
 

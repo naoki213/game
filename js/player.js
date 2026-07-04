@@ -349,4 +349,50 @@ class Player {
     }
     return null;
   }
+
+  // バケツ用: raycast() と違い水も透過せず, 最初に当たったブロック
+  // (水/マグマ含む) で止まる
+  raycastFluid() {
+    const world = this.world;
+    const origin = this.eyePos();
+    const dir = this.forward();
+
+    let x = Math.floor(origin[0]);
+    let y = Math.floor(origin[1]);
+    let z = Math.floor(origin[2]);
+
+    const stepX = dir[0] > 0 ? 1 : -1;
+    const stepY = dir[1] > 0 ? 1 : -1;
+    const stepZ = dir[2] > 0 ? 1 : -1;
+
+    const invX = dir[0] !== 0 ? Math.abs(1 / dir[0]) : Infinity;
+    const invY = dir[1] !== 0 ? Math.abs(1 / dir[1]) : Infinity;
+    const invZ = dir[2] !== 0 ? Math.abs(1 / dir[2]) : Infinity;
+
+    let tX = dir[0] !== 0
+      ? (dir[0] > 0 ? (x + 1 - origin[0]) : (origin[0] - x)) * invX : Infinity;
+    let tY = dir[1] !== 0
+      ? (dir[1] > 0 ? (y + 1 - origin[1]) : (origin[1] - y)) * invY : Infinity;
+    let tZ = dir[2] !== 0
+      ? (dir[2] > 0 ? (z + 1 - origin[2]) : (origin[2] - z)) * invZ : Infinity;
+
+    let px = x, py = y, pz = z;
+    let t = 0;
+
+    while (t <= REACH) {
+      const id = world.getBlock(x, y, z);
+      if (id !== B.AIR) {
+        return { pos: [x, y, z], prev: [px, py, pz], id, t };
+      }
+      px = x; py = y; pz = z;
+      if (tX < tY && tX < tZ) {
+        x += stepX; t = tX; tX += invX;
+      } else if (tY < tZ) {
+        y += stepY; t = tY; tY += invY;
+      } else {
+        z += stepZ; t = tZ; tZ += invZ;
+      }
+    }
+    return null;
+  }
 }

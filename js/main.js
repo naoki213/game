@@ -380,7 +380,8 @@
   inventoryGrid.parentNode.insertBefore(invTabsEl, inventoryGrid);
 
   const gridDefs = [
-    ...BLOCKS.filter((b) => b && b.id !== B.AIR && b.id !== B.WATER && b.id !== B.BEDROCK),
+    ...BLOCKS.filter((b) => b && b.id !== B.AIR && b.id !== B.WATER && b.id !== B.BEDROCK &&
+      !(b.stairs && b.stairDir !== 0)),   // 階段は方向違いの重複表示を避け, 基準の1つだけ出す
     ...Object.values(ITEMS),
   ];
   for (const block of gridDefs) {
@@ -465,6 +466,7 @@
     { out: STAIR_ID_BASE + 3 * 4, outN: 2, in: [[B.STONE_BRICK, 3]] },
     { out: STAIR_ID_BASE + 4 * 4, outN: 2, in: [[B.BRICK, 3]] },
     { out: STAIR_ID_BASE + 5 * 4, outN: 2, in: [[B.SANDSTONE, 3]] },
+    { out: I.BUCKET, outN: 1, in: [[I.IRON_INGOT, 3]] },
   ];
 
   // 色付き羊毛: 羊毛 1 → 各色 1
@@ -1862,6 +1864,38 @@
       showToast("ウキを垂らした…");
       sound.blip(400, 0.1, "sine", 0.15);
       return;
+    }
+    // 空のバケツ: 狙った先が水/マグマの発生源ならすくって入りバケツにする
+    // (通常の raycast は水を透過するので, 水も止まる raycastFluid を使う)
+    if (tool && tool.kind === "bucket") {
+      const hit = player.raycastFluid();
+      if (hit && (hit.id === B.WATER || hit.id === B.LAVA_BLOCK)) {
+        const filledId = hit.id === B.WATER ? I.WATER_BUCKET : I.LAVA_BUCKET;
+        if (!consumeItem(I.BUCKET)) return;
+        world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR);
+        addItem(filledId);
+        sound.place();
+        return;
+      }
+    }
+    // 水/マグマ入りバケツ: 中身を設置して空バケツに戻る
+    if (tool && tool.kind === "fluid_bucket") {
+      const hit = player.raycastFluid();
+      if (hit) {
+        const [px, py, pz] = hit.prev;
+        const cur = world.getBlock(px, py, pz);
+        if (cur === B.AIR || cur === B.WATER) {
+          if (!consumeItem(tool.id)) return;
+          if (world.setBlock(px, py, pz, tool.fluid)) {
+            addItem(I.BUCKET);
+            sound.place();
+            checkFalling(px, py, pz);
+          } else if (gameMode === "survival") {
+            addItem(tool.id); // 失敗したら返却
+          }
+          return;
+        }
+      }
     }
     // チェスト / ベッドは右クリックで開く・眠る (スニーク中は通常設置)
     const hitFirst = player.raycast();
