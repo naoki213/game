@@ -13,20 +13,20 @@ const MOB_TYPES = {
     health: 8,
     drops: 113, dropN: 2,   // 牛肉
     parts: [
-      // 胴体
-      [-0.45, 0.55, -0.6, 0.9, 0.55, 1.2, 0.42, 0.30, 0.22],
+      // 胴体 (茶白のまだら模様)
+      [-0.45, 0.55, -0.6, 0.9, 0.55, 1.2, 1, 1, 1, TILE.MOB_COW_PATCH],
       // 頭
-      [-0.22, 0.78, 0.55, 0.44, 0.42, 0.4, 0.46, 0.34, 0.26],
+      [-0.22, 0.78, 0.55, 0.44, 0.42, 0.4, 1, 1, 1, TILE.MOB_COW_BROWN],
       // 鼻先
       [-0.13, 0.8, 0.93, 0.26, 0.2, 0.06, 0.82, 0.78, 0.72],
       // 角 x2
       [-0.26, 1.16, 0.6, 0.08, 0.12, 0.08, 0.85, 0.82, 0.75],
       [0.18, 1.16, 0.6, 0.08, 0.12, 0.08, 0.85, 0.82, 0.75],
       // 脚 x4
-      [-0.38, 0, -0.5, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
-      [0.16, 0, -0.5, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
-      [-0.38, 0, 0.26, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
-      [0.16, 0, 0.26, 0.22, 0.55, 0.22, 0.35, 0.26, 0.2],
+      [-0.38, 0, -0.5, 0.22, 0.55, 0.22, 1, 1, 1, TILE.MOB_COW_BROWN],
+      [0.16, 0, -0.5, 0.22, 0.55, 0.22, 1, 1, 1, TILE.MOB_COW_BROWN],
+      [-0.38, 0, 0.26, 0.22, 0.55, 0.22, 1, 1, 1, TILE.MOB_COW_BROWN],
+      [0.16, 0, 0.26, 0.22, 0.55, 0.22, 1, 1, 1, TILE.MOB_COW_BROWN],
     ],
   },
   spider: {
@@ -58,16 +58,16 @@ const MOB_TYPES = {
     drops: 112, dropN: 2,   // 豚肉
     parts: [
       // 胴体
-      [-0.4, 0.35, -0.5, 0.8, 0.5, 1.0, 0.93, 0.62, 0.66],
+      [-0.4, 0.35, -0.5, 0.8, 0.5, 1.0, 1, 1, 1, TILE.MOB_PIG_SKIN],
       // 頭
-      [-0.28, 0.42, 0.42, 0.56, 0.45, 0.42, 0.95, 0.66, 0.70],
+      [-0.28, 0.42, 0.42, 0.56, 0.45, 0.42, 1, 1, 1, TILE.MOB_PIG_SKIN],
       // 鼻
       [-0.1, 0.5, 0.82, 0.2, 0.14, 0.06, 0.85, 0.5, 0.55],
       // 脚 x4
-      [-0.35, 0, -0.42, 0.22, 0.36, 0.22, 0.88, 0.56, 0.60],
-      [0.13, 0, -0.42, 0.22, 0.36, 0.22, 0.88, 0.56, 0.60],
-      [-0.35, 0, 0.2, 0.22, 0.36, 0.22, 0.88, 0.56, 0.60],
-      [0.13, 0, 0.2, 0.22, 0.36, 0.22, 0.88, 0.56, 0.60],
+      [-0.35, 0, -0.42, 0.22, 0.36, 0.22, 1, 1, 1, TILE.MOB_PIG_SKIN],
+      [0.13, 0, -0.42, 0.22, 0.36, 0.22, 1, 1, 1, TILE.MOB_PIG_SKIN],
+      [-0.35, 0, 0.2, 0.22, 0.36, 0.22, 1, 1, 1, TILE.MOB_PIG_SKIN],
+      [0.13, 0, 0.2, 0.22, 0.36, 0.22, 1, 1, 1, TILE.MOB_PIG_SKIN],
     ],
   },
   sheep: {
@@ -76,15 +76,15 @@ const MOB_TYPES = {
     drops: 21, dropN: 2,   // 羊毛
 
     parts: [
-      // もこもこの胴体
-      [-0.45, 0.45, -0.55, 0.9, 0.65, 1.1, 0.92, 0.92, 0.90],
-      // 頭
-      [-0.22, 0.75, 0.5, 0.44, 0.4, 0.35, 0.85, 0.80, 0.75],
+      // もこもこの胴体 (毛玉状の羊毛模様)
+      [-0.45, 0.45, -0.55, 0.9, 0.65, 1.1, 1, 1, 1, TILE.MOB_SHEEP_WOOL],
+      // 頭 (肌)
+      [-0.22, 0.75, 0.5, 0.44, 0.4, 0.35, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
       // 脚 x4
-      [-0.35, 0, -0.45, 0.2, 0.5, 0.2, 0.80, 0.78, 0.74],
-      [0.15, 0, -0.45, 0.2, 0.5, 0.2, 0.80, 0.78, 0.74],
-      [-0.35, 0, 0.22, 0.2, 0.5, 0.2, 0.80, 0.78, 0.74],
-      [0.15, 0, 0.22, 0.2, 0.5, 0.2, 0.80, 0.78, 0.74],
+      [-0.35, 0, -0.45, 0.2, 0.5, 0.2, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
+      [0.15, 0, -0.45, 0.2, 0.5, 0.2, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
+      [-0.35, 0, 0.22, 0.2, 0.5, 0.2, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
+      [0.15, 0, 0.22, 0.2, 0.5, 0.2, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
     ],
   },
   zombie: {
@@ -93,16 +93,16 @@ const MOB_TYPES = {
     health: 10,
     hostile: true,
     parts: [
-      // 脚 x2 (暗い青のズボン)
-      [-0.22, 0, -0.11, 0.2, 0.72, 0.22, 0.22, 0.25, 0.45],
-      [0.02, 0, -0.11, 0.2, 0.72, 0.22, 0.22, 0.25, 0.45],
-      // 胴体 (青いシャツ)
-      [-0.25, 0.72, -0.14, 0.5, 0.62, 0.28, 0.25, 0.45, 0.65],
-      // 腕 x2 (前に突き出した緑の腕)
-      [-0.43, 1.08, -0.1, 0.18, 0.18, 0.72, 0.4, 0.6, 0.3],
-      [0.25, 1.08, -0.1, 0.18, 0.18, 0.72, 0.4, 0.6, 0.3],
-      // 頭 (緑)
-      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 0.38, 0.58, 0.28],
+      // 脚 x2 (ぼろぼろの服)
+      [-0.22, 0, -0.11, 0.2, 0.72, 0.22, 1, 1, 1, TILE.MOB_ZOMBIE_CLOTH],
+      [0.02, 0, -0.11, 0.2, 0.72, 0.22, 1, 1, 1, TILE.MOB_ZOMBIE_CLOTH],
+      // 胴体 (ぼろぼろの服)
+      [-0.25, 0.72, -0.14, 0.5, 0.62, 0.28, 1, 1, 1, TILE.MOB_ZOMBIE_CLOTH],
+      // 腕 x2 (前に突き出した腐った肌)
+      [-0.43, 1.08, -0.1, 0.18, 0.18, 0.72, 1, 1, 1, TILE.MOB_ZOMBIE_SKIN],
+      [0.25, 1.08, -0.1, 0.18, 0.18, 0.72, 1, 1, 1, TILE.MOB_ZOMBIE_SKIN],
+      // 頭 (腐った肌)
+      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 1, 1, 1, TILE.MOB_ZOMBIE_SKIN],
     ],
   },
   skeleton: {
@@ -134,15 +134,15 @@ const MOB_TYPES = {
     noBurn: true,
     drops: I.GUNPOWDER, dropN: 2,
     parts: [
-      // 脚 x4 (低い)
-      [-0.25, 0, -0.28, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
-      [0.03, 0, -0.28, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
-      [-0.25, 0, 0.06, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
-      [0.03, 0, 0.06, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
-      // 縦長の胴体
-      [-0.2, 0.4, -0.15, 0.4, 0.85, 0.3, 0.33, 0.65, 0.3],
-      // 頭
-      [-0.24, 1.25, -0.24, 0.48, 0.45, 0.48, 0.36, 0.68, 0.33],
+      // 脚 x4 (低い, 迷彩模様)
+      [-0.25, 0, -0.28, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
+      [0.03, 0, -0.28, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
+      [-0.25, 0, 0.06, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
+      [0.03, 0, 0.06, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
+      // 縦長の胴体 (迷彩模様)
+      [-0.2, 0.4, -0.15, 0.4, 0.85, 0.3, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
+      // 頭 (迷彩模様)
+      [-0.24, 1.25, -0.24, 0.48, 0.45, 0.48, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
     ],
   },
   enderman: {
@@ -1064,9 +1064,11 @@ class MobManager {
     }
   }
 
-  // 描画用の頂点配列 [x,y,z,r,g,b] を組み立てる
+  // 描画用の頂点配列を組み立てる。verts = 単色ボックス [x,y,z,r,g,b],
+  // texVerts = 模様入りテクスチャつきボックス [x,y,z,u,v,shade,tr,tg,tb]
   buildVertexData() {
     const verts = [];
+    const texVerts = [];
     for (const m of this.mobs) {
       const sin = Math.sin(m.yaw), cos = Math.cos(m.yaw);
       const bobY = Math.abs(m.bob) * 0.04;
@@ -1075,7 +1077,7 @@ class MobManager {
       const flashT = (m.fuse != null && Math.sin(m.fuse * 24) > 0) ? 0.75 : 0;
       for (let pi = 0; pi < m.def.parts.length; pi++) {
         const p = m.def.parts[pi];
-        let [ox, oy, oz, w, h, d, r, g, b] = p;
+        let [ox, oy, oz, w, h, d, r, g, b, tile] = p;
         if (hurtT > 0) {
           // 被弾中は赤くフラッシュ
           r = r + (1 - r) * hurtT;
@@ -1093,7 +1095,11 @@ class MobManager {
           const dir = (pi % 2 === 0 ? 1 : -1) * m.bob * 0.12;
           oz += dir;
         }
-        pushBox(verts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, r, g, b);
+        if (tile !== undefined) {
+          pushBoxTex(texVerts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, tile, r, g, b);
+        } else {
+          pushBox(verts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, r, g, b);
+        }
       }
       // 手なずけたオオカミは赤い首輪をつける
       if (m.tamed) {
@@ -1131,7 +1137,7 @@ class MobManager {
         pushBox(verts, dr.pos, sin, cos, ox, oy, oz, w, h, d, r, g, b);
       }
     }
-    return new Float32Array(verts);
+    return { verts: new Float32Array(verts), texVerts: new Float32Array(texVerts) };
   }
 }
 
@@ -1244,6 +1250,40 @@ function pushBox(verts, pos, sin, cos, ox, oy, oz, w, h, d, r, g, b) {
     for (const tri of [[0, 1, 2], [0, 2, 3]]) {
       for (const vi of tri) {
         verts.push(quad[vi][0], quad[vi][1], quad[vi][2], cr, cg, cb);
+      }
+    }
+  }
+}
+
+// pushBox のテクスチャ版: 各面にタイルの模様をそのまま貼る
+// (r,g,b は色ではなく, 被弾フラッシュなどに使う色ティント倍率)
+function pushBoxTex(verts, pos, sin, cos, ox, oy, oz, w, h, d, tile, tr, tg, tb) {
+  const corners = [];
+  for (let i = 0; i < 8; i++) {
+    const lx = ox + ((i & 1) ? w : 0);
+    const ly = oy + ((i & 2) ? h : 0);
+    const lz = oz + ((i & 4) ? d : 0);
+    corners.push([
+      pos[0] + lx * cos + lz * sin,
+      pos[1] + ly,
+      pos[2] + -lx * sin + lz * cos,
+    ]);
+  }
+  const uv = tileUV(tile);
+  const uvs = [[uv.u0, uv.v0], [uv.u0, uv.v1], [uv.u1, uv.v1], [uv.u1, uv.v0]];
+  const faces = [
+    [[2, 6, 7, 3], BOX_SHADE.top],
+    [[0, 1, 5, 4], BOX_SHADE.bottom],
+    [[4, 5, 7, 6], BOX_SHADE.south],
+    [[1, 0, 2, 3], BOX_SHADE.north],
+    [[1, 3, 7, 5], BOX_SHADE.east],
+    [[4, 6, 2, 0], BOX_SHADE.west],
+  ];
+  for (const [idx, shade] of faces) {
+    const quad = idx.map((i) => corners[i]);
+    for (const tri of [[0, 1, 2], [0, 2, 3]]) {
+      for (const vi of tri) {
+        verts.push(quad[vi][0], quad[vi][1], quad[vi][2], uvs[vi][0], uvs[vi][1], shade, tr, tg, tb);
       }
     }
   }

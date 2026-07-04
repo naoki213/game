@@ -198,6 +198,35 @@ void main() {
   gl_FragColor = vec4(vCol * uLight, 1.0);
 }`;
 
+const ENTITY_TEX_VS = `
+attribute vec3 aPos;
+attribute vec2 aUV;
+attribute float aShade;
+attribute vec3 aTint;
+uniform mat4 uMVP;
+varying vec2 vUV;
+varying float vShade;
+varying vec3 vTint;
+void main() {
+  gl_Position = uMVP * vec4(aPos, 1.0);
+  vUV = aUV;
+  vShade = aShade;
+  vTint = aTint;
+}`;
+
+const ENTITY_TEX_FS = `
+precision mediump float;
+uniform sampler2D uTex;
+uniform float uLight;
+varying vec2 vUV;
+varying float vShade;
+varying vec3 vTint;
+void main() {
+  vec4 tex = texture2D(uTex, vUV);
+  if (tex.a < 0.5) discard;
+  gl_FragColor = vec4(tex.rgb * vShade * uLight * vTint, 1.0);
+}`;
+
 const SHADOW_VS = `
 attribute vec3 aPos;
 attribute vec2 aUV;
@@ -253,11 +282,13 @@ class Renderer {
     this.progColor = this.createProgram(COLOR_VS, COLOR_FS);
     this.progPoint = this.createProgram(POINT_VS, POINT_FS);
     this.progShadow = this.createProgram(SHADOW_VS, SHADOW_FS);
+    this.progEntityTex = this.createProgram(ENTITY_TEX_VS, ENTITY_TEX_FS);
 
     // パーティクル用の動的バッファ
     this.particleBuf = gl.createBuffer();
     this.entityBuf = gl.createBuffer();
     this.shadowBuf = gl.createBuffer();
+    this.entityTexBuf = gl.createBuffer();
 
     // --- テクスチャアトラス ---
     this.atlas = gl.createTexture();
@@ -542,6 +573,31 @@ class Renderer {
       gl.enableVertexAttribArray(pp.attribs.aCol);
       gl.vertexAttribPointer(pp.attribs.aCol, 3, gl.FLOAT, false, 24, 12);
       gl.drawArrays(gl.TRIANGLES, 0, state.entities.length / 6);
+      gl.enable(gl.CULL_FACE);
+      gl.useProgram(pw.prog);
+    }
+
+    // --- エンティティ (模様入りテクスチャつきモブ) ---
+    if (state.entitiesTex && state.entitiesTex.length > 0) {
+      const pt = this.progEntityTex;
+      gl.useProgram(pt.prog);
+      gl.disable(gl.CULL_FACE); // ボックスの面順は保証しないため両面描画
+      gl.uniformMatrix4fv(pt.uniforms.uMVP, false, this.mvp);
+      gl.uniform1f(pt.uniforms.uLight, lerp(0.22, 1.0, env.daylight));
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.atlas);
+      gl.uniform1i(pt.uniforms.uTex, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.entityTexBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, state.entitiesTex, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(pt.attribs.aPos);
+      gl.vertexAttribPointer(pt.attribs.aPos, 3, gl.FLOAT, false, 36, 0);
+      gl.enableVertexAttribArray(pt.attribs.aUV);
+      gl.vertexAttribPointer(pt.attribs.aUV, 2, gl.FLOAT, false, 36, 12);
+      gl.enableVertexAttribArray(pt.attribs.aShade);
+      gl.vertexAttribPointer(pt.attribs.aShade, 1, gl.FLOAT, false, 36, 20);
+      gl.enableVertexAttribArray(pt.attribs.aTint);
+      gl.vertexAttribPointer(pt.attribs.aTint, 3, gl.FLOAT, false, 36, 24);
+      gl.drawArrays(gl.TRIANGLES, 0, state.entitiesTex.length / 9);
       gl.enable(gl.CULL_FACE);
       gl.useProgram(pw.prog);
     }

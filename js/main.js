@@ -2539,6 +2539,7 @@
     const camPos = player.eyePos();
     camPos[1] += Math.sin(bobPhase * Math.PI * 2) * 0.05 * bobAmount;
 
+    const entityData = mobs.buildVertexData();
     const drawCalls = renderer.render({
       camPos,
       forward: player.forward(),
@@ -2548,7 +2549,8 @@
       highlight: hit ? hit.pos : null,
       time: elapsed,
       particles: { data: particleData, count: particles.length },
-      entities: mobs.buildVertexData(),
+      entities: entityData.verts,
+      entitiesTex: entityData.texVerts,
       shadows: buildShadowQuads(),
       items: (fallingBlocks.length > 0 || primedTNT.length > 0)
         ? items.items.concat(fallingBlocks, primedTNT)

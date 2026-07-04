@@ -377,6 +377,15 @@ const TILE = {
   WITHER_SKULL: 176,
   NETHER_STAR: 177,
   BONE: 178,
+  // モブの模様入りスキン (ボックスモデルにテクスチャを貼る)
+  MOB_ZOMBIE_SKIN: 179,
+  MOB_ZOMBIE_CLOTH: 180,
+  MOB_SHEEP_WOOL: 181,
+  MOB_SHEEP_SKIN: 182,
+  MOB_CREEPER_SKIN: 183,
+  MOB_COW_PATCH: 184,
+  MOB_COW_BROWN: 185,
+  MOB_PIG_SKIN: 186,
 };
 
 // 各ブロックの属性

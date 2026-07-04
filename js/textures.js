@@ -1002,6 +1002,63 @@ function buildTextureAtlas(seed) {
     return px(232, 226, 208, jitter(1, 0.05));
   });
 
+  // --- モブの模様入りスキン ---
+
+  // ゾンビの肌 (緑, まだらな腐敗の斑点)
+  paintTile(TILE.MOB_ZOMBIE_SKIN, (x, y) => {
+    const spot = hash2(x, y, 0x2001) > 0.82;
+    if (spot) return px(70, 110, 55, jitter(1, 0.08));
+    return px(100, 150, 75, jitter(1, 0.1));
+  });
+
+  // ゾンビの服 (ぼろぼろの青い布, 縦のかすれ)
+  paintTile(TILE.MOB_ZOMBIE_CLOTH, (x, y) => {
+    const tear = hash2((x * 0.5) | 0, y, 0x2002) > 0.72;
+    const v = tear ? 0.65 : 1;
+    return px(60, 100, 145, jitter(v, 0.08));
+  });
+
+  // ヒツジの毛 (もこもことした白い毛玉状の模様)
+  paintTile(TILE.MOB_SHEEP_WOOL, (x, y) => {
+    const n = hash2((x * 0.5) | 0, (y * 0.5) | 0, 0x2003) * 0.6 +
+      hash2(x, y, 0x2004) * 0.4;
+    const v = 0.82 + n * 0.3;
+    return px(235, 232, 222, jitter(v, 0.04));
+  });
+
+  // ヒツジの肌 (顔・脚, なめらかなピンク)
+  paintTile(TILE.MOB_SHEEP_SKIN, (x, y) => {
+    return px(222, 178, 168, jitter(1, 0.05));
+  });
+
+  // クリーパーの肌 (緑と黒のブロック状の迷彩)
+  paintTile(TILE.MOB_CREEPER_SKIN, (x, y) => {
+    const cx = (x / 2) | 0, cy = (y / 2) | 0;
+    const n = hash2(cx, cy, 0x2005);
+    if (n > 0.6) return px(30, 70, 30, jitter(1, 0.05));
+    if (n > 0.3) return px(50, 110, 50, jitter(1, 0.06));
+    return px(70, 150, 65, jitter(1, 0.07));
+  });
+
+  // 牛の毛皮 (茶色と白のまだら模様)
+  paintTile(TILE.MOB_COW_PATCH, (x, y) => {
+    const n = hash2((x * 0.4) | 0, (y * 0.4) | 0, 0x2006);
+    if (n > 0.55) return px(230, 220, 205, jitter(1, 0.06));
+    return px(110, 70, 48, jitter(1, 0.08));
+  });
+
+  // 牛の毛皮 (頭・脚用の無地の茶色)
+  paintTile(TILE.MOB_COW_BROWN, (x, y) => {
+    return px(112, 74, 52, jitter(1, 0.07));
+  });
+
+  // 豚の肌 (ピンク, まれに小さな斑点)
+  paintTile(TILE.MOB_PIG_SKIN, (x, y) => {
+    const spot = hash2(x, y, 0x2007) > 0.9;
+    if (spot) return px(200, 130, 130, jitter(1, 0.06));
+    return px(235, 165, 168, jitter(1, 0.05));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
