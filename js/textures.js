@@ -814,6 +814,75 @@ function buildTextureAtlas(seed) {
     paintTile(CONCRETE_TILE_BASE + i, () => px(r, g, b, jitter(1, 0.02)));
   });
 
+  // --- エンダードラゴン討伐関連 ---
+
+  // エンダーパール (緑がかった半透明の球, 内側に渦模様)
+  paintTile(TILE.ENDER_PEARL, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    if (d > 6.2) return [0, 0, 0, 0];
+    const swirl = Math.sin(Math.atan2(dy, dx) * 3 + d * 0.9) > 0.15;
+    const rim = d > 5.2 ? 0.7 : 1;
+    return px(swirl ? 40 : 70, swirl ? 110 : 160, swirl ? 95 : 130, jitter(rim, 0.05), 235);
+  });
+
+  // エンダーアイ (緑の虹彩 + 黒い瞳孔)
+  paintTile(TILE.EYE_OF_ENDER, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    if (d > 6.5) return [0, 0, 0, 0];
+    if (d < 2.2) return px(20, 15, 10, 1);            // 瞳孔
+    if (d < 4.8) return px(90 + (dx > 0 ? 40 : 0), 200, 110, jitter(1, 0.08)); // 虹彩
+    return px(40, 90, 60, jitter(1, 0.06));            // 外周
+  });
+
+  // 火薬 (灰色い粉の山, ざらついた粒感)
+  paintTile(TILE.GUNPOWDER, (x, y) => {
+    const dx = x - 7.5, dy = y - 8.5;
+    const d = dx * dx * 0.7 + dy * dy;
+    if (d > 26) return [0, 0, 0, 0];
+    const speck = hash2(x, y, 0x1e9d) > 0.72;
+    return px(speck ? 90 : 55, speck ? 90 : 55, speck ? 96 : 60, jitter(1, 0.05));
+  });
+
+  // エンドストーン (淡い黄土色, 小さな穴ぼこ)
+  paintTile(TILE.END_STONE, (x, y) => {
+    const hole = hash2((x * 1.7) | 0, (y * 1.7) | 0, 0x1e9d) > 0.88;
+    if (hole) return px(150, 138, 95, 1);
+    return px(221, 210, 156, jitter(1, 0.05));
+  });
+
+  // エンドポータルフレーム (黒紫の石 + 縁の青緑トリム)
+  paintTile(TILE.END_PORTAL_FRAME, (x, y) => {
+    const edge = x < 2 || x > 13 || y < 2 || y > 13;
+    if (edge) return px(70, 190, 170, jitter(1, 0.08));
+    return px(35, 20, 45, jitter(1, 0.1));
+  });
+
+  // エンダーアイ入りフレーム (中央に光る目を埋め込む)
+  paintTile(TILE.END_PORTAL_FRAME_EYE, (x, y) => {
+    const edge = x < 2 || x > 13 || y < 2 || y > 13;
+    if (edge) return px(70, 190, 170, jitter(1, 0.08));
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    if (d < 2) return px(15, 10, 10, 1);
+    if (d < 4.5) return px(100, 230, 130, jitter(1, 0.1));
+    return px(35, 20, 45, jitter(1, 0.1));
+  });
+
+  // エンドポータル (暗い紫の渦 + 星屑)
+  paintTile(TILE.END_PORTAL, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5;
+    const swirl = Math.sin(Math.atan2(dy, dx) * 4 + Math.hypot(dx, dy) * 1.3) * 0.5 + 0.5;
+    const star = hash2(x, y, 0x1e9d) > 0.93;
+    if (star) return px(210, 190, 255, 1);
+    return px(30 + swirl * 30, 8 + swirl * 10, 55 + swirl * 45, 1);
+  });
+
+  // エンダークリスタル (中心が明るい発光コア)
+  paintTile(TILE.END_CRYSTAL, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    const core = Math.max(0, 1 - d / 7);
+    return px(200 + core * 55, 130 + core * 100, 230 + core * 25, jitter(1, 0.05));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {

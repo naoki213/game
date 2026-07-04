@@ -545,6 +545,8 @@
     { out: I.GOLD_SWORD, outN: 1, in: [[I.GOLD_INGOT, 2], [B.PLANK, 1]] },
     { out: I.SHEARS, outN: 1, in: [[I.IRON_INGOT, 2]] },
     { out: I.FISHING_ROD, outN: 1, in: [[B.PLANK, 3], [B.WOOL, 1]] },
+    // エンダードラゴン討伐に向けて: エンダーパール + 火薬 → エンダーアイ
+    { out: I.EYE_OF_ENDER, outN: 1, in: [[I.ENDER_PEARL, 1], [I.GUNPOWDER, 1]] },
   );
 
   const craftSectionEl = document.getElementById("craft-section");

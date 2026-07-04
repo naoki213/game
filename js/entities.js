@@ -131,6 +131,7 @@ const MOB_TYPES = {
     hostile: true,
     creeper: true,
     noBurn: true,
+    drops: I.GUNPOWDER, dropN: 2,
     parts: [
       // 脚 x4 (低い)
       [-0.25, 0, -0.28, 0.22, 0.4, 0.24, 0.28, 0.55, 0.25],
@@ -141,6 +142,32 @@ const MOB_TYPES = {
       [-0.2, 0.4, -0.15, 0.4, 0.85, 0.3, 0.33, 0.65, 0.3],
       // 頭
       [-0.24, 1.25, -0.24, 0.48, 0.45, 0.48, 0.36, 0.68, 0.33],
+    ],
+  },
+  enderman: {
+    speed: 1.6,
+    halfW: 0.3, height: 2.9,
+    health: 20,
+    hostile: false,     // 殴られるまでは襲ってこない (アグロ状態は angered で管理)
+    neutral: true,
+    noBurn: true,
+    teleporter: true,   // 徘徊中もまれに瞬間移動する
+    attack: 5,
+    drops: I.ENDER_PEARL, dropN: 1,
+    parts: [
+      // 脚 x2 (長い)
+      [-0.16, 0, -0.08, 0.13, 1.3, 0.16, 0.05, 0.05, 0.06],
+      [0.03, 0, -0.08, 0.13, 1.3, 0.16, 0.05, 0.05, 0.06],
+      // 胴体
+      [-0.2, 1.3, -0.12, 0.4, 0.9, 0.24, 0.06, 0.05, 0.08],
+      // 腕 x2 (長く垂れる)
+      [-0.34, 1.0, -0.08, 0.12, 1.2, 0.16, 0.05, 0.04, 0.07],
+      [0.22, 1.0, -0.08, 0.12, 1.2, 0.16, 0.05, 0.04, 0.07],
+      // 頭
+      [-0.22, 2.2, -0.22, 0.44, 0.44, 0.44, 0.05, 0.04, 0.07],
+      // 目 x2 (紫に発光)
+      [-0.14, 2.38, 0.2, 0.09, 0.08, 0.03, 0.85, 0.25, 0.95],
+      [0.05, 2.38, 0.2, 0.09, 0.08, 0.03, 0.85, 0.25, 0.95],
     ],
   },
   chicken: {
@@ -185,14 +212,46 @@ class Mob {
     this.hurt = 0;                 // 被弾の赤フラッシュ残り時間
     this.attackCooldown = 0;
     this.burnAccum = 0;
+    this.angered = false;                          // エンダーマン: 殴られるとアグロ
+    this.teleportTimer = 4 + Math.random() * 5;
+  }
+
+  // 近くの安全な足場を探して瞬間移動する (エンダーマン)
+  teleportBlink(world, range = 6) {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const nx = this.pos[0] + (Math.random() * 2 - 1) * range;
+      const nz = this.pos[2] + (Math.random() * 2 - 1) * range;
+      const bx = Math.floor(nx), bz = Math.floor(nz);
+      for (let dy = 3; dy >= -3; dy--) {
+        const by = Math.floor(this.pos[1]) + dy;
+        if (!world.isSolidAt(bx, by, bz) && !world.isSolidAt(bx, by + 1, bz) &&
+            !world.isSolidAt(bx, by + 2, bz) && world.isSolidAt(bx, by - 1, bz)) {
+          this.pos[0] = nx; this.pos[1] = by; this.pos[2] = nz;
+          this.vel = [0, 0, 0];
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   update(dt, world, player, daylight, mgr) {
     this.hurt = Math.max(0, this.hurt - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
+    // --- エンダーマンの瞬間移動 (徘徊中もまれに, 水中では必ず) ---
+    if (this.def.teleporter) {
+      const inWater = world.getBlock(Math.floor(this.pos[0]),
+        Math.floor(this.pos[1] + 0.3), Math.floor(this.pos[2])) === B.WATER;
+      this.teleportTimer -= dt;
+      if (inWater || this.teleportTimer <= 0) {
+        this.teleportBlink(world, this.angered ? 10 : 6);
+        this.teleportTimer = this.angered ? 1.5 + Math.random() * 2 : 5 + Math.random() * 6;
+      }
+    }
+
     let chasing = false;
-    if (this.def.hostile) {
+    if (this.def.hostile || this.angered) {
       // --- 昼は燃えてダメージ (クリーパーは燃えない) ---
       if (daylight > 0.5 && !this.def.noBurn) {
         this.burnAccum += dt;
@@ -368,6 +427,7 @@ class MobManager {
     this.spawnTimer = 0;
     this.maxAnimals = 12;
     this.maxZombies = 8;
+    this.maxEndermen = 3;
     this.deaths = [];        // 今フレーム死んだモブ (演出は main 側)
     this.explosions = [];    // クリーパーの爆発 (処理は main 側)
     this.arrows = [];        // スケルトンの矢
@@ -503,6 +563,12 @@ class MobManager {
     return n;
   }
 
+  countType(type) {
+    let n = 0;
+    for (const m of this.mobs) if (m.type === type) n++;
+    return n;
+  }
+
   trySpawn(playerPos, daylight) {
     // プレイヤーの周囲 20–50 ブロックのランダム地点
     const ang = Math.random() * Math.PI * 2;
@@ -517,16 +583,20 @@ class MobManager {
     if (y + 1 <= WATER_LEVEL) return;
 
     if (daylight < 0.3) {
-      // 夜: 敵モブ (ゾンビ / スケルトン / クリーパー / クモ)
+      // 夜: 敵モブ (ゾンビ / スケルトン / クリーパー / クモ / まれにエンダーマン)
+      if (Math.random() < 0.08 && this.countType("enderman") < this.maxEndermen) {
+        this.mobs.push(new Mob("enderman", x + 0.5, y + 1.01, z + 0.5));
+        return;
+      }
       if (this.count(true) >= this.maxZombies) return;
       const r = Math.random();
       const type = r < 0.35 ? "zombie" : r < 0.6 ? "skeleton" : r < 0.8 ? "creeper" : "spider";
       this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
     } else if (daylight > 0.5) {
-      // 昼: 動物 (草の上のみ)
+      // 昼: 動物 (草の上のみ, ニュートラルモブは除く)
       if (this.count(false) >= this.maxAnimals) return;
       if (this.world.getBlock(x, y, z) !== B.GRASS) return;
-      const passive = MOB_NAMES.filter((n) => !MOB_TYPES[n].hostile);
+      const passive = MOB_NAMES.filter((n) => !MOB_TYPES[n].hostile && !MOB_TYPES[n].neutral);
       const type = passive[(Math.random() * passive.length) | 0];
       this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
     }
@@ -549,7 +619,9 @@ class MobManager {
     mob.vel[0] += dir[0] * 7;
     mob.vel[2] += dir[2] * 7;
     mob.vel[1] = 5;
-    if (!mob.def.hostile) {
+    if (mob.def.neutral) {
+      mob.angered = true; // エンダーマン: 殴られると襲ってくる
+    } else if (!mob.def.hostile) {
       mob.state = "walk";
       mob.yaw = Math.atan2(dir[0], dir[2]); // 叩かれた方向へ逃げる
       mob.stateTime = 2;

@@ -87,6 +87,12 @@ const B = {
   HAZARD: 160,
   PILLAR: 161,
   CLOUD: 162,
+  // 173-177: エンダードラゴン討伐に向けたジ・エンド関連ブロック
+  END_STONE: 173,
+  END_PORTAL_FRAME: 174,
+  END_PORTAL_FRAME_EYE: 175,
+  END_PORTAL: 176,
+  END_CRYSTAL: 177,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -199,6 +205,10 @@ const I = {
   SHEARS: 132,
   FISHING_ROD: 133,
   FISH: 134,
+  // エンダードラゴン討伐関連
+  ENDER_PEARL: 135,
+  EYE_OF_ENDER: 136,
+  GUNPOWDER: 137,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -325,6 +335,15 @@ const TILE = {
   HAZARD: 147,
   PILLAR: 148,
   CLOUD: 149,
+  // 158-165: エンダードラゴン討伐関連 (150-157 はコンクリート)
+  ENDER_PEARL: 158,
+  EYE_OF_ENDER: 159,
+  GUNPOWDER: 160,
+  END_STONE: 161,
+  END_PORTAL_FRAME: 162,
+  END_PORTAL_FRAME_EYE: 163,
+  END_PORTAL: 164,
+  END_CRYSTAL: 165,
 };
 
 // 各ブロックの属性
@@ -600,6 +619,11 @@ defItem(I.FISHING_ROD, "fishing_rod", "釣竿", TILE.FISHING_ROD,
   { kind: "rod", tier: 1, speed: 1, damage: 1, durability: 40 });
 defItem(I.FISH, "fish", "魚", TILE.FISH, null, 6);
 
+// --- エンダードラゴン討伐関連アイテム ---
+defItem(I.ENDER_PEARL, "ender_pearl", "エンダーパール", TILE.ENDER_PEARL);
+defItem(I.EYE_OF_ENDER, "eye_of_ender", "エンダーアイ", TILE.EYE_OF_ENDER);
+defItem(I.GUNPOWDER, "gunpowder", "火薬", TILE.GUNPOWDER);
+
 // --- オリジナル建築ブロック ---
 
 // ネオン 6 色 (光源)
@@ -644,6 +668,23 @@ CONCRETE_COLORS.forEach(([name, jp], i) => {
   const t = CONCRETE_TILE_BASE + i;
   defBlock(CONCRETE_ID_BASE + i, "concrete_" + name, jp, [t, t, t], deco);
 });
+
+// --- ジ・エンド関連ブロック ---
+defBlock(B.END_STONE, "end_stone", "エンドストーン",
+  [TILE.END_STONE, TILE.END_STONE, TILE.END_STONE],
+  { hardness: 2.2, pickable: true, minTier: 1 });
+defBlock(B.END_PORTAL_FRAME, "end_portal_frame", "エンドポータルフレーム",
+  [TILE.END_PORTAL_FRAME, TILE.END_PORTAL_FRAME, TILE.END_PORTAL_FRAME],
+  { hardness: Infinity, drops: null });
+defBlock(B.END_PORTAL_FRAME_EYE, "end_portal_frame_eye", "エンダーアイ入りフレーム",
+  [TILE.END_PORTAL_FRAME_EYE, TILE.END_PORTAL_FRAME, TILE.END_PORTAL_FRAME],
+  { hardness: Infinity, drops: null, emissive: true });
+defBlock(B.END_PORTAL, "end_portal", "エンドポータル",
+  [TILE.END_PORTAL, TILE.END_PORTAL, TILE.END_PORTAL],
+  { hardness: Infinity, drops: null, solid: false, opaque: false, emissive: true });
+defBlock(B.END_CRYSTAL, "end_crystal", "エンダークリスタル",
+  [TILE.END_CRYSTAL, TILE.END_CRYSTAL, TILE.END_CRYSTAL],
+  { hardness: 1.0, drops: null, emissive: true });
 
 // --- 農地 (クワで耕した土, 上面がわずかに低い) ---
 defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],
