@@ -16,7 +16,7 @@ const MOB_TYPES = {
       // 胴体 (茶白のまだら模様)
       [-0.45, 0.55, -0.6, 0.9, 0.55, 1.2, 1, 1, 1, TILE.MOB_COW_PATCH],
       // 頭
-      [-0.22, 0.78, 0.55, 0.44, 0.42, 0.4, 1, 1, 1, TILE.MOB_COW_BROWN],
+      [-0.22, 0.78, 0.55, 0.44, 0.42, 0.4, 1, 1, 1, TILE.MOB_COW_BROWN, TILE.MOB_COW_FACE],
       // 鼻先
       [-0.13, 0.8, 0.93, 0.26, 0.2, 0.06, 0.82, 0.78, 0.72],
       // 角 x2
@@ -60,7 +60,7 @@ const MOB_TYPES = {
       // 胴体
       [-0.4, 0.35, -0.5, 0.8, 0.5, 1.0, 1, 1, 1, TILE.MOB_PIG_SKIN],
       // 頭
-      [-0.28, 0.42, 0.42, 0.56, 0.45, 0.42, 1, 1, 1, TILE.MOB_PIG_SKIN],
+      [-0.28, 0.42, 0.42, 0.56, 0.45, 0.42, 1, 1, 1, TILE.MOB_PIG_SKIN, TILE.MOB_PIG_FACE],
       // 鼻
       [-0.1, 0.5, 0.82, 0.2, 0.14, 0.06, 0.85, 0.5, 0.55],
       // 脚 x4
@@ -79,7 +79,7 @@ const MOB_TYPES = {
       // もこもこの胴体 (毛玉状の羊毛模様)
       [-0.45, 0.45, -0.55, 0.9, 0.65, 1.1, 1, 1, 1, TILE.MOB_SHEEP_WOOL],
       // 頭 (肌)
-      [-0.22, 0.75, 0.5, 0.44, 0.4, 0.35, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
+      [-0.22, 0.75, 0.5, 0.44, 0.4, 0.35, 1, 1, 1, TILE.MOB_SHEEP_SKIN, TILE.MOB_SHEEP_FACE],
       // 脚 x4
       [-0.35, 0, -0.45, 0.2, 0.5, 0.2, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
       [0.15, 0, -0.45, 0.2, 0.5, 0.2, 1, 1, 1, TILE.MOB_SHEEP_SKIN],
@@ -102,7 +102,7 @@ const MOB_TYPES = {
       [-0.43, 1.08, -0.1, 0.18, 0.18, 0.72, 1, 1, 1, TILE.MOB_ZOMBIE_SKIN],
       [0.25, 1.08, -0.1, 0.18, 0.18, 0.72, 1, 1, 1, TILE.MOB_ZOMBIE_SKIN],
       // 頭 (腐った肌)
-      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 1, 1, 1, TILE.MOB_ZOMBIE_SKIN],
+      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 1, 1, 1, TILE.MOB_ZOMBIE_SKIN, TILE.MOB_ZOMBIE_FACE],
     ],
   },
   skeleton: {
@@ -122,7 +122,7 @@ const MOB_TYPES = {
       [-0.34, 0.85, -0.08, 0.12, 0.5, 0.16, 1, 1, 1, TILE.MOB_SKELETON_BONE],
       [0.22, 0.85, -0.08, 0.12, 0.5, 0.16, 1, 1, 1, TILE.MOB_SKELETON_BONE],
       // 頭 (白い骨)
-      [-0.22, 1.35, -0.22, 0.44, 0.44, 0.44, 1, 1, 1, TILE.MOB_SKELETON_BONE],
+      [-0.22, 1.35, -0.22, 0.44, 0.44, 0.44, 1, 1, 1, TILE.MOB_SKELETON_BONE, TILE.MOB_SKELETON_FACE],
     ],
   },
   creeper: {
@@ -142,7 +142,7 @@ const MOB_TYPES = {
       // 縦長の胴体 (迷彩模様)
       [-0.2, 0.4, -0.15, 0.4, 0.85, 0.3, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
       // 頭 (迷彩模様)
-      [-0.24, 1.25, -0.24, 0.48, 0.45, 0.48, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
+      [-0.24, 1.25, -0.24, 0.48, 0.45, 0.48, 1, 1, 1, TILE.MOB_CREEPER_SKIN, TILE.MOB_CREEPER_FACE],
     ],
   },
   enderman: {
@@ -179,7 +179,7 @@ const MOB_TYPES = {
       // 体 (羽毛)
       [-0.22, 0.25, -0.3, 0.44, 0.4, 0.55, 1, 1, 1, TILE.MOB_CHICKEN_FEATHER],
       // 頭 (羽毛)
-      [-0.13, 0.55, 0.18, 0.26, 0.3, 0.24, 1, 1, 1, TILE.MOB_CHICKEN_FEATHER],
+      [-0.13, 0.55, 0.18, 0.26, 0.3, 0.24, 1, 1, 1, TILE.MOB_CHICKEN_FEATHER, TILE.MOB_CHICKEN_FACE],
       // くちばし
       [-0.06, 0.66, 0.42, 0.12, 0.08, 0.1, 0.95, 0.65, 0.2],
       // とさか
@@ -226,7 +226,7 @@ const MOB_TYPES = {
       // 胴体 (毛並み)
       [-0.22, 0.32, -0.42, 0.44, 0.4, 0.8, 1, 1, 1, TILE.MOB_WOLF_FUR],
       // 頭 (毛並み)
-      [-0.16, 0.42, 0.35, 0.32, 0.32, 0.32, 1, 1, 1, TILE.MOB_WOLF_FUR],
+      [-0.16, 0.42, 0.35, 0.32, 0.32, 0.32, 1, 1, 1, TILE.MOB_WOLF_FUR, TILE.MOB_WOLF_FACE],
       // 鼻先
       [-0.07, 0.44, 0.62, 0.14, 0.14, 0.12, 0.2, 0.18, 0.17],
       // 耳 x2
@@ -260,7 +260,7 @@ const MOB_TYPES = {
       [-0.43, 1.08, -0.1, 0.18, 0.62, 0.22, 1, 1, 1, TILE.MOB_PIGMAN_SKIN],
       [0.25, 1.08, -0.1, 0.18, 0.62, 0.22, 1, 1, 1, TILE.MOB_PIGMAN_SKIN],
       // 頭 (豚鼻)
-      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 1, 1, 1, TILE.MOB_PIGMAN_SKIN],
+      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 1, 1, 1, TILE.MOB_PIGMAN_SKIN, TILE.MOB_PIGMAN_FACE],
     ],
   },
   blaze: {
@@ -282,7 +282,7 @@ const MOB_TYPES = {
       [-0.05, 0.6, -0.55, 0.1, 0.7, 0.1, 1, 1, 1, TILE.MOB_BLAZE_FIRE],
       [-0.05, 0.6, 0.45, 0.1, 0.7, 0.1, 1, 1, 1, TILE.MOB_BLAZE_FIRE],
       // 頭
-      [-0.2, 1.5, -0.2, 0.4, 0.4, 0.4, 1, 1, 1, TILE.MOB_BLAZE_FIRE],
+      [-0.2, 1.5, -0.2, 0.4, 0.4, 0.4, 1, 1, 1, TILE.MOB_BLAZE_FIRE, TILE.MOB_BLAZE_FACE],
     ],
   },
   wither_skeleton: {
@@ -303,7 +303,7 @@ const MOB_TYPES = {
       [-0.36, 1.08, -0.09, 0.13, 0.62, 0.18, 1, 1, 1, TILE.MOB_WITHER_SKELETON_BONE],
       [0.23, 1.08, -0.09, 0.13, 0.62, 0.18, 1, 1, 1, TILE.MOB_WITHER_SKELETON_BONE],
       // 頭
-      [-0.24, 1.65, -0.24, 0.48, 0.48, 0.48, 1, 1, 1, TILE.MOB_WITHER_SKELETON_BONE],
+      [-0.24, 1.65, -0.24, 0.48, 0.48, 0.48, 1, 1, 1, TILE.MOB_WITHER_SKELETON_BONE, TILE.MOB_WITHER_SKELETON_FACE],
     ],
   },
   ghast: {
@@ -1077,7 +1077,7 @@ class MobManager {
       const flashT = (m.fuse != null && Math.sin(m.fuse * 24) > 0) ? 0.75 : 0;
       for (let pi = 0; pi < m.def.parts.length; pi++) {
         const p = m.def.parts[pi];
-        let [ox, oy, oz, w, h, d, r, g, b, tile] = p;
+        let [ox, oy, oz, w, h, d, r, g, b, tile, faceTile] = p;
         if (hurtT > 0) {
           // 被弾中は赤くフラッシュ
           r = r + (1 - r) * hurtT;
@@ -1096,7 +1096,7 @@ class MobManager {
           oz += dir;
         }
         if (tile !== undefined) {
-          pushBoxTex(texVerts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, tile, r, g, b);
+          pushBoxTex(texVerts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, tile, r, g, b, faceTile);
         } else {
           pushBox(verts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, r, g, b);
         }
@@ -1256,8 +1256,9 @@ function pushBox(verts, pos, sin, cos, ox, oy, oz, w, h, d, r, g, b) {
 }
 
 // pushBox のテクスチャ版: 各面にタイルの模様をそのまま貼る
-// (r,g,b は色ではなく, 被弾フラッシュなどに使う色ティント倍率)
-function pushBoxTex(verts, pos, sin, cos, ox, oy, oz, w, h, d, tile, tr, tg, tb) {
+// (r,g,b は色ではなく, 被弾フラッシュなどに使う色ティント倍率)。
+// faceTile を渡すと正面 (+Z) だけ別タイル (顔) に差し替える
+function pushBoxTex(verts, pos, sin, cos, ox, oy, oz, w, h, d, tile, tr, tg, tb, faceTile) {
   const corners = [];
   for (let i = 0; i < 8; i++) {
     const lx = ox + ((i & 1) ? w : 0);
@@ -1271,19 +1272,21 @@ function pushBoxTex(verts, pos, sin, cos, ox, oy, oz, w, h, d, tile, tr, tg, tb)
   }
   const uv = tileUV(tile);
   const uvs = [[uv.u0, uv.v0], [uv.u0, uv.v1], [uv.u1, uv.v1], [uv.u1, uv.v0]];
+  const faceUV = faceTile !== undefined ? tileUV(faceTile) : null;
+  const faceUVs = faceUV && [[faceUV.u0, faceUV.v0], [faceUV.u0, faceUV.v1], [faceUV.u1, faceUV.v1], [faceUV.u1, faceUV.v0]];
   const faces = [
-    [[2, 6, 7, 3], BOX_SHADE.top],
-    [[0, 1, 5, 4], BOX_SHADE.bottom],
-    [[4, 5, 7, 6], BOX_SHADE.south],
-    [[1, 0, 2, 3], BOX_SHADE.north],
-    [[1, 3, 7, 5], BOX_SHADE.east],
-    [[4, 6, 2, 0], BOX_SHADE.west],
+    [[2, 6, 7, 3], BOX_SHADE.top, uvs],
+    [[0, 1, 5, 4], BOX_SHADE.bottom, uvs],
+    [[4, 5, 7, 6], BOX_SHADE.south, faceUVs || uvs],   // +Z (正面, 顔)
+    [[1, 0, 2, 3], BOX_SHADE.north, uvs],
+    [[1, 3, 7, 5], BOX_SHADE.east, uvs],
+    [[4, 6, 2, 0], BOX_SHADE.west, uvs],
   ];
-  for (const [idx, shade] of faces) {
+  for (const [idx, shade, faceUvSet] of faces) {
     const quad = idx.map((i) => corners[i]);
     for (const tri of [[0, 1, 2], [0, 2, 3]]) {
       for (const vi of tri) {
-        verts.push(quad[vi][0], quad[vi][1], quad[vi][2], uvs[vi][0], uvs[vi][1], shade, tr, tg, tb);
+        verts.push(quad[vi][0], quad[vi][1], quad[vi][2], faceUvSet[vi][0], faceUvSet[vi][1], shade, tr, tg, tb);
       }
     }
   }

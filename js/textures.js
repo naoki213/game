@@ -1130,6 +1130,104 @@ function buildTextureAtlas(seed) {
     return px(225, 225, 222, jitter(0.85 + n * 0.25, 0.03));
   });
 
+  // --- モブの顔 (頭の正面だけに貼る) ---
+
+  // クリーパー (本家おなじみの四角い目と伸びた口)
+  paintTile(TILE.MOB_CREEPER_FACE, (x, y) => {
+    const eyeL = x >= 2 && x < 6 && y >= 3 && y < 7;
+    const eyeR = x >= 10 && x < 14 && y >= 3 && y < 7;
+    const stem = x >= 6 && x < 10 && y >= 7 && y < 10;
+    const frown = x >= 4 && x < 12 && y >= 10 && y < 13;
+    if (eyeL || eyeR || stem || frown) return px(12, 12, 12, 1);
+    return px(60, 130, 55, jitter(1, 0.08));
+  });
+
+  // ゾンビ (虚ろな黒い目)
+  paintTile(TILE.MOB_ZOMBIE_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 8;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 8;
+    if (eyeL || eyeR) return px(15, 15, 15, 1);
+    if (x >= 5 && x < 11 && y >= 11 && y < 12) return px(40, 30, 25, 1);
+    return px(100, 150, 75, jitter(1, 0.1));
+  });
+
+  // スケルトン (くぼんだ眼窩と歯列)
+  paintTile(TILE.MOB_SKELETON_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 9;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 9;
+    if (eyeL || eyeR) return px(12, 12, 15, 1);
+    if (y >= 11 && y < 13 && x >= 4 && x < 12 && x % 2 === 0) return px(120, 118, 110, 1);
+    return px(222, 220, 206, jitter(1, 0.06));
+  });
+
+  // 牛 (黒い目)
+  paintTile(TILE.MOB_COW_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 8;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 8;
+    if (eyeL || eyeR) return px(18, 14, 11, 1);
+    return px(112, 74, 52, jitter(1, 0.07));
+  });
+
+  // 豚 (小さな目)
+  paintTile(TILE.MOB_PIG_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 4 && y < 7;
+    const eyeR = x >= 10 && x < 13 && y >= 4 && y < 7;
+    if (eyeL || eyeR) return px(30, 15, 15, 1);
+    return px(235, 165, 168, jitter(1, 0.05));
+  });
+
+  // ヒツジ (小さな目)
+  paintTile(TILE.MOB_SHEEP_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 8;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 8;
+    if (eyeL || eyeR) return px(20, 15, 15, 1);
+    return px(222, 178, 168, jitter(1, 0.05));
+  });
+
+  // オオカミ (琥珀色の目)
+  paintTile(TILE.MOB_WOLF_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 8;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 8;
+    if (eyeL || eyeR) return px(235, 190, 60, 1);
+    const n = hash2((x * 0.5) | 0, (y * 0.5) | 0, 0x3004);
+    return px(150, 140, 128, jitter(0.85 + n * 0.3, 0.06));
+  });
+
+  // ゾンビピッグマン (虚ろな黒い目)
+  paintTile(TILE.MOB_PIGMAN_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 8;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 8;
+    if (eyeL || eyeR) return px(20, 15, 15, 1);
+    const spot = hash2(x, y, 0x3005) > 0.85;
+    if (spot) return px(200, 110, 105, jitter(1, 0.08));
+    return px(230, 150, 145, jitter(1, 0.08));
+  });
+
+  // ウィザースケルトン (黒く落ちくぼんだ眼窩)
+  paintTile(TILE.MOB_WITHER_SKELETON_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 9;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 9;
+    if (eyeL || eyeR) return px(5, 5, 8, 1);
+    return px(58, 56, 60, jitter(1, 0.08));
+  });
+
+  // ニワトリ (小さな目)
+  paintTile(TILE.MOB_CHICKEN_FACE, (x, y) => {
+    const eyeL = x >= 4 && x < 7 && y >= 6 && y < 9;
+    const eyeR = x >= 9 && x < 12 && y >= 6 && y < 9;
+    if (eyeL || eyeR) return px(20, 15, 10, 1);
+    return px(240, 236, 226, jitter(1, 0.04));
+  });
+
+  // ブレイズ (白く輝く目)
+  paintTile(TILE.MOB_BLAZE_FACE, (x, y) => {
+    const eyeL = x >= 3 && x < 6 && y >= 5 && y < 8;
+    const eyeR = x >= 10 && x < 13 && y >= 5 && y < 8;
+    if (eyeL || eyeR) return px(255, 255, 220, 1);
+    const flick = hash2(x, (y + ((x * 3) % 5)) | 0, 0x3006);
+    return px(255, 180, 60, jitter(0.7 + flick * 0.6, 0.08));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
