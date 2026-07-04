@@ -26,6 +26,10 @@ function fromNether(nx, nz) {
   return [(nx - NETHER.x) * NETHER.scale, (nz - NETHER.z) * NETHER.scale];
 }
 
+// ネザーフォートレス。ネザー領域内の固定座標に生成される, ネザーレンガの
+// 十字型の橋。ウィザースケルトンが徘徊する探索の目的地
+const NETHER_FORTRESS = { x: NETHER.x + 50, z: NETHER.z + 30, y: 50 };
+
 // チャンク内インデックス: idx = (y << 8) | (z << 4) | x
 function blockIndex(x, y, z) {
   return (y << 8) | (z << 4) | x;
@@ -436,6 +440,9 @@ class World {
       }
     }
 
+    // --- ネザーフォートレスを刻印 ---
+    this.stampNetherFortress(chunk);
+
     // --- 保存済みの編集を適用 ---
     const key = World.key(chunk.cx, chunk.cz);
     const edits = this.edits.get(key);
@@ -446,6 +453,52 @@ class World {
     chunk.generated = true;
     chunk.dirty = true;
     return chunk;
+  }
+
+  stampNetherFortress(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    const { x: fx, z: fz, y: fy } = NETHER_FORTRESS;
+    const R = 22;
+    if (ox + 15 < fx - R || ox > fx + R || oz + 15 < fz - R || oz > fz + R) return;
+
+    const set = (wx, y, wz, id) => {
+      if (wx < ox || wx > ox + 15 || wz < oz || wz > oz + 15 || y < 1 || y >= CHUNK_H) return;
+      chunk.set(wx - ox, y, wz - oz, id);
+    };
+    const fill = (x0, y0, z0, x1, y1, z1, id) => {
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++)
+          for (let x = x0; x <= x1; x++) set(x, y, z, id);
+    };
+
+    // 橋の上を歩けるよう周囲を空気でくり抜く
+    fill(fx - 20, fy + 1, fz - 20, fx + 20, fy + 6, fz + 20, B.AIR);
+
+    // 南北の橋 (床 + 胸壁 + 支柱)
+    fill(fx - 2, fy, fz - 20, fx + 2, fy, fz + 20, B.NETHER_BRICK);
+    for (let z = fz - 20; z <= fz + 20; z++) {
+      if ((z - fz) % 2 === 0) { set(fx - 2, fy + 1, z, B.NETHER_BRICK); set(fx + 2, fy + 1, z, B.NETHER_BRICK); }
+    }
+    for (const [px, pz] of [[fx - 2, fz - 20], [fx + 2, fz - 20], [fx - 2, fz + 20], [fx + 2, fz + 20]]) {
+      fill(px, fy - 12, pz, px, fy - 1, pz, B.NETHER_BRICK);
+    }
+
+    // 東西の橋 (床 + 胸壁 + 支柱)
+    fill(fx - 20, fy, fz - 2, fx + 20, fy, fz + 2, B.NETHER_BRICK);
+    for (let x = fx - 20; x <= fx + 20; x++) {
+      if ((x - fx) % 2 === 0) { set(x, fy + 1, fz - 2, B.NETHER_BRICK); set(x, fy + 1, fz + 2, B.NETHER_BRICK); }
+    }
+    for (const [px, pz] of [[fx - 20, fz - 2], [fx - 20, fz + 2], [fx + 20, fz - 2], [fx + 20, fz + 2]]) {
+      fill(px, fy - 12, pz, px, fy - 1, pz, B.NETHER_BRICK);
+    }
+
+    // 交差点の見張り台 (少し高く, 縁取り)
+    fill(fx - 4, fy + 1, fz - 4, fx + 4, fy + 4, fz + 4, B.AIR);
+    fill(fx - 4, fy, fz - 4, fx + 4, fy, fz + 4, B.NETHER_BRICK);
+    for (const [dx, dz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) {
+      fill(fx + dx, fy + 1, fz + dz, fx + dx, fy + 4, fz + dz, B.NETHER_BRICK);
+    }
   }
 
   // ネザーの (nx, y, nz) 付近で安全な (溶岩に埋まっていない, 頭上が開けた) 足場の Y を探す。

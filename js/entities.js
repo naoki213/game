@@ -232,6 +232,27 @@ const MOB_TYPES = {
       [-0.2, 1.5, -0.2, 0.4, 0.4, 0.4, 0.95, 0.8, 0.3],
     ],
   },
+  wither_skeleton: {
+    speed: 1.8,
+    halfW: 0.32, height: 2.4,
+    health: 20,
+    hostile: true,
+    noBurn: true,
+    attack: 5,
+    drops: B.COAL_ORE, dropN: 2,
+    parts: [
+      // 脚 x2 (黒い骨)
+      [-0.2, 0, -0.09, 0.15, 0.95, 0.18, 0.18, 0.17, 0.19],
+      [0.05, 0, -0.09, 0.15, 0.95, 0.18, 0.18, 0.17, 0.19],
+      // 胴体
+      [-0.22, 0.95, -0.13, 0.44, 0.7, 0.26, 0.15, 0.14, 0.16],
+      // 腕 x2 (石の剣を模して太め)
+      [-0.36, 1.08, -0.09, 0.13, 0.62, 0.18, 0.16, 0.15, 0.17],
+      [0.23, 1.08, -0.09, 0.13, 0.62, 0.18, 0.16, 0.15, 0.17],
+      // 頭
+      [-0.24, 1.65, -0.24, 0.48, 0.48, 0.48, 0.2, 0.19, 0.21],
+    ],
+  },
 };
 
 const MOB_NAMES = Object.keys(MOB_TYPES);
@@ -800,7 +821,8 @@ class MobManager {
         if (y < 2 || y > CHUNK_H - 3) continue;
         if (this.world.getBlock(x, y, z) === B.AIR && this.world.getBlock(x, y + 1, z) === B.AIR &&
             this.world.getBlock(x, y, z) !== B.LAVA_BLOCK) {
-          const type = Math.random() < 0.7 ? "zombie_pigman" : "blaze";
+          const r = Math.random();
+          const type = r < 0.55 ? "zombie_pigman" : r < 0.85 ? "blaze" : "wither_skeleton";
           this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
           return;
         }
