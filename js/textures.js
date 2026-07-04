@@ -992,6 +992,16 @@ function buildTextureAtlas(seed) {
     return px(230 + core * 25, 235 + core * 20, 200 + core * 55, jitter(1, 0.05));
   });
 
+  // ホネ (斜めに伸びる白い骨, 両端が節くれ立つ)
+  paintTile(TILE.BONE, (x, y) => {
+    const t = x - y; // 斜めの軸
+    if (Math.abs(t) > 1.6) return [0, 0, 0, 0];
+    const nearEnd = y < 3 || y > 12;
+    const width = nearEnd ? 2.4 : 1.6;
+    if (Math.abs(t) > width) return [0, 0, 0, 0];
+    return px(232, 226, 208, jitter(1, 0.05));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {

@@ -111,6 +111,7 @@ const MOB_TYPES = {
     health: 10,
     hostile: true,
     ranged: true,
+    drops: I.BONE, dropN: 2,
     parts: [
       // 脚 x2 (細い骨)
       [-0.18, 0, -0.08, 0.13, 0.75, 0.16, 0.82, 0.82, 0.78],
@@ -186,6 +187,31 @@ const MOB_TYPES = {
       // 脚 x2
       [-0.14, 0, -0.05, 0.08, 0.28, 0.08, 0.9, 0.65, 0.25],
       [0.06, 0, -0.05, 0.08, 0.28, 0.08, 0.9, 0.65, 0.25],
+    ],
+  },
+  wolf: {
+    speed: 2.6,
+    halfW: 0.32, height: 0.85,
+    health: 12,
+    hostile: false,
+    tamable: true,     // ホネで手なずけると主人について歩き, 敵を攻撃する
+    parts: [
+      // 胴体
+      [-0.22, 0.32, -0.42, 0.44, 0.4, 0.8, 0.55, 0.5, 0.46],
+      // 頭
+      [-0.16, 0.42, 0.35, 0.32, 0.32, 0.32, 0.58, 0.53, 0.48],
+      // 鼻先
+      [-0.07, 0.44, 0.62, 0.14, 0.14, 0.12, 0.2, 0.18, 0.17],
+      // 耳 x2
+      [-0.16, 0.68, 0.4, 0.1, 0.1, 0.08, 0.4, 0.36, 0.32],
+      [0.06, 0.68, 0.4, 0.1, 0.1, 0.08, 0.4, 0.36, 0.32],
+      // しっぽ
+      [-0.06, 0.5, -0.72, 0.12, 0.12, 0.3, 0.5, 0.46, 0.42],
+      // 脚 x4
+      [-0.2, 0, -0.32, 0.14, 0.32, 0.14, 0.48, 0.44, 0.4],
+      [0.06, 0, -0.32, 0.14, 0.32, 0.14, 0.48, 0.44, 0.4],
+      [-0.2, 0, 0.24, 0.14, 0.32, 0.14, 0.48, 0.44, 0.4],
+      [0.06, 0, 0.24, 0.14, 0.32, 0.14, 0.48, 0.44, 0.4],
     ],
   },
   zombie_pigman: {
@@ -459,6 +485,7 @@ class Mob {
     this.burnAccum = 0;
     this.angered = false;                          // エンダーマン: 殴られるとアグロ
     this.teleportTimer = 4 + Math.random() * 5;
+    this.tamed = false;                            // オオカミ: ホネで手なずけられたか
   }
 
   // 近くの安全な足場を探して瞬間移動する (エンダーマン)
@@ -501,6 +528,39 @@ class Mob {
     }
 
     let chasing = false;
+
+    // --- 手なずけたオオカミ: 主人について歩き, 近くの敵モブを攻撃する ---
+    if (this.tamed) {
+      let nearestHostile = null, nearestD2 = 8 * 8;
+      if (mgr) {
+        for (const om of mgr.mobs) {
+          if (om === this || !om.def.hostile) continue;
+          const hdx = om.pos[0] - this.pos[0], hdz = om.pos[2] - this.pos[2];
+          const d2 = hdx * hdx + hdz * hdz;
+          if (d2 < nearestD2) { nearestD2 = d2; nearestHostile = om; }
+        }
+      }
+      if (nearestHostile) {
+        const hdx = nearestHostile.pos[0] - this.pos[0], hdz = nearestHostile.pos[2] - this.pos[2];
+        const hd = Math.hypot(hdx, hdz);
+        this.yaw = Math.atan2(hdx, hdz);
+        this.state = "walk";
+        chasing = true;
+        if (hd < 1.5 && this.attackCooldown <= 0) {
+          this.attackCooldown = 1.0;
+          nearestHostile.health -= 3;
+          nearestHostile.hurt = 0.3;
+        }
+      } else {
+        const pdx = player.pos[0] - this.pos[0], pdz = player.pos[2] - this.pos[2];
+        if (Math.hypot(pdx, pdz) > 4) {
+          this.yaw = Math.atan2(pdx, pdz);
+          this.state = "walk";
+          chasing = true;
+        }
+      }
+    }
+
     if (this.def.hostile || this.angered) {
       // --- 昼は燃えてダメージ (クリーパーは燃えない) ---
       if (daylight > 0.5 && !this.def.noBurn) {
@@ -913,7 +973,13 @@ class MobManager {
       // 昼: 動物 (草の上のみ, ニュートラルモブは除く)
       if (this.count(false) >= this.maxAnimals) return;
       if (this.world.getBlock(x, y, z) !== B.GRASS) return;
-      const passive = MOB_NAMES.filter((n) => !MOB_TYPES[n].hostile && !MOB_TYPES[n].neutral);
+      // 森林バイオームにはオオカミが徘徊する (ホネで手なずけられる)
+      if (this.world.columnInfo(x, z).biome === "forest" &&
+          this.countType("wolf") < 4 && Math.random() < 0.15) {
+        this.mobs.push(new Mob("wolf", x + 0.5, y + 1.01, z + 0.5));
+        return;
+      }
+      const passive = MOB_NAMES.filter((n) => !MOB_TYPES[n].hostile && !MOB_TYPES[n].neutral && !MOB_TYPES[n].tamable);
       const type = passive[(Math.random() * passive.length) | 0];
       this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
     }
@@ -975,6 +1041,10 @@ class MobManager {
           oz += dir;
         }
         pushBox(verts, m.pos, sin, cos, ox, oy + bobY, oz, w, h, d, r, g, b);
+      }
+      // 手なずけたオオカミは赤い首輪をつける
+      if (m.tamed) {
+        pushBox(verts, m.pos, sin, cos, -0.17, 0.5 + bobY, 0.28, 0.34, 0.1, 0.16, 0.75, 0.12, 0.12);
       }
     }
 

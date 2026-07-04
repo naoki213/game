@@ -1878,6 +1878,23 @@
       showToast(`🧭 スポーン地点は ${dir} の方角, 約${dist}ブロック先`);
       return;
     }
+    // ホネ: オオカミに与えると, まれに手なずけられる
+    if (heldDef && heldDef.id === I.BONE) {
+      const hit = player.raycast();
+      const mob = mobs.pick(player.eyePos(), player.forward(), hit ? hit.t : REACH);
+      if (mob && mob.type === "wolf" && !mob.tamed) {
+        if (!consumeItem(I.BONE)) return;
+        if (Math.random() < 0.34) {
+          mob.tamed = true;
+          showToast("🐺 オオカミを手なずけた!");
+          sound.blip(700, 0.15, "sine", 0.2);
+        } else {
+          showToast("オオカミにホネをあげた…");
+          sound.blip(400, 0.1, "sine", 0.15);
+        }
+      }
+      return;
+    }
     // 種: 土 / 草ブロックの上面に植える
     if (heldDef && heldDef.seeds) {
       if (!hitFirst) return;
