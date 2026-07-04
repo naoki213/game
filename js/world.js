@@ -69,7 +69,8 @@ class World {
     this.villageCache = new Map();    // 村グリッドのキャッシュ
     this.templeCache = new Map();     // 砂漠の神殿グリッドのキャッシュ
     this.lavaPoolCache = new Map();   // 地上のマグマだまりグリッドのキャッシュ
-    this.entranceCache = new Map();   // 洞窟の入り口 (竪穴) のキャッシュ
+    this.entranceCandCache = new Map();  // 洞窟の入り口候補 (グリッドセル) のキャッシュ
+    this.entranceColCache = new Map();   // 列ごとの近傍入り口候補リストのキャッシュ
 
     // プレイヤーの編集 (生成地形との差分): "cx,cz" -> Map(idx -> blockId)
     this.edits = new Map();
@@ -150,70 +151,95 @@ class World {
   }
 
   isCave(x, y, z, surfaceH) {
-    if (y <= 2 || y > surfaceH - 4) return false;
+    if (y <= 2) return false;
+    if (y > surfaceH - 4) {
+      // 地表付近は通常ふさぐが, 入り口候補の近くだけ, 自然な洞窟ノイズと
+      // 同じ見た目の蛇行トンネルで地表まで開けることを許可する
+      if (y > surfaceH) return false;
+      return this.isCaveEntrance(x, y, z);
+    }
     return this.caveNoiseAt(x, y, z, surfaceH);
   }
 
-  // 洞窟の入り口 (地表に開く竪穴)。まばらな格子点に候補地を置き,
-  // そこから地下の自然な洞窟にぶつかるまで掘り下げる。見つからなければ
-  // 浅い袋小路の竪穴になる。戻り値は「この座標が入り口の穴なら底の Y」,
-  // 入り口でなければ -1
-  // 洞窟の入り口は, 垂直な竪穴ではなく歩いて降りられる斜めのスロープにする。
-  // 入り口セルの中心から 4 方向のどれかへ, 階段状に高さを落としながら
-  // 自然な洞窟にぶつかるまで掘り進む
-  caveEntranceBottom(x, z, h) {
-    const key = x + "," + z;
-    let bottom = this.entranceCache.get(key);
-    if (bottom !== undefined) return bottom;
-    bottom = -1;
+  // ---------------- 洞窟の入り口 ----------------
+  // まばらな格子点ごとに低確率で入り口候補を置き, そこから下向きに
+  // ノイズで蛇行するトンネルを掘り, 自然な洞窟 (caveNoiseAt) にぶつかったら
+  // そこで終わる。垂直な竪穴や幾何学的なスロープではなく, 本家のように
+  // 不定形で蛇行する自然な穴になる
 
-    const CELL = 8, RAMP_LEN = 14, HALF_W = 1.4;
-    const gx0 = Math.floor((x - RAMP_LEN) / CELL), gx1 = Math.floor((x + RAMP_LEN) / CELL);
-    const gz0 = Math.floor((z - RAMP_LEN) / CELL), gz1 = Math.floor((z + RAMP_LEN) / CELL);
-    for (let gz = gz0; gz <= gz1 && bottom < 0; gz++) {
-      for (let gx = gx0; gx <= gx1 && bottom < 0; gx++) {
-        if (hash2(gx, gz, this.seed ^ 0x1ca7e) >= 0.05) continue;
-        const ex = gx * CELL + 2 + Math.floor(hash2(gx, gz, this.seed ^ 0xe17a01) * (CELL - 4));
-        const ez = gz * CELL + 2 + Math.floor(hash2(gx, gz, this.seed ^ 0x0e18a2) * (CELL - 4));
-        const eh = this.columnInfo(ex, ez).h;
-        if (eh <= WATER_LEVEL + 3) continue;
+  // 入り口トンネルの, 入り口からの深さ (step) における中心座標。
+  // 滑らかなノイズで左右に蛇行させる
+  entranceTunnelCenter(ex, ez, seedX, seedZ, step) {
+    const w = step * 0.22;
+    const dx = this.noiseCave2.noise2(w + seedX, seedX * 0.6) * 3.2;
+    const dz = this.noiseCave2.noise2(seedZ * 0.6, w + seedZ) * 3.2;
+    return [ex + dx, ez + dz];
+  }
 
-        // 4 方向のどれかへ伸びるランプ (単位ベクトル)
-        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-        const [ddx, ddz] = dirs[Math.floor(hash2(gx, gz, this.seed ^ 0x77bb1e) * 4)];
-        const fx = ex + ddx * RAMP_LEN, fz = ez + ddz * RAMP_LEN;
-
-        // 進行方向への投影 t と, 軸から直交方向のずれ
-        const rx = x - ex, rz = z - ez;
-        const t = rx * ddx + rz * ddz;
-        if (t < -1.5 || t > RAMP_LEN + 1.5) continue;
-        const rNoise = this.noiseCave2.noise2(x * 0.35 + 40, z * 0.35 - 40);
-        const perp = Math.abs(rx * ddz - rz * ddx);
-        if (perp > HALF_W + rNoise * 0.6) continue;
-
-        // ランプの先で自然な洞窟にぶつかる深さを探す (見つからなければ緩やかに掘る)
-        const farH = this.columnInfo(fx, fz).h;
-        let farBottom = -1;
-        if (farH > WATER_LEVEL + 1) {
-          for (let d = 2; d <= 22; d++) {
-            const cy = farH - d;
-            if (cy <= 3) break;
-            if (this.caveNoiseAt(fx, cy, fz, farH)) { farBottom = cy; break; }
-          }
+  // グリッドセルごとの入り口候補 (存在しなければ null)
+  caveEntranceCandidate(gx, gz) {
+    const key = gx + "," + gz;
+    let c = this.entranceCandCache.get(key);
+    if (c !== undefined) return c;
+    c = null;
+    const CELL = 8;
+    if (hash2(gx, gz, this.seed ^ 0x1ca7e) < 0.05) {
+      const ex = gx * CELL + 2 + Math.floor(hash2(gx, gz, this.seed ^ 0xe17a01) * (CELL - 4));
+      const ez = gz * CELL + 2 + Math.floor(hash2(gx, gz, this.seed ^ 0x0e18a2) * (CELL - 4));
+      const eh = this.columnInfo(ex, ez).h;
+      if (eh > WATER_LEVEL + 3) {
+        const seedX = hash2(gx, gz, this.seed ^ 0x2a11) * 1000;
+        const seedZ = hash2(gx, gz, this.seed ^ 0x3b22) * 1000;
+        // 蛇行トンネルに沿って, 自然な洞窟にぶつかるまでの深さを探す
+        // (見つからなければ短い袋小路として扱う)
+        let depth = 12;
+        for (let step = 2; step <= 24; step++) {
+          const y = eh - step;
+          if (y <= 3) { depth = step - 1; break; }
+          const [tx, tz] = this.entranceTunnelCenter(ex, ez, seedX, seedZ, step);
+          const localH = this.columnInfo(Math.round(tx), Math.round(tz)).h;
+          if (this.caveNoiseAt(Math.round(tx), y, Math.round(tz), localH)) { depth = step; break; }
         }
-        if (farBottom < 0) farBottom = Math.max(4, farH - 16);
-
-        // 2 ブロックごとに 1 段下がる階段状のスロープ (歩いて降りられる)
-        const tc = clamp(t, 0, RAMP_LEN);
-        const totalSteps = Math.max(1, Math.round(RAMP_LEN / 2));
-        const stepFrac = Math.round(tc / 2) / totalSteps;
-        bottom = Math.round(eh - stepFrac * (eh - farBottom));
+        c = { ex, ez, eh, seedX, seedZ, depth };
       }
     }
+    this.entranceCandCache.set(key, c);
+    return c;
+  }
 
-    if (this.entranceCache.size > 60000) this.entranceCache.clear();
-    this.entranceCache.set(key, bottom);
-    return bottom;
+  // (x, z) 列の近くにある入り口候補のリスト (複数チャンクにまたがるため周囲も見る)
+  nearbyEntranceCandidates(x, z) {
+    const key = x + "," + z;
+    let list = this.entranceColCache.get(key);
+    if (list) return list;
+    list = [];
+    const CELL = 8, R = 16;
+    const gx0 = Math.floor((x - R) / CELL), gx1 = Math.floor((x + R) / CELL);
+    const gz0 = Math.floor((z - R) / CELL), gz1 = Math.floor((z + R) / CELL);
+    for (let gz = gz0; gz <= gz1; gz++) {
+      for (let gx = gx0; gx <= gx1; gx++) {
+        const c = this.caveEntranceCandidate(gx, gz);
+        if (c) list.push(c);
+      }
+    }
+    if (this.entranceColCache.size > 60000) this.entranceColCache.clear();
+    this.entranceColCache.set(key, list);
+    return list;
+  }
+
+  // (x, y, z) が入り口の蛇行トンネルの内部かどうか
+  isCaveEntrance(x, y, z) {
+    const candidates = this.nearbyEntranceCandidates(x, z);
+    for (const c of candidates) {
+      const step = c.eh - y;
+      if (step < 0 || step > c.depth + 1) continue;
+      const [tx, tz] = this.entranceTunnelCenter(c.ex, c.ez, c.seedX, c.seedZ, step);
+      const dx = x - tx, dz = z - tz;
+      const edgeNoise = this.noiseCave2.noise2(x * 0.4 + 40, z * 0.4 - 40);
+      const radius = 1.7 + edgeNoise * 0.7 + Math.min(step, 3) * 0.15;
+      if (dx * dx + dz * dz <= radius * radius) return true;
+    }
+    return false;
   }
 
   // 地上のマグマだまり (まれに平地にできる小さな溶岩の池)
@@ -295,15 +321,12 @@ class World {
         const wx = ox + lx, wz = oz + lz;
         const { h, biome } = this.columnInfo(wx, wz);
         const sandy = biome === "desert" || h <= WATER_LEVEL + 1;
-        const entranceBottom = this.caveEntranceBottom(wx, wz, h);
         const lavaPool = this.surfaceLavaPool(wx, wz, h);
 
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === 0) {
             id = B.BEDROCK;
-          } else if (entranceBottom >= 0 && y > entranceBottom) {
-            id = B.AIR; // 洞窟の入り口 (歩いて降りられるスロープ)
           } else if (this.isCave(wx, y, wz, h)) {
             id = y <= CAVE_LAVA_Y ? B.LAVA_BLOCK : B.AIR; // 深い洞窟は溶岩で満たす
           } else if (lavaPool && y >= h - 1) {
