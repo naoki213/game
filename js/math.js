@@ -50,6 +50,19 @@ const Mat4 = {
     return out;
   },
 
+  // 正射影行列 (影MOD の平行光源シャドウマップ用)
+  ortho(out, left, right, bottom, top, near, far) {
+    out.fill(0);
+    out[0] = 2 / (right - left);
+    out[5] = 2 / (top - bottom);
+    out[10] = -2 / (far - near);
+    out[12] = -(right + left) / (right - left);
+    out[13] = -(top + bottom) / (top - bottom);
+    out[14] = -(far + near) / (far - near);
+    out[15] = 1;
+    return out;
+  },
+
   multiply(out, a, b) {
     const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
     const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
