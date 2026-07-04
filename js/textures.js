@@ -970,6 +970,28 @@ function buildTextureAtlas(seed) {
     return px(224, 214, 190, jitter(1, 0.04)); // 文字盤
   });
 
+  // ウィザースケルトンの頭蓋骨 (灰白色の骨, 黒い眼窩)
+  paintTile(TILE.WITHER_SKULL, (x, y) => {
+    const dx = x - 7.5, dy = y - 6;
+    if (dx * dx * 0.9 + dy * dy > 34) return [0, 0, 0, 0];
+    // 眼窩 x2
+    if ((x - 5) * (x - 5) + (y - 8) * (y - 8) < 2.4) return px(10, 10, 12, 1);
+    if ((x - 10) * (x - 10) + (y - 8) * (y - 8) < 2.4) return px(10, 10, 12, 1);
+    // 歯並び (下部の横縞)
+    if (y > 11 && x % 2 === 0) return px(60, 60, 64, 1);
+    return px(205, 202, 196, jitter(1, 0.05));
+  });
+
+  // ネザースター (中心から輝く光条つきの星形コア)
+  paintTile(TILE.NETHER_STAR, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    const spike = Math.pow(Math.abs(Math.cos(ang * 4)), 6) * 3;
+    if (d > 6 + spike) return [0, 0, 0, 0];
+    const core = Math.max(0, 1 - d / 5);
+    return px(230 + core * 25, 235 + core * 20, 200 + core * 55, jitter(1, 0.05));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {

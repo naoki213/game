@@ -99,6 +99,10 @@ const B = {
   NETHER_QUARTZ_ORE: 180,
   NETHER_PORTAL: 181,
   NETHER_BRICK: 182,
+  // 186-187: ウィザー召喚 (ソウルサンド + ウィザースケルトンの頭蓋骨のレア
+  // ドロップで T 字に組むと召喚される) 関連
+  WITHER_SKULL: 186,
+  NETHER_STAR: 187,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -369,6 +373,8 @@ const TILE = {
   NETHER_QUARTZ: 173,
   BLAZE_ROD: 174,
   COMPASS: 175,
+  WITHER_SKULL: 176,
+  NETHER_STAR: 177,
 };
 
 // 各ブロックの属性
@@ -734,6 +740,14 @@ defBlock(B.NETHER_PORTAL, "nether_portal", "ネザーポータル",
 defBlock(B.NETHER_BRICK, "nether_brick", "ネザーレンガ",
   [TILE.NETHER_BRICK, TILE.NETHER_BRICK, TILE.NETHER_BRICK],
   { hardness: 2.0, pickable: true, minTier: 1 });
+
+// --- ウィザー召喚関連 ---
+defBlock(B.WITHER_SKULL, "wither_skull", "ウィザースケルトンの頭蓋骨",
+  [TILE.WITHER_SKULL, TILE.WITHER_SKULL, TILE.WITHER_SKULL],
+  { hardness: 1.0, pickable: true, minTier: 0 });
+defBlock(B.NETHER_STAR, "nether_star", "ネザースター",
+  [TILE.NETHER_STAR, TILE.NETHER_STAR, TILE.NETHER_STAR],
+  { hardness: 1.0, drops: null, emissive: true });
 
 // --- 農地 (クワで耕した土, 上面がわずかに低い) ---
 defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],

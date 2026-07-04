@@ -1885,9 +1885,46 @@
     if (world.setBlock(px, py, pz, id)) {
       sound.place();
       checkFalling(px, py, pz); // 空中に置いた砂は落ちる
+      if (id === B.WITHER_SKULL) tryDetectWither(px, py, pz);
     } else if (gameMode === "survival") {
       addItem(id); // 失敗したら返却
     }
+  }
+
+  // ---------------- ウィザー召喚 ----------------
+  // ソウルサンドで T 字 (縦棒 + 横棒 3 個) を組み, 頭蓋骨を上の 3 マスに
+  // 置くと召喚される (本家準拠)。頭蓋骨はウィザースケルトンのレアドロップ
+  function tryDetectWither(px, py, pz) {
+    if (mobs.countType("wither_boss") > 0) return false;
+    const check = (cx, cy, cz, dx, dz) => {
+      for (let d = -1; d <= 1; d++) {
+        if (world.getBlock(cx + dx * d, cy, cz + dz * d) !== B.WITHER_SKULL) return false;
+        if (world.getBlock(cx + dx * d, cy - 1, cz + dz * d) !== B.SOUL_SAND) return false;
+      }
+      return world.getBlock(cx, cy - 2, cz) === B.SOUL_SAND;
+    };
+    for (const [dx, dz] of [[1, 0], [0, 1]]) {
+      for (let off = -1; off <= 1; off++) {
+        const cx = px - dx * off, cz = pz - dz * off;
+        if (!check(cx, py, cz, dx, dz)) continue;
+        for (let d = -1; d <= 1; d++) {
+          world.setBlock(cx + dx * d, py, cz + dz * d, B.AIR);
+          world.setBlock(cx + dx * d, py - 1, cz + dz * d, B.AIR);
+        }
+        world.setBlock(cx, py - 2, cz, B.AIR);
+        spawnWitherBoss(cx + 0.5, py + 0.5, cz + 0.5);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function spawnWitherBoss(x, y, z) {
+    mobs.mobs.push(new Mob("wither_boss", x, y, z));
+    spawnPuff(x, y, z, [0.15, 0.15, 0.18]);
+    explode(x, y, z, 3.5);
+    sound.blip(60, 1.0, "sawtooth", 0.5);
+    showToast("💀 ウィザーが召喚された!");
   }
 
   // 旧 API 互換 (テスト / デバッグフック用): 即時破壊 / 設置
@@ -2355,6 +2392,11 @@
               Math.floor(death.pos[0]), Math.floor(death.pos[1]), Math.floor(death.pos[2]));
           }
         }
+        // ウィザースケルトン: まれに頭蓋骨をドロップ (ウィザー召喚に必要)
+        if (gameMode === "survival" && death.type === "wither_skeleton" && Math.random() < 0.08) {
+          items.spawn(B.WITHER_SKULL,
+            Math.floor(death.pos[0]), Math.floor(death.pos[1]), Math.floor(death.pos[2]));
+        }
       }
       if (mobs.groanRequest) sound.groan();
       if (mobs.hissRequest) sound.hiss();
@@ -2524,6 +2566,8 @@
     exitNether,
     get netherReturnPos() { return netherReturnPos; },
     chests,
+    tryDetectWither,
+    spawnWitherBoss,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

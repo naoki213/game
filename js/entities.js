@@ -278,6 +278,36 @@ const MOB_TYPES = {
       [-0.11, -1.6, 0.88, 0.22, 1.8, 0.22, 0.85, 0.84, 0.82],
     ],
   },
+  // 召喚制のボスモブ (ソウルサンド + ウィザースケルトンの頭蓋骨 3 個で召喚)
+  wither_boss: {
+    speed: 2.0,
+    halfW: 1.0, height: 3.5,
+    health: 150,
+    hostile: true,
+    flying: true,
+    ranged: true,
+    witherSkull: true,   // 専用の暗い頭蓋骨状の弾を撃つ
+    noBurn: true,
+    regen: 0.4,           // 徐々に体力が回復する (先制で畳みかける必要がある)
+    attack: 8,
+    drops: B.NETHER_STAR, dropN: 1,
+    parts: [
+      // 胴体 (黒い骨の塊)
+      [-0.5, 1.6, -0.5, 1.0, 1.3, 1.0, 0.12, 0.11, 0.13],
+      // あばら x3
+      [-0.85, 1.7, -0.2, 0.3, 0.6, 0.4, 0.16, 0.15, 0.17],
+      [0.55, 1.7, -0.2, 0.3, 0.6, 0.4, 0.16, 0.15, 0.17],
+      [-0.3, 1.4, -0.75, 0.6, 0.7, 0.3, 0.16, 0.15, 0.17],
+      // 頭 x3 (中央が大きい)
+      [-0.3, 2.9, -0.3, 0.6, 0.6, 0.6, 0.75, 0.73, 0.7],
+      [-0.95, 2.5, -0.1, 0.42, 0.42, 0.42, 0.7, 0.68, 0.65],
+      [0.53, 2.5, -0.1, 0.42, 0.42, 0.42, 0.7, 0.68, 0.65],
+      // 目 x3 (青白く発光)
+      [-0.12, 3.05, 0.28, 0.1, 0.1, 0.04, 0.5, 0.9, 1.0],
+      [-0.78, 2.65, 0.28, 0.08, 0.08, 0.03, 0.5, 0.9, 1.0],
+      [0.7, 2.65, 0.28, 0.08, 0.08, 0.03, 0.5, 0.9, 1.0],
+    ],
+  },
 };
 
 const MOB_NAMES = Object.keys(MOB_TYPES);
@@ -453,6 +483,11 @@ class Mob {
   update(dt, world, player, daylight, mgr) {
     this.hurt = Math.max(0, this.hurt - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+
+    // --- ゆっくり体力が回復するボスモブ (ウィザー) ---
+    if (this.def.regen && this.health > 0 && this.health < this.def.health) {
+      this.health = Math.min(this.def.health, this.health + this.def.regen * dt);
+    }
 
     // --- エンダーマンの瞬間移動 (徘徊中もまれに, 水中では必ず) ---
     if (this.def.teleporter) {
@@ -679,7 +714,8 @@ class MobManager {
     const dz = player.pos[2] - from[2];
     const len = Math.hypot(dx, dy, dz) || 1;
     const fireball = !!mob.def.fireball;
-    const SPEED = fireball ? 12 : 17;
+    const witherSkull = !!mob.def.witherSkull;
+    const SPEED = fireball || witherSkull ? 12 : 17;
     this.arrows.push({
       pos: from,
       vel: [
@@ -690,6 +726,7 @@ class MobManager {
       life: 3,
       dmg: mob.def.attack || 3,
       fireball,
+      witherSkull,
     });
     this.shootRequest = true;
   }
@@ -944,7 +981,10 @@ class MobManager {
     // 矢: 速度方向を向いた細い棒 (ファイアボールは大きな橙の球状に)
     for (const a of this.arrows) {
       const yaw = Math.atan2(a.vel[0], a.vel[2]);
-      if (a.fireball) {
+      if (a.witherSkull) {
+        pushBox(verts, a.pos, Math.sin(yaw), Math.cos(yaw),
+          -0.24, -0.24, -0.24, 0.48, 0.48, 0.48, 0.12, 0.1, 0.16);
+      } else if (a.fireball) {
         pushBox(verts, a.pos, Math.sin(yaw), Math.cos(yaw),
           -0.28, -0.28, -0.28, 0.56, 0.56, 0.56, 1.0, 0.55, 0.15);
       } else {
