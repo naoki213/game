@@ -11,6 +11,10 @@ const VILLAGE_GRID = 320; // 村の配置グリッド (ブロック)
 // エンドポータルの間 (ストロングホールド) の固定座標。シードによらず常に同じ場所
 const STRONGHOLD = { x: 260, y: 20, z: 340 };
 
+// ジ・エンド (最終決戦場)。通常の地形生成とは全く別の, 遠く離れた固定座標に
+// 浮島 + 黒曜石の柱を生成する。シードによらず常に同じ内容
+const END = { x: 100000, z: 0, y: 64, islandR: 26, pillarR: 19, boundsR: 110 };
+
 // チャンク内インデックス: idx = (y << 8) | (z << 4) | x
 function blockIndex(x, y, z) {
   return (y << 8) | (z << 4) | x;
@@ -171,6 +175,10 @@ class World {
     return bottom;
   }
 
+  isInEnd(x, z) {
+    return Math.hypot(x - END.x, z - END.z) <= END.boundsR;
+  }
+
   generateChunk(cx, cz) {
     const key = World.key(cx, cz);
     let chunk = this.chunks.get(key);
@@ -183,6 +191,11 @@ class World {
     const ox = cx * CHUNK_SIZE;
     const oz = cz * CHUNK_SIZE;
     const seed = this.seed;
+
+    // --- ジ・エンド: 通常の地形生成を完全にスキップして専用の浮島を作る ---
+    if (this.isInEnd(ox + 8, oz + 8) || this.isInEnd(ox, oz) || this.isInEnd(ox + 15, oz + 15)) {
+      return this.generateEndChunk(chunk);
+    }
 
     // --- 列ごとの基本地形 ---
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -298,6 +311,53 @@ class World {
     this.stampStronghold(chunk);
 
     // --- 保存済みの編集を適用 ---
+    const edits = this.edits.get(key);
+    if (edits) {
+      for (const [idx, id] of edits) chunk.data[idx] = id;
+    }
+
+    chunk.generated = true;
+    chunk.dirty = true;
+    return chunk;
+  }
+
+  // ---------------- ジ・エンド (最終決戦場) ----------------
+
+  generateEndChunk(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    const { x: ex, z: ez, y: ey, islandR, pillarR } = END;
+
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        const wx = ox + lx, wz = oz + lz;
+        const dx = wx - ex, dz = wz - ez;
+        const d = Math.hypot(dx, dz);
+        if (d > islandR) continue;
+        // 中心が緩やかに盛り上がったエンドストーンの浮島 + 縁の欠け
+        const edgeNoise = hash2(wx, wz, this.seed ^ 0xe4d1) * 3;
+        if (d > islandR - 2 && edgeNoise < 1.1) continue; // 縁を不揃いに欠けさせる
+        const dome = Math.round(Math.max(0, (islandR - d) * 0.14));
+        const topY = ey + dome;
+        for (let y = ey - 5; y <= topY; y++) chunk.set(lx, y, lz, B.END_STONE);
+      }
+    }
+
+    // 黒曜石の柱 + てっぺんのエンダークリスタル (中心を囲む円状に配置)
+    const N = 8;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2;
+      const px = Math.round(ex + Math.cos(ang) * pillarR);
+      const pz = Math.round(ez + Math.sin(ang) * pillarR);
+      if (px < ox || px > ox + 15 || pz < oz || pz > oz + 15) continue;
+      const lx = px - ox, lz = pz - oz;
+      const pillarTop = ey + 7 + (i % 3) * 5; // 高さにばらつきをつける
+      for (let y = ey - 3; y <= pillarTop; y++) chunk.set(lx, y, lz, B.OBSIDIAN);
+      chunk.set(lx, pillarTop + 1, lz, B.END_CRYSTAL);
+    }
+
+    // --- 保存済みの編集を適用 (クリスタル破壊やポータル設置などを復元) ---
+    const key = World.key(chunk.cx, chunk.cz);
     const edits = this.edits.get(key);
     if (edits) {
       for (const [idx, id] of edits) chunk.data[idx] = id;

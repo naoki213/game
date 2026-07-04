@@ -538,8 +538,8 @@ class Renderer {
       gl.drawArrays(gl.LINES, 0, this.highlightCount);
     }
 
-    // --- 雲 ---
-    this.drawClouds(camPos, env, time);
+    // --- 雲 (ジ・エンドには存在しない) ---
+    if (!env.noClouds) this.drawClouds(camPos, env, time);
 
     // --- 手持ちブロック ---
     if (state.held) {

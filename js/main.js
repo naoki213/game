@@ -1459,6 +1459,55 @@
     showToast("🌀 エンドポータルが起動した! 中に入るとジ・エンドへ渡れる");
   }
 
+  // ---------------- ジ・エンドへの行き来 ----------------
+
+  let endReturnPos = null; // ジ・エンドへ渡る前のオーバーワールド座標
+  let portalCooldown = 0;
+
+  function enterEnd() {
+    endReturnPos = [...player.pos];
+    const { x: ex, y: ey, z: ez } = END;
+    // 浮島とその周辺チャンクを先に同期生成してから送る (奈落に落とさないため)
+    for (let cz = (ez - 32) >> 4; cz <= (ez + 32) >> 4; cz++) {
+      for (let cx = (ex - 32) >> 4; cx <= (ex + 32) >> 4; cx++) {
+        world.generateChunk(cx, cz);
+      }
+    }
+    player.pos = [ex + 0.5, ey + 3, ez - 8 + 0.5];
+    player.vel = [0, 0, 0];
+    player.flying = false;
+    showToast("🌌 ジ・エンドへ渡った…");
+    sound.blip(200, 0.6, "sine", 0.3);
+  }
+
+  function exitEnd() {
+    const back = endReturnPos || [8.5, world.surfaceY(8, 8) + 1, 8.5];
+    player.pos = [...back];
+    player.vel = [0, 0, 0];
+    showToast("オーバーワールドに帰還した");
+    sound.blip(500, 0.4, "sine", 0.25);
+  }
+
+  function updateEndPortalTravel(dt) {
+    portalCooldown = Math.max(0, portalCooldown - dt);
+    const inEndNow = world.isInEnd(player.pos[0], player.pos[2]);
+
+    // 奈落に落ちたら送還 (ジ・エンドの浮島の外に落下)
+    if (inEndNow && player.pos[1] < END.y - 30) {
+      player.takeDamage(4);
+      exitEnd();
+      return;
+    }
+
+    if (portalCooldown > 0) return;
+    const feet = world.getBlock(
+      Math.floor(player.pos[0]), Math.floor(player.pos[1] + 0.4), Math.floor(player.pos[2]));
+    if (feet !== B.END_PORTAL) return;
+    portalCooldown = 3;
+    if (!inEndNow) enterEnd();
+    else exitEnd();
+  }
+
   function placeAction() {
     swingTimer = 0;
     // 弓: 矢を放つ
@@ -1910,6 +1959,21 @@
   // ---------------- 昼夜サイクル ----------------
 
   function computeEnv(timeOfDay, fov) {
+    // ジ・エンド: 太陽も昼夜もない, 暗い虚空
+    if (world.isInEnd(player.pos[0], player.pos[2])) {
+      return {
+        sunDir: [0, 1, 0],
+        daylight: 0.42,
+        zenith: [0.03, 0.012, 0.05],
+        horizon: [0.09, 0.03, 0.11],
+        fog: [0.05, 0.02, 0.08],
+        fogStart: 12,
+        fogEnd: RENDER_DIST * CHUNK_SIZE - 6,
+        fov,
+        sunColor: [1, 0.92, 1],
+        noClouds: true,
+      };
+    }
     const angle = timeOfDay * Math.PI * 2;
     let sx = Math.cos(angle), sy = Math.sin(angle), sz = 0.28;
     const sl = Math.hypot(sx, sy, sz);
@@ -2017,6 +2081,7 @@
       updateParticles(dt);
 
       updateWeather(dt);
+      updateEndPortalTravel(dt);
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
@@ -2193,6 +2258,9 @@
     placeAction,
     tryActivateEndPortal,
     endPortalFrameCoords,
+    enterEnd,
+    exitEnd,
+    get endReturnPos() { return endReturnPos; },
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());
