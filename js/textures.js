@@ -1059,6 +1059,77 @@ function buildTextureAtlas(seed) {
     return px(235, 165, 168, jitter(1, 0.05));
   });
 
+  // スケルトンの骨 (継ぎ目の縦筋入り)
+  paintTile(TILE.MOB_SKELETON_BONE, (x, y) => {
+    const line = x % 4 === 0 && hash2(x, y, 0x3001) > 0.5;
+    if (line) return px(150, 150, 142, jitter(1, 0.05));
+    return px(222, 220, 206, jitter(1, 0.06));
+  });
+
+  // クモの毛 (暗い毛羽立ち, まれに明るい毛先)
+  paintTile(TILE.MOB_SPIDER_FUR, (x, y) => {
+    const fleck = hash2(x, y, 0x3002) > 0.85;
+    const v = fleck ? 1.35 : 1;
+    return px(35, 28, 32, jitter(v, 0.16));
+  });
+
+  // エンダーマンの肌 (漆黒に紫の粒子)
+  paintTile(TILE.MOB_ENDERMAN_SKIN, (x, y) => {
+    const fleck = hash2(x, y, 0x3003) > 0.9;
+    if (fleck) return px(90, 40, 130, jitter(1, 0.12));
+    return px(18, 14, 22, jitter(1, 0.1));
+  });
+
+  // ニワトリの羽毛 (白, 細い羽根の筋)
+  paintTile(TILE.MOB_CHICKEN_FEATHER, (x, y) => {
+    const line = y % 3 === 0;
+    return px(240, 236, 226, jitter(line ? 0.93 : 1, 0.04));
+  });
+
+  // 村人のローブ (布の縦の折り目)
+  paintTile(TILE.MOB_VILLAGER_ROBE, (x, y) => {
+    const fold = x % 4 === 2;
+    return px(112, 76, 52, jitter(fold ? 0.82 : 1, 0.05));
+  });
+
+  // 村人の肌 (なめらかなクリーム色)
+  paintTile(TILE.MOB_VILLAGER_SKIN, (x, y) => {
+    return px(222, 178, 148, jitter(1, 0.04));
+  });
+
+  // オオカミの毛 (灰色のまだらな毛並み)
+  paintTile(TILE.MOB_WOLF_FUR, (x, y) => {
+    const n = hash2((x * 0.5) | 0, (y * 0.5) | 0, 0x3004);
+    return px(150, 140, 128, jitter(0.85 + n * 0.3, 0.06));
+  });
+
+  // ゾンビピッグマンの肌 (ピンクがかった斑点入りの肌)
+  paintTile(TILE.MOB_PIGMAN_SKIN, (x, y) => {
+    const spot = hash2(x, y, 0x3005) > 0.85;
+    if (spot) return px(200, 110, 105, jitter(1, 0.08));
+    return px(230, 150, 145, jitter(1, 0.08));
+  });
+
+  // ブレイズの火柱 (揺らめく橙と黄色)
+  paintTile(TILE.MOB_BLAZE_FIRE, (x, y) => {
+    const flick = hash2(x, (y + ((x * 3) % 5)) | 0, 0x3006);
+    return px(255, 180, 60, jitter(0.7 + flick * 0.6, 0.08));
+  });
+
+  // ウィザースケルトンの骨 (黒ずんだ骨)
+  paintTile(TILE.MOB_WITHER_SKELETON_BONE, (x, y) => {
+    const line = x % 4 === 0 && hash2(x, y, 0x3007) > 0.5;
+    if (line) return px(28, 28, 30, jitter(1, 0.08));
+    return px(58, 56, 60, jitter(1, 0.08));
+  });
+
+  // ギャストの体 (ふわふわした白い雲状の模様)
+  paintTile(TILE.MOB_GHAST_BODY, (x, y) => {
+    const n = hash2((x * 0.4) | 0, (y * 0.4) | 0, 0x3008) * 0.5 +
+      hash2(x, y, 0x3009) * 0.5;
+    return px(225, 225, 222, jitter(0.85 + n * 0.25, 0.03));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {
