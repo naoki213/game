@@ -253,6 +253,31 @@ const MOB_TYPES = {
       [-0.24, 1.65, -0.24, 0.48, 0.48, 0.48, 0.2, 0.19, 0.21],
     ],
   },
+  ghast: {
+    speed: 1.2,
+    halfW: 1.4, height: 1.7,
+    health: 15,
+    hostile: true,
+    flying: true,
+    ranged: true,
+    fireball: true,      // ファイアボールを撃つ (見た目と高ダメージ)
+    noBurn: true,
+    attack: 6,
+    drops: I.GUNPOWDER, dropN: 2,
+    parts: [
+      // 白くふわふわした大きな体
+      [-1.4, 0.2, -1.4, 2.8, 2.4, 2.8, 0.88, 0.88, 0.86],
+      // 顔 (眉と口)
+      [-0.6, 1.6, -1.42, 0.35, 0.18, 0.05, 0.15, 0.14, 0.14],
+      [0.25, 1.6, -1.42, 0.35, 0.18, 0.05, 0.15, 0.14, 0.14],
+      [-0.35, 1.15, -1.42, 0.7, 0.3, 0.05, 0.15, 0.14, 0.14],
+      // 垂れ下がる触手 x4
+      [-1.1, -1.6, -0.3, 0.22, 1.8, 0.22, 0.85, 0.84, 0.82],
+      [0.88, -1.6, -0.3, 0.22, 1.8, 0.22, 0.85, 0.84, 0.82],
+      [-0.11, -1.6, -1.1, 0.22, 1.8, 0.22, 0.85, 0.84, 0.82],
+      [-0.11, -1.6, 0.88, 0.22, 1.8, 0.22, 0.85, 0.84, 0.82],
+    ],
+  },
 };
 
 const MOB_NAMES = Object.keys(MOB_TYPES);
@@ -653,7 +678,8 @@ class MobManager {
     const dy = (player.pos[1] + 1.1) - from[1];
     const dz = player.pos[2] - from[2];
     const len = Math.hypot(dx, dy, dz) || 1;
-    const SPEED = 17;
+    const fireball = !!mob.def.fireball;
+    const SPEED = fireball ? 12 : 17;
     this.arrows.push({
       pos: from,
       vel: [
@@ -662,6 +688,8 @@ class MobManager {
         (dz / len) * SPEED + (Math.random() - 0.5) * 1.2,
       ],
       life: 3,
+      dmg: mob.def.attack || 3,
+      fireball,
     });
     this.shootRequest = true;
   }
@@ -725,7 +753,7 @@ class MobManager {
         const dz = a.pos[2] - player.pos[2];
         const dy = a.pos[1] - player.pos[1];
         if (!player.dead && Math.abs(dx) < 0.5 && Math.abs(dz) < 0.5 && dy > -0.2 && dy < 1.9) {
-          player.takeDamage(3);
+          player.takeDamage(a.dmg || 3);
           player.vel[0] += a.vel[0] * 0.12;
           player.vel[2] += a.vel[2] * 0.12;
           this.arrows.splice(i, 1);
@@ -822,7 +850,8 @@ class MobManager {
         if (this.world.getBlock(x, y, z) === B.AIR && this.world.getBlock(x, y + 1, z) === B.AIR &&
             this.world.getBlock(x, y, z) !== B.LAVA_BLOCK) {
           const r = Math.random();
-          const type = r < 0.55 ? "zombie_pigman" : r < 0.85 ? "blaze" : "wither_skeleton";
+          const type = r < 0.5 ? "zombie_pigman" : r < 0.72 ? "blaze" :
+            r < 0.88 ? "wither_skeleton" : "ghast";
           this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
           return;
         }
@@ -912,11 +941,16 @@ class MobManager {
       }
     }
 
-    // 矢: 速度方向を向いた細い棒
+    // 矢: 速度方向を向いた細い棒 (ファイアボールは大きな橙の球状に)
     for (const a of this.arrows) {
       const yaw = Math.atan2(a.vel[0], a.vel[2]);
-      pushBox(verts, a.pos, Math.sin(yaw), Math.cos(yaw),
-        -0.035, -0.035, -0.3, 0.07, 0.07, 0.6, 0.5, 0.4, 0.28);
+      if (a.fireball) {
+        pushBox(verts, a.pos, Math.sin(yaw), Math.cos(yaw),
+          -0.28, -0.28, -0.28, 0.56, 0.56, 0.56, 1.0, 0.55, 0.15);
+      } else {
+        pushBox(verts, a.pos, Math.sin(yaw), Math.cos(yaw),
+          -0.035, -0.035, -0.3, 0.07, 0.07, 0.6, 0.5, 0.4, 0.28);
+      }
     }
 
     // エンダードラゴン
