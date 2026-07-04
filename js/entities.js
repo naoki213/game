@@ -189,6 +189,31 @@ const MOB_TYPES = {
       [0.06, 0, -0.05, 0.08, 0.28, 0.08, 0.9, 0.65, 0.25],
     ],
   },
+  villager: {
+    speed: 1.0,
+    halfW: 0.3, height: 1.95,
+    health: 20,
+    hostile: false,
+    villager: true,   // 村の中だけに自然スポーンする NPC
+    parts: [
+      // 靴 (ローブの裾からわずかに覗く)
+      [-0.16, 0, -0.1, 0.32, 0.12, 0.2, 0.25, 0.22, 0.2],
+      // ローブ (裾広がり, 脚を覆う)
+      [-0.28, 0.12, -0.16, 0.56, 0.66, 0.32, 0.45, 0.32, 0.22],
+      // 胴体 (肩まわり)
+      [-0.25, 0.78, -0.14, 0.5, 0.55, 0.28, 0.42, 0.3, 0.2],
+      // 腕 x2
+      [-0.4, 0.85, -0.1, 0.15, 0.5, 0.2, 0.42, 0.3, 0.2],
+      [0.25, 0.85, -0.1, 0.15, 0.5, 0.2, 0.42, 0.3, 0.2],
+      // 頭 (大きめ)
+      [-0.3, 1.33, -0.3, 0.6, 0.6, 0.6, 0.85, 0.68, 0.5],
+      // 鼻 (前に突き出た大きな鼻)
+      [-0.07, 1.42, 0.3, 0.14, 0.22, 0.16, 0.62, 0.42, 0.28],
+      // 目 x2 (緑)
+      [-0.22, 1.62, 0.28, 0.09, 0.07, 0.03, 0.2, 0.55, 0.15],
+      [0.13, 1.62, 0.28, 0.09, 0.07, 0.03, 0.2, 0.55, 0.15],
+    ],
+  },
   wolf: {
     speed: 2.6,
     halfW: 0.32, height: 0.85,
@@ -994,7 +1019,18 @@ class MobManager {
         this.mobs.push(new Mob("wolf", x + 0.5, y + 1.01, z + 0.5));
         return;
       }
-      const passive = MOB_NAMES.filter((n) => !MOB_TYPES[n].hostile && !MOB_TYPES[n].neutral && !MOB_TYPES[n].tamable);
+      // 村の中には村人が住んでいる
+      const vgx = Math.floor(x / VILLAGE_GRID), vgz = Math.floor(z / VILLAGE_GRID);
+      const village = this.world.villageInCell(vgx, vgz);
+      if (village) {
+        const vdx = x - village.cx, vdz = z - village.cz;
+        if (vdx * vdx + vdz * vdz < 30 * 30 &&
+            this.countType("villager") < 6 && Math.random() < 0.25) {
+          this.mobs.push(new Mob("villager", x + 0.5, y + 1.01, z + 0.5));
+          return;
+        }
+      }
+      const passive = MOB_NAMES.filter((n) => !MOB_TYPES[n].hostile && !MOB_TYPES[n].neutral && !MOB_TYPES[n].tamable && !MOB_TYPES[n].villager);
       const type = passive[(Math.random() * passive.length) | 0];
       this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
     }
