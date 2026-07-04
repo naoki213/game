@@ -1271,16 +1271,22 @@ function pushBoxTex(verts, pos, sin, cos, ox, oy, oz, w, h, d, tile, tr, tg, tb,
     ]);
   }
   const uv = tileUV(tile);
-  const uvs = [[uv.u0, uv.v0], [uv.u0, uv.v1], [uv.u1, uv.v1], [uv.u1, uv.v0]];
   const faceUV = faceTile !== undefined ? tileUV(faceTile) : null;
-  const faceUVs = faceUV && [[faceUV.u0, faceUV.v0], [faceUV.u0, faceUV.v1], [faceUV.u1, faceUV.v1], [faceUV.u1, faceUV.v0]];
+  // 面ごとの角の並び順 (idx) は pushBox 由来でカメラ視点での回転オフセットが異なるため,
+  // UV 4点サイクルを面ごとに回転させて正しい向きに揃える (揃えないと顔などが90度回転して見える)
+  const rotUV = (t, shift) => {
+    const cycle = [[t.u0, t.v0], [t.u0, t.v1], [t.u1, t.v1], [t.u1, t.v0]];
+    const out = [];
+    for (let i = 0; i < 4; i++) out.push(cycle[(i + shift) % 4]);
+    return out;
+  };
   const faces = [
-    [[2, 6, 7, 3], BOX_SHADE.top, uvs],
-    [[0, 1, 5, 4], BOX_SHADE.bottom, uvs],
-    [[4, 5, 7, 6], BOX_SHADE.south, faceUVs || uvs],   // +Z (正面, 顔)
-    [[1, 0, 2, 3], BOX_SHADE.north, uvs],
-    [[1, 3, 7, 5], BOX_SHADE.east, uvs],
-    [[4, 6, 2, 0], BOX_SHADE.west, uvs],
+    [[2, 6, 7, 3], BOX_SHADE.top, rotUV(uv, 0)],
+    [[0, 1, 5, 4], BOX_SHADE.bottom, rotUV(uv, 1)],
+    [[4, 5, 7, 6], BOX_SHADE.south, rotUV(faceUV || uv, 1)],   // +Z (正面, 顔)
+    [[1, 0, 2, 3], BOX_SHADE.north, rotUV(uv, 1)],
+    [[1, 3, 7, 5], BOX_SHADE.east, rotUV(uv, 2)],
+    [[4, 6, 2, 0], BOX_SHADE.west, rotUV(uv, 2)],
   ];
   for (const [idx, shade, faceUvSet] of faces) {
     const quad = idx.map((i) => corners[i]);
