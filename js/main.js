@@ -2387,6 +2387,32 @@
   let pendingShot = false;
   let stepAccum = 0;
 
+  // プレイヤー / モブの足元に落ちる柔らかい接地シャドウ (簡易版)
+  function buildShadowQuads() {
+    const verts = [];
+    const push = (ex, ez, feetY, halfW) => {
+      let gy = -1;
+      for (let d = 0; d <= 6; d++) {
+        const by = Math.floor(feetY) - d;
+        if (by < 0) break;
+        if (world.isSolidAt(Math.floor(ex), by, Math.floor(ez))) { gy = by + 1; break; }
+      }
+      if (gy < 0) return;
+      const gap = feetY - gy;
+      const alpha = clamp(1 - gap / 5, 0, 1);
+      if (alpha <= 0.02) return;
+      const r = halfW, y = gy + 0.02;
+      const quad = [
+        [ex - r, y, ez - r, -1, -1], [ex + r, y, ez - r, 1, -1], [ex + r, y, ez + r, 1, 1],
+        [ex - r, y, ez - r, -1, -1], [ex + r, y, ez + r, 1, 1], [ex - r, y, ez + r, -1, 1],
+      ];
+      for (const [x, yy, z, u, v] of quad) verts.push(x, yy, z, u, v, alpha);
+    };
+    push(player.pos[0], player.pos[2], player.pos[1], 0.32);
+    for (const m of mobs.mobs) push(m.pos[0], m.pos[2], m.pos[1], m.def.halfW);
+    return new Float32Array(verts);
+  }
+
   function frame(now) {
     requestAnimationFrame(frame);
     let dt = Math.min((now - lastT) / 1000, 0.1);
@@ -2523,6 +2549,7 @@
       time: elapsed,
       particles: { data: particleData, count: particles.length },
       entities: mobs.buildVertexData(),
+      shadows: buildShadowQuads(),
       items: (fallingBlocks.length > 0 || primedTNT.length > 0)
         ? items.items.concat(fallingBlocks, primedTNT)
         : items.items,
@@ -2635,6 +2662,8 @@
     tryDetectWither,
     spawnWitherBoss,
     particles,
+    buildShadowQuads,
+    renderer,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

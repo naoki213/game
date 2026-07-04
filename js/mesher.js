@@ -115,16 +115,16 @@ function computeLight(world, chunk) {
   // --- スカイライト: 各列の最初の不透明ブロックまで 15 ---
   for (let rz = 0; rz < LSZ; rz++) {
     for (let rx = 0; rx < LSX; rx++) {
+      let level = 15;
       for (let y = CHUNK_H - 1; y >= 0; y--) {
         const i = lIdx(rx, y, rz);
         const id = lightBlocks[i];
         if (OPAQUE_LUT[id]) break;
-        // 水中はスカイライトを減衰させる (2/ブロック)
-        lightSky[i] = 15;
+        lightSky[i] = level;
         lightQueue[tail++] = i;
         if (id === B.WATER) {
-          // 水面から下は別途減衰伝播に任せる
-          for (let wy = y, l = 15; wy >= 0; wy--) {
+          // 水面から下は別途減衰伝播に任せる (2/ブロック)
+          for (let wy = y, l = level; wy >= 0; wy--) {
             const wi = lIdx(rx, wy, rz);
             const wid = lightBlocks[wi];
             if (OPAQUE_LUT[wid]) break;
@@ -134,6 +134,8 @@ function computeLight(world, chunk) {
           }
           break;
         }
+        // 葉は不透明ではないが光をわずかに遮る (木の下に木漏れ日の木陰ができる)
+        if (id === B.LEAVES) level = Math.max(0, level - 2);
       }
     }
   }
@@ -280,9 +282,12 @@ function buildChunkMesh(world, chunk) {
           for (const q of quads) {
             const vi = opaque.count;
             for (let ci = 0; ci < 4; ci++) {
-              // 24 + shade = 法線インデックス 6 (方向なし)
+              // 24 + shade = 法線インデックス 6 (方向なし)。
+              // 先端 (ci 0,3) は 28 + shade = インデックス 7 にして, 頂点シェーダで
+              // 根元は揺れず先端だけそよ風で揺れるようにする
+              const top = ci === 0 || ci === 3;
               opaque.verts.push(q[ci][0], q[ci][1], q[ci][2],
-                quadUV[ci][0], quadUV[ci][1], 24.95, sky, blk);
+                quadUV[ci][0], quadUV[ci][1], top ? 28.95 : 24.95, sky, blk);
             }
             // 両面 (表裏の三角形を両方積む)
             opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);

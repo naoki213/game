@@ -24,20 +24,27 @@ varying float vDist;
 varying vec3 vWorldPos;
 void main() {
   vec3 pos = aPos;
-  // 水面の波
-  if (uWave > 0.5) {
-    pos.y += sin(pos.x * 1.1 + uTime * 1.8) * 0.045
-           + cos(pos.z * 0.9 + uTime * 1.4) * 0.045;
-  }
-  gl_Position = uMVP * vec4(pos, 1.0);
-  vUV = aUV;
-  vWorldPos = pos;
 
   // aShade から法線インデックスと AO シェードを取り出す
   float idx = floor(aShade * 0.25 + 0.001);
   float shade = aShade - idx * 4.0;
 
-  // 面の法線 (idx 6 = 植生など方向なし)
+  // 水面の波
+  if (uWave > 0.5) {
+    pos.y += sin(pos.x * 1.1 + uTime * 1.8) * 0.045
+           + cos(pos.z * 0.9 + uTime * 1.4) * 0.045;
+  }
+  // 草花の先端: 根元は揺れず, 先端だけそよ風でなびく (idx 7 = 植生の先端)
+  if (idx > 6.5) {
+    float sway = sin(uTime * 1.6 + pos.x * 0.7 + pos.z * 0.7) * 0.09;
+    pos.x += sway;
+    pos.z += sway * 0.6;
+  }
+  gl_Position = uMVP * vec4(pos, 1.0);
+  vUV = aUV;
+  vWorldPos = pos;
+
+  // 面の法線 (idx 6/7 = 植生など方向なし)
   vec3 N = vec3(0.0);
   if (idx < 0.5) N = vec3(1.0, 0.0, 0.0);
   else if (idx < 1.5) N = vec3(-1.0, 0.0, 0.0);
@@ -191,6 +198,30 @@ void main() {
   gl_FragColor = vec4(vCol * uLight, 1.0);
 }`;
 
+const SHADOW_VS = `
+attribute vec3 aPos;
+attribute vec2 aUV;
+attribute float aAlpha;
+uniform mat4 uMVP;
+varying vec2 vUV;
+varying float vAlpha;
+void main() {
+  gl_Position = uMVP * vec4(aPos, 1.0);
+  vUV = aUV;
+  vAlpha = aAlpha;
+}`;
+
+const SHADOW_FS = `
+precision mediump float;
+varying vec2 vUV;
+varying float vAlpha;
+void main() {
+  float d = length(vUV);
+  if (d > 1.0) discard;
+  float a = (1.0 - d * d) * vAlpha;
+  gl_FragColor = vec4(0.0, 0.0, 0.0, a * 0.45);
+}`;
+
 const COLOR_VS = `
 attribute vec3 aPos;
 uniform mat4 uMVP;
@@ -221,10 +252,12 @@ class Renderer {
     this.progSky = this.createProgram(SKY_VS, SKY_FS);
     this.progColor = this.createProgram(COLOR_VS, COLOR_FS);
     this.progPoint = this.createProgram(POINT_VS, POINT_FS);
+    this.progShadow = this.createProgram(SHADOW_VS, SHADOW_FS);
 
     // パーティクル用の動的バッファ
     this.particleBuf = gl.createBuffer();
     this.entityBuf = gl.createBuffer();
+    this.shadowBuf = gl.createBuffer();
 
     // --- テクスチャアトラス ---
     this.atlas = gl.createTexture();
@@ -458,6 +491,30 @@ class Renderer {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
       drawCalls++;
+    }
+
+    // --- 接地シャドウ (プレイヤー / モブの足元に落ちる柔らかい影) ---
+    if (state.shadows && state.shadows.length > 0) {
+      const ps = this.progShadow;
+      gl.useProgram(ps.prog);
+      gl.uniformMatrix4fv(ps.uniforms.uMVP, false, this.mvp);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.disable(gl.CULL_FACE);
+      gl.depthMask(false);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, state.shadows, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(ps.attribs.aPos);
+      gl.vertexAttribPointer(ps.attribs.aPos, 3, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(ps.attribs.aUV);
+      gl.vertexAttribPointer(ps.attribs.aUV, 2, gl.FLOAT, false, 24, 12);
+      gl.enableVertexAttribArray(ps.attribs.aAlpha);
+      gl.vertexAttribPointer(ps.attribs.aAlpha, 1, gl.FLOAT, false, 24, 20);
+      gl.drawArrays(gl.TRIANGLES, 0, state.shadows.length / 6);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.CULL_FACE);
+      gl.useProgram(pw.prog);
     }
 
     // --- 破壊ひび割れ (対象ブロックに重ねる) ---
