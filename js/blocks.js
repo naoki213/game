@@ -676,9 +676,9 @@ defBlock(B.COPPER_OXIDIZED, "copper_oxidized", "緑青の銅",
   [TILE.COPPER_OXIDIZED, TILE.COPPER_OXIDIZED, TILE.COPPER_OXIDIZED], deco);
 defBlock(B.CRYSTAL, "crystal", "クリスタル", [TILE.CRYSTAL, TILE.CRYSTAL, TILE.CRYSTAL],
   { hardness: 0.8, opaque: false, emissive: true });
-defBlock(B.LAVA_BLOCK, "lava_block", "溶岩ブロック",
+defBlock(B.LAVA_BLOCK, "lava_block", "溶岩",
   [TILE.LAVA_BLOCK, TILE.LAVA_BLOCK, TILE.LAVA_BLOCK],
-  { hardness: 1.6, pickable: true, minTier: 1, emissive: true });
+  { opaque: false, solid: false, hardness: Infinity, drops: null, emissive: true });
 defBlock(B.ASPHALT, "asphalt", "アスファルト", [TILE.ASPHALT, TILE.ASPHALT, TILE.ASPHALT], deco);
 defBlock(B.ROAD_LINE, "road_line", "白線アスファルト",
   [TILE.ROAD_LINE, TILE.ASPHALT, TILE.ASPHALT], deco);

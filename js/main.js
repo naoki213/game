@@ -1625,6 +1625,67 @@
     else exitEnd();
   }
 
+  // ---------------- ネザーへの行き来 ----------------
+
+  let netherReturnPos = null;
+  let netherPortalCooldown = 0;
+
+  function enterNether() {
+    netherReturnPos = [...player.pos];
+    const [nx, nz] = toNether(player.pos[0], player.pos[2]);
+    for (let cz = (nz - 24) >> 4; cz <= (nz + 24) >> 4; cz++) {
+      for (let cx = (nx - 24) >> 4; cx <= (nx + 24) >> 4; cx++) {
+        world.generateChunk(cx, cz);
+      }
+    }
+    const sy = world.findSafeNetherY(nx, nz);
+    player.pos = [nx + 0.5, sy, nz + 0.5];
+    player.vel = [0, 0, 0];
+    player.flying = false;
+    showToast("🔥 ネザーへ渡った…");
+    sound.blip(150, 0.6, "sawtooth", 0.3);
+  }
+
+  function exitNether() {
+    const back = netherReturnPos || [8.5, world.surfaceY(8, 8) + 1, 8.5];
+    const bx = Math.floor(back[0]), bz = Math.floor(back[2]);
+    world.generateChunk(bx >> 4, bz >> 4);
+    // 戻り先が塞がれていたら, 頭上 2 マス分空くところまで安全な高さに調整する
+    // (彷徨わないよう上限を設ける)
+    let by = Math.floor(back[1]);
+    const top = Math.min(CHUNK_H - 3, by + 40);
+    while (by < top && (world.isSolidAt(bx, by, bz) || world.isSolidAt(bx, by + 1, bz))) by++;
+    player.pos = [back[0], Math.max(back[1], by), back[2]];
+    player.vel = [0, 0, 0];
+    showToast("オーバーワールドに帰還した");
+    sound.blip(450, 0.4, "sine", 0.25);
+  }
+
+  function updateNetherPortalTravel(dt) {
+    netherPortalCooldown = Math.max(0, netherPortalCooldown - dt);
+    if (netherPortalCooldown > 0) return;
+    const feet = world.getBlock(
+      Math.floor(player.pos[0]), Math.floor(player.pos[1] + 0.4), Math.floor(player.pos[2]));
+    if (feet !== B.NETHER_PORTAL) return;
+    netherPortalCooldown = 3;
+    if (!world.isInNether(player.pos[0], player.pos[2])) enterNether();
+    else exitNether();
+  }
+
+  // 溶岩に触れるとダメージ (水中と違って燃え続ける)
+  let lavaBurnAccum = 0;
+  function updateLavaDamage(dt) {
+    const inLava = world.getBlock(
+      Math.floor(player.pos[0]), Math.floor(player.pos[1] + 0.5), Math.floor(player.pos[2])) === B.LAVA_BLOCK;
+    if (!inLava) { lavaBurnAccum = 0; return; }
+    lavaBurnAccum += dt;
+    if (lavaBurnAccum >= 0.5) {
+      lavaBurnAccum -= 0.5;
+      player.takeDamage(4);
+      player.vel[1] = Math.max(player.vel[1], 2.5); // 少し浮かせる (泳げないので溺れ防止)
+    }
+  }
+
   function placeAction() {
     swingTimer = 0;
     // 弓: 矢を放つ
@@ -2106,6 +2167,21 @@
         noClouds: true,
       };
     }
+    // ネザー: 太陽も昼夜もない, 赤黒く霞んだ空間
+    if (world.isInNether(player.pos[0], player.pos[2])) {
+      return {
+        sunDir: [0, 1, 0],
+        daylight: 0.5,
+        zenith: [0.14, 0.03, 0.02],
+        horizon: [0.32, 0.09, 0.04],
+        fog: [0.28, 0.08, 0.04],
+        fogStart: 8,
+        fogEnd: 42,
+        fov,
+        sunColor: [1.15, 0.7, 0.5],
+        noClouds: true,
+      };
+    }
     const angle = timeOfDay * Math.PI * 2;
     let sx = Math.cos(angle), sy = Math.sin(angle), sz = 0.28;
     const sl = Math.hypot(sx, sy, sz);
@@ -2214,6 +2290,8 @@
 
       updateWeather(dt);
       updateEndPortalTravel(dt);
+      updateNetherPortalTravel(dt);
+      updateLavaDamage(dt);
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
@@ -2396,6 +2474,9 @@
     get endReturnPos() { return endReturnPos; },
     get dragonDefeated() { return dragonDefeated; },
     tryIgnitePortal,
+    enterNether,
+    exitNether,
+    get netherReturnPos() { return netherReturnPos; },
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

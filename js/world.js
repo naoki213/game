@@ -15,6 +15,17 @@ const STRONGHOLD = { x: 260, y: 20, z: 340 };
 // 浮島 + 黒曜石の柱を生成する。シードによらず常に同じ内容
 const END = { x: 100000, z: 0, y: 64, islandR: 26, pillarR: 19, boundsR: 110 };
 
+// ネザー。オーバーワールドとは別の, さらに遠く離れた固定領域に生成する
+// 洞窟だらけの世界。オーバーワールド座標を 1/8 に縮めてこの領域内に写像する
+// (本家の「ネザー経由の高速移動」の簡易版)
+const NETHER = { x: -200000, z: 0, boundsR: 4000, lavaY: 30, scale: 8 };
+function toNether(wx, wz) {
+  return [NETHER.x + Math.floor(wx / NETHER.scale), NETHER.z + Math.floor(wz / NETHER.scale)];
+}
+function fromNether(nx, nz) {
+  return [(nx - NETHER.x) * NETHER.scale, (nz - NETHER.z) * NETHER.scale];
+}
+
 // チャンク内インデックス: idx = (y << 8) | (z << 4) | x
 function blockIndex(x, y, z) {
   return (y << 8) | (z << 4) | x;
@@ -179,6 +190,10 @@ class World {
     return Math.hypot(x - END.x, z - END.z) <= END.boundsR;
   }
 
+  isInNether(x, z) {
+    return Math.hypot(x - NETHER.x, z - NETHER.z) <= NETHER.boundsR;
+  }
+
   // 8 本の柱の上にあるエンダークリスタルの座標 (generateEndChunk と同じ式)
   endCrystalCoords() {
     const { x: ex, z: ez, y: ey, pillarR } = END;
@@ -210,6 +225,10 @@ class World {
     // --- ジ・エンド: 通常の地形生成を完全にスキップして専用の浮島を作る ---
     if (this.isInEnd(ox + 8, oz + 8) || this.isInEnd(ox, oz) || this.isInEnd(ox + 15, oz + 15)) {
       return this.generateEndChunk(chunk);
+    }
+    // --- ネザー: 通常の地形生成を完全にスキップして洞窟だらけの世界を作る ---
+    if (this.isInNether(ox + 8, oz + 8) || this.isInNether(ox, oz) || this.isInNether(ox + 15, oz + 15)) {
+      return this.generateNetherChunk(chunk);
     }
 
     // --- 列ごとの基本地形 ---
@@ -381,6 +400,73 @@ class World {
     chunk.generated = true;
     chunk.dirty = true;
     return chunk;
+  }
+
+  // ---------------- ネザー ----------------
+  // 上下を岩盤で挟んだ, ネザーラックの塊を洞窟ノイズでくり抜いた世界。
+  // 低い場所 (y < NETHER.lavaY) の空洞は溶岩の海になる
+
+  isNetherCave(wx, y, wz) {
+    const n = this.noiseCave.noise3(wx * 0.06 + 4000, y * 0.09 - 4000, wz * 0.06 + 4000);
+    const n2 = this.noiseCave2.noise3(wx * 0.03 - 4000, y * 0.05 + 4000, wz * 0.03 - 4000);
+    return n > 0.26 || n2 > 0.35;
+  }
+
+  generateNetherChunk(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    const seed = this.seed;
+
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        const wx = ox + lx, wz = oz + lz;
+        chunk.set(lx, 0, lz, B.BEDROCK);
+        chunk.set(lx, CHUNK_H - 1, lz, B.BEDROCK);
+        for (let y = 1; y <= CHUNK_H - 2; y++) {
+          if (this.isNetherCave(wx, y, wz)) {
+            chunk.set(lx, y, lz, y < NETHER.lavaY ? B.LAVA_BLOCK : B.AIR);
+            continue;
+          }
+          const r = hash3(wx, y, wz, seed ^ 0x4e37e2);
+          let id = B.NETHERRACK;
+          if (r < 0.012) id = B.NETHER_QUARTZ_ORE;
+          else if (r < 0.03) id = B.SOUL_SAND;
+          chunk.set(lx, y, lz, id);
+        }
+      }
+    }
+
+    // --- 保存済みの編集を適用 ---
+    const key = World.key(chunk.cx, chunk.cz);
+    const edits = this.edits.get(key);
+    if (edits) {
+      for (const [idx, id] of edits) chunk.data[idx] = id;
+    }
+
+    chunk.generated = true;
+    chunk.dirty = true;
+    return chunk;
+  }
+
+  // ネザーの (nx, y, nz) 付近で安全な (溶岩に埋まっていない, 頭上が開けた) 足場の Y を探す。
+  // 見つからなければ nx,nz に人工的な足場を彫って安全を確保する
+  findSafeNetherY(nx, nz) {
+    for (let y = 100; y >= 2; y--) {
+      if (this.getBlock(nx, y, nz) !== B.AIR && this.getBlock(nx, y, nz) !== B.LAVA_BLOCK) {
+        if (this.getBlock(nx, y + 1, nz) === B.AIR && this.getBlock(nx, y + 2, nz) === B.AIR) {
+          return y + 1;
+        }
+      }
+    }
+    // 見つからなければ y=64 に人工の足場を彫る
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        this.setBlock(nx + dx, 64, nz + dz, B.NETHERRACK);
+        this.setBlock(nx + dx, 65, nz + dz, B.AIR);
+        this.setBlock(nx + dx, 66, nz + dz, B.AIR);
+      }
+    }
+    return 65;
   }
 
   // ---------------- 村の生成 ----------------
