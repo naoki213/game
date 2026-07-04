@@ -547,6 +547,10 @@
     { out: I.FISHING_ROD, outN: 1, in: [[B.PLANK, 3], [B.WOOL, 1]] },
     // エンダードラゴン討伐に向けて: エンダーパール + 火薬 → エンダーアイ
     { out: I.EYE_OF_ENDER, outN: 1, in: [[I.ENDER_PEARL, 1], [I.GUNPOWDER, 1]] },
+    // ネザーへ渡るための道具と素材
+    { out: I.FLINT_AND_STEEL, outN: 1, in: [[I.IRON_INGOT, 1], [I.FLINT, 1]] },
+    { out: B.QUARTZ, outN: 1, in: [[I.NETHER_QUARTZ, 1]] },
+    { out: B.NETHER_BRICK, outN: 2, in: [[B.NETHERRACK, 2], [B.COAL_ORE, 1]] },
   );
 
   const craftSectionEl = document.getElementById("craft-section");
@@ -1383,6 +1387,8 @@
           1 + (Math.random() < 0.5 ? 1 : 0));
       } else if (hit.id === B.WHEAT_0 || hit.id === B.WHEAT_1) {
         items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
+      } else if (hit.id === B.GRAVEL && Math.random() < 0.12) {
+        items.spawn(I.FLINT, hit.pos[0], hit.pos[1], hit.pos[2]);
       }
       // 道具の消耗 (硬いブロックのみ)
       if (tool && block.hardness >= 0.3) damageTool(tool.id);
@@ -1539,6 +1545,66 @@
     sound.blip(500, 0.4, "sine", 0.25);
   }
 
+  // ---------------- ネザーポータル (プレイヤーが黒曜石で組む) ----------------
+
+  // (ox,oy,oz) の空気ブロックから, 平面上を隣接する空気セルへ flood fill し,
+  // 綺麗な長方形かつ周囲がすべて黒曜石になっているか判定して起動する
+  function tryIgnitePortal(ox, oy, oz) {
+    if (world.getBlock(ox, oy, oz) !== B.AIR) return false;
+    const isObs = (x, y, z) => world.getBlock(x, y, z) === B.OBSIDIAN;
+
+    let axis = null; // 'x': 枠は zy 平面 (x 固定) / 'z': 枠は xy 平面 (z 固定)
+    // 東西 (x 方向) に黒曜石があれば, その方向に幅を持つ = z が固定 (xy 平面)
+    if (isObs(ox - 1, oy, oz) || isObs(ox + 1, oy, oz)) axis = "z";
+    else if (isObs(ox, oy, oz - 1) || isObs(ox, oy, oz + 1)) axis = "x";
+    if (!axis) return false;
+
+    const visited = new Set();
+    const key = (x, y, z) => x + "," + y + "," + z;
+    const queue = [[ox, oy, oz]];
+    const cells = [];
+    visited.add(key(ox, oy, oz));
+    while (queue.length) {
+      const [x, y, z] = queue.pop();
+      cells.push([x, y, z]);
+      if (cells.length > 40) return false; // 大きすぎる
+      const neighbors = axis === "x"
+        ? [[x, y + 1, z], [x, y - 1, z], [x, y, z + 1], [x, y, z - 1]]
+        : [[x, y + 1, z], [x, y - 1, z], [x + 1, y, z], [x - 1, y, z]];
+      for (const [nx, ny, nz] of neighbors) {
+        const k = key(nx, ny, nz);
+        if (visited.has(k)) continue;
+        visited.add(k);
+        if (world.getBlock(nx, ny, nz) !== B.AIR) continue;
+        queue.push([nx, ny, nz]);
+      }
+    }
+
+    let minY = Infinity, maxY = -Infinity, minH = Infinity, maxH = -Infinity;
+    for (const [x, y, z] of cells) {
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      const h = axis === "x" ? z : x;
+      minH = Math.min(minH, h); maxH = Math.max(maxH, h);
+    }
+    const w = maxH - minH + 1, h2 = maxY - minY + 1;
+    if (w < 2 || w > 4 || h2 < 3 || h2 > 5) return false;
+    if (cells.length !== w * h2) return false; // 穴のない綺麗な長方形のみ許可
+
+    const fixed = axis === "x" ? ox : oz;
+    for (let y = minY - 1; y <= maxY + 1; y++) {
+      for (let hh = minH - 1; hh <= maxH + 1; hh++) {
+        const onBorder = y < minY || y > maxY || hh < minH || hh > maxH;
+        if (!onBorder) continue;
+        const x = axis === "x" ? fixed : hh;
+        const z = axis === "x" ? hh : fixed;
+        if (!isObs(x, y, z)) return false;
+      }
+    }
+
+    for (const [x, y, z] of cells) world.setBlock(x, y, z, B.NETHER_PORTAL);
+    return true;
+  }
+
   function updateEndPortalTravel(dt) {
     portalCooldown = Math.max(0, portalCooldown - dt);
     const inEndNow = world.isInEnd(player.pos[0], player.pos[2]);
@@ -1569,6 +1635,21 @@
       mobs.playerShoot(player.eyePos(), player.forward());
       sound.bow();
       damageTool(tool.id);
+      return;
+    }
+    // 火打ち石と鉄: 黒曜石の枠の内側を狙うとネザーポータルを起動する
+    if (tool && tool.kind === "flint_and_steel") {
+      const hit = player.raycast();
+      if (hit && hit.id === B.OBSIDIAN) {
+        const [px, py, pz] = hit.prev;
+        if (tryIgnitePortal(px, py, pz)) {
+          sound.blip(180, 0.4, "sawtooth", 0.25);
+          showToast("🔥 ネザーポータルが起動した!");
+          damageTool(tool.id);
+        } else {
+          showToast("枠が正しくない (幅2-4 x 高さ3-5 の黒曜石の長方形が必要)");
+        }
+      }
       return;
     }
     // クワ: 草 / 土を耕して農地に
@@ -2314,6 +2395,7 @@
     exitEnd,
     get endReturnPos() { return endReturnPos; },
     get dragonDefeated() { return dragonDefeated; },
+    tryIgnitePortal,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

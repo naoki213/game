@@ -883,6 +883,81 @@ function buildTextureAtlas(seed) {
     return px(200 + core * 55, 130 + core * 100, 230 + core * 25, jitter(1, 0.05));
   });
 
+  // --- ネザー関連 ---
+
+  // ネザーラック (赤茶色, まだらな凹凸)
+  paintTile(TILE.NETHERRACK, (x, y) => {
+    const n = hash2(x, y, 0x9e77) * 0.3 + hash2((x * 0.5) | 0, (y * 0.5) | 0, 0x9e78) * 0.7;
+    const v = 0.75 + n * 0.4;
+    return px(120 * v, 42 * v, 40 * v, jitter(1, 0.04));
+  });
+
+  // ソウルサンド (灰茶色, 小さな穴と根っこ模様)
+  paintTile(TILE.SOUL_SAND, (x, y) => {
+    const hole = hash2(x, y, 0x5001) > 0.85;
+    if (hole) return px(60, 48, 42, 1);
+    return px(94, 74, 62, jitter(1, 0.06));
+  });
+
+  // ネザー水晶鉱石 (ネザーラックに白い水晶の粒)
+  {
+    const spots = makeSpots(rand, 6);
+    paintTile(TILE.NETHER_QUARTZ_ORE, (x, y) => {
+      if (spots(x, y)) return px(235, 230, 220, jitter(1, 0.08));
+      const n = hash2(x, y, 0x9e77) * 0.3 + hash2((x * 0.5) | 0, (y * 0.5) | 0, 0x9e78) * 0.7;
+      const v = 0.75 + n * 0.4;
+      return px(120 * v, 42 * v, 40 * v, jitter(1, 0.04));
+    });
+  }
+
+  // ネザーポータル (紫と黒の渦)
+  paintTile(TILE.NETHER_PORTAL, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5;
+    const swirl = Math.sin(Math.atan2(dy, dx) * 5 + Math.hypot(dx, dy) * 1.6) * 0.5 + 0.5;
+    return px(60 + swirl * 90, 10 + swirl * 20, 90 + swirl * 130, 1);
+  });
+
+  // ネザーレンガ (暗い赤茶のレンガ模様)
+  paintTile(TILE.NETHER_BRICK, (x, y) => {
+    const row = Math.floor(y / 4);
+    const mortarY = y % 4 === 3;
+    const shift = (row % 2) * 4;
+    const mortarX = (x + shift) % 8 === 7;
+    if (mortarY || mortarX) return px(35, 18, 20, jitter(1, 0.06));
+    return px(70, 32, 34, jitter(1, 0.08));
+  });
+
+  // 火打ち石 (灰色の石片, 角ばった形)
+  paintTile(TILE.FLINT, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5;
+    if (Math.abs(dx) + Math.abs(dy) > 6.5) return [0, 0, 0, 0];
+    const facet = (x + y) % 3 === 0 ? 1.15 : 1;
+    return px(70, 68, 76, jitter(facet, 0.06));
+  });
+
+  // 火打ち石と鉄 (L字の鉄棒 + 石)
+  paintTile(TILE.FLINT_AND_STEEL, (x, y) => {
+    if (Math.abs((x - y)) < 1.5 && x > 3 && x < 13) return px(200, 200, 205, jitter(1, 0.05));
+    const dx = x - 4, dy = y - 12;
+    if (dx * dx + dy * dy < 6) return px(75, 73, 80, jitter(1, 0.06));
+    return [0, 0, 0, 0];
+  });
+
+  // ネザー水晶 (アイテム: 白い結晶)
+  paintTile(TILE.NETHER_QUARTZ, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5;
+    if (Math.abs(dx) * 0.7 + Math.abs(dy) > 6) return [0, 0, 0, 0];
+    const facet = Math.abs(dx - dy) % 4 < 2 ? 1.1 : 0.92;
+    return px(238, 233, 224, jitter(facet, 0.05));
+  });
+
+  // ブレイズロッド (黄金色の棒)
+  paintTile(TILE.BLAZE_ROD, (x, y) => {
+    if (x < 6 || x > 9) return [0, 0, 0, 0];
+    const band = y % 3 === 0 ? 1.2 : 1;
+    return px(235, 195, 90, jitter(band, 0.06));
+  });
+
   // --- 各タイルの平均色を計算 ---
   const full = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let tile = 0; tile < ATLAS_COLS * ATLAS_ROWS; tile++) {

@@ -93,6 +93,12 @@ const B = {
   END_PORTAL_FRAME_EYE: 175,
   END_PORTAL: 176,
   END_CRYSTAL: 177,
+  // 178-182: ネザー関連ブロック
+  NETHERRACK: 178,
+  SOUL_SAND: 179,
+  NETHER_QUARTZ_ORE: 180,
+  NETHER_PORTAL: 181,
+  NETHER_BRICK: 182,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -209,6 +215,11 @@ const I = {
   ENDER_PEARL: 135,
   EYE_OF_ENDER: 136,
   GUNPOWDER: 137,
+  // ネザー関連
+  FLINT: 138,
+  FLINT_AND_STEEL: 139,
+  NETHER_QUARTZ: 140,
+  BLAZE_ROD: 141,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -344,6 +355,16 @@ const TILE = {
   END_PORTAL_FRAME_EYE: 163,
   END_PORTAL: 164,
   END_CRYSTAL: 165,
+  // ネザー関連
+  NETHERRACK: 166,
+  SOUL_SAND: 167,
+  NETHER_QUARTZ_ORE: 168,
+  NETHER_PORTAL: 169,
+  NETHER_BRICK: 170,
+  FLINT: 171,
+  FLINT_AND_STEEL: 172,
+  NETHER_QUARTZ: 173,
+  BLAZE_ROD: 174,
 };
 
 // 各ブロックの属性
@@ -624,6 +645,13 @@ defItem(I.ENDER_PEARL, "ender_pearl", "エンダーパール", TILE.ENDER_PEARL)
 defItem(I.EYE_OF_ENDER, "eye_of_ender", "エンダーアイ", TILE.EYE_OF_ENDER);
 defItem(I.GUNPOWDER, "gunpowder", "火薬", TILE.GUNPOWDER);
 
+// --- ネザー関連アイテム ---
+defItem(I.FLINT, "flint", "火打ち石", TILE.FLINT);
+defItem(I.FLINT_AND_STEEL, "flint_and_steel", "火打ち石と鉄", TILE.FLINT_AND_STEEL,
+  { kind: "flint_and_steel", tier: 1, speed: 1, damage: 1, durability: 32 });
+defItem(I.NETHER_QUARTZ, "nether_quartz", "ネザー水晶", TILE.NETHER_QUARTZ);
+defItem(I.BLAZE_ROD, "blaze_rod", "ブレイズロッド", TILE.BLAZE_ROD);
+
 // --- オリジナル建築ブロック ---
 
 // ネオン 6 色 (光源)
@@ -685,6 +713,22 @@ defBlock(B.END_PORTAL, "end_portal", "エンドポータル",
 defBlock(B.END_CRYSTAL, "end_crystal", "エンダークリスタル",
   [TILE.END_CRYSTAL, TILE.END_CRYSTAL, TILE.END_CRYSTAL],
   { hardness: 1.0, drops: null, emissive: true });
+
+// --- ネザー関連ブロック ---
+defBlock(B.NETHERRACK, "netherrack", "ネザーラック",
+  [TILE.NETHERRACK, TILE.NETHERRACK, TILE.NETHERRACK],
+  { hardness: 1.2, pickable: true, minTier: 1 });
+defBlock(B.SOUL_SAND, "soul_sand", "ソウルサンド",
+  [TILE.SOUL_SAND, TILE.SOUL_SAND, TILE.SOUL_SAND], { hardness: 1.0 });
+defBlock(B.NETHER_QUARTZ_ORE, "nether_quartz_ore", "ネザー水晶鉱石",
+  [TILE.NETHER_QUARTZ_ORE, TILE.NETHER_QUARTZ_ORE, TILE.NETHER_QUARTZ_ORE],
+  { hardness: 1.8, pickable: true, minTier: 1, drops: I.NETHER_QUARTZ });
+defBlock(B.NETHER_PORTAL, "nether_portal", "ネザーポータル",
+  [TILE.NETHER_PORTAL, TILE.NETHER_PORTAL, TILE.NETHER_PORTAL],
+  { hardness: Infinity, drops: null, solid: false, opaque: false, emissive: true });
+defBlock(B.NETHER_BRICK, "nether_brick", "ネザーレンガ",
+  [TILE.NETHER_BRICK, TILE.NETHER_BRICK, TILE.NETHER_BRICK],
+  { hardness: 2.0, pickable: true, minTier: 1 });
 
 // --- 農地 (クワで耕した土, 上面がわずかに低い) ---
 defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],
