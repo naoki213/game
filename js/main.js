@@ -1429,6 +1429,36 @@
     }
   }
 
+  // ---------------- エンドポータル (ストロングホールド) ----------------
+
+  function endPortalFrameCoords() {
+    const { x: sx, z: sz, y: sy } = STRONGHOLD;
+    const py = sy + 1;
+    const coords = [];
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const m = Math.max(Math.abs(dx), Math.abs(dz));
+        if (m === 2 && !(Math.abs(dx) === 2 && Math.abs(dz) === 2)) coords.push([sx + dx, py, sz + dz]);
+      }
+    }
+    return coords;
+  }
+
+  function tryActivateEndPortal() {
+    const filled = endPortalFrameCoords().every(
+      ([x, y, z]) => world.getBlock(x, y, z) === B.END_PORTAL_FRAME_EYE);
+    if (!filled) return;
+    const { x: sx, z: sz, y: sy } = STRONGHOLD;
+    const py = sy + 1;
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        world.setBlock(sx + dx, py, sz + dz, B.END_PORTAL);
+      }
+    }
+    sound.blip(300, 0.5, "sine", 0.3);
+    showToast("🌀 エンドポータルが起動した! 中に入るとジ・エンドへ渡れる");
+  }
+
   function placeAction() {
     swingTimer = 0;
     // 弓: 矢を放つ
@@ -1506,8 +1536,29 @@
       if (hitFirst.id === B.CHEST) { openChest(hitFirst.pos); return; }
       if (hitFirst.id === B.BED) { trySleep(hitFirst.pos); return; }
     }
-    // 種: 土 / 草ブロックの上面に植える
+    // エンダーアイ: フレームに埋め込むか, 使ってストロングホールドの方角を知る
     const heldDef = getDef(HOTBAR_BLOCKS[selectedSlot]);
+    if (heldDef && heldDef.id === I.EYE_OF_ENDER) {
+      if (hitFirst && hitFirst.id === B.END_PORTAL_FRAME) {
+        if (!consumeItem(I.EYE_OF_ENDER)) return;
+        world.setBlock(hitFirst.pos[0], hitFirst.pos[1], hitFirst.pos[2], B.END_PORTAL_FRAME_EYE);
+        sound.blip(700, 0.15, "sine", 0.2);
+        showToast("エンダーアイをはめ込んだ");
+        tryActivateEndPortal();
+      } else {
+        if (!consumeItem(I.EYE_OF_ENDER)) return;
+        const dx = STRONGHOLD.x - player.pos[0], dz = STRONGHOLD.z - player.pos[2];
+        const dist = Math.round(Math.hypot(dx, dz));
+        let ang = Math.atan2(dx, dz);
+        if (ang < 0) ang += Math.PI * 2;
+        const dirs = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"];
+        const dir = dirs[Math.round(ang / (Math.PI / 4)) % 8];
+        sound.blip(500, 0.2, "sine", 0.18);
+        showToast(`エンダーアイが ${dir} の方角へ輝きながら飛んでいった… (残り約${dist}ブロック)`);
+      }
+      return;
+    }
+    // 種: 土 / 草ブロックの上面に植える
     if (heldDef && heldDef.seeds) {
       if (!hitFirst) return;
       const [px, py, pz] = hitFirst.prev;
@@ -2139,6 +2190,9 @@
     pickBlock,
     hotbar: HOTBAR_BLOCKS,
     get slot() { return selectedSlot; },
+    placeAction,
+    tryActivateEndPortal,
+    endPortalFrameCoords,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());
