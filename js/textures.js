@@ -763,11 +763,20 @@ function buildTextureAtlas(seed) {
     return [150, 90, 220, 140];
   });
 
-  // 溶岩ブロック (光る亀裂)
+  // 溶岩ブロック (本家風: 黒い焼け岩に網目状の発光する亀裂 + 明るいコア)
   paintTile(TILE.LAVA_BLOCK, (x, y) => {
-    const crack = Math.sin(x * 1.5 + y * 0.8) * Math.sin(y * 1.7 - x * 0.6) > 0.35;
-    if (crack) return px(255, 160, 40, jitter(1, 0.08));
-    return px(60, 30, 25, jitter(1, 0.12));
+    const n1 = Math.sin(x * 1.3 + y * 0.9) + Math.sin(x * 0.55 - y * 1.6) * 0.8;
+    const n2 = Math.sin(x * 0.45 + y * 2.1 + 2.0) + Math.sin(x * 2.0 - y * 0.5 + 1.0) * 0.6;
+    const crackA = Math.abs(n1) < 0.3;
+    const crackB = Math.abs(n2) < 0.18;
+    if (crackA || crackB) {
+      const hotCore = Math.abs(n1) < 0.08 || Math.abs(n2) < 0.06;
+      return hotCore
+        ? px(255, 220, 110, jitter(1, 0.06))
+        : px(255, 130, 30, jitter(1, 0.1));
+    }
+    const scorched = hash2(x, y, 0x4a17) > 0.82;
+    return scorched ? px(68, 34, 26, jitter(1, 0.1)) : px(38, 22, 19, jitter(1, 0.12));
   });
 
   // アスファルト / 白線

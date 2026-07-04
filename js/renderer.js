@@ -30,7 +30,11 @@ void main() {
   float shade = aShade - idx * 4.0;
 
   // 水面の波
-  if (uWave > 0.5) {
+  if (uWave > 1.5) {
+    // マグマ: 粘性が高くゆっくり脈打つように微かに上下する
+    pos.y += sin(pos.x * 0.7 + uTime * 0.6) * 0.02
+           + cos(pos.z * 0.6 + uTime * 0.5) * 0.02;
+  } else if (uWave > 0.5) {
     pos.y += sin(pos.x * 1.1 + uTime * 1.8) * 0.045
            + cos(pos.z * 0.9 + uTime * 1.4) * 0.045;
   }
@@ -96,8 +100,13 @@ void main() {
   vec3 col = tex.rgb * vLight * tint;
   float alpha = tex.a * uAlpha;
 
-  // 水: 太陽の鏡面反射 + フレネルで角度により透け方が変わる
-  if (uWave > 0.5) {
+  // マグマ: UV は歪ませず (アトラスの滲み防止), 明滅と流動するグローで質感を出す
+  if (uWave > 1.5) {
+    float flow = sin(vWorldPos.x * 0.8 + vWorldPos.z * 0.6 + uTime * 0.35) * 0.5 + 0.5;
+    float flicker = sin(uTime * 3.0 + vWorldPos.x * 2.3 + vWorldPos.z * 1.7) * 0.09;
+    col *= 1.0 + flow * 0.22 + flicker;
+  } else if (uWave > 0.5) {
+    // 水: 太陽の鏡面反射 + フレネルで角度により透け方が変わる
     vec3 V = normalize(uCamPos - vWorldPos);
     vec3 N = normalize(vec3(
       sin(vWorldPos.x * 1.4 + uTime * 1.9) * 0.10,
@@ -110,6 +119,9 @@ void main() {
     alpha = min(alpha, 0.95);
     // 空の色を少し映り込ませる
     col = mix(col, uFogColor * 1.1, fres * 0.45 * uDaylight);
+    // ゆっくり流れる水流のきらめき (流動感)
+    float current = sin(vWorldPos.x * 0.5 - vWorldPos.z * 0.35 + uTime * 0.8) * 0.5 + 0.5;
+    col += vec3(0.04, 0.05, 0.07) * current * uDaylight;
   }
 
   // フォグ + 太陽方向の大気散乱 (夕日が霞に滲む)
@@ -432,13 +444,14 @@ class Renderer {
     chunk.mesh = {
       opaque: make(meshData.opaque),
       water: make(meshData.water),
+      lava: make(meshData.lava),
     };
   }
 
   deleteChunkMesh(chunk) {
     const gl = this.gl;
     if (!chunk.mesh) return;
-    for (const part of ["opaque", "water"]) {
+    for (const part of ["opaque", "water", "lava"]) {
       const m = chunk.mesh[part];
       if (m) {
         gl.deleteBuffer(m.vbo);
@@ -523,6 +536,18 @@ class Renderer {
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
       drawCalls++;
     }
+
+    // --- マグマ (不透明だがゆっくり脈打ち発光が流動するように揺らめく) ---
+    gl.uniform1f(pw.uniforms.uWave, 2);
+    for (const chunk of visible) {
+      const m = chunk.mesh.lava;
+      if (!m) continue;
+      this.bindWorldAttribs(m.vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
+      gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
+      drawCalls++;
+    }
+    gl.uniform1f(pw.uniforms.uWave, 0);
 
     // --- 接地シャドウ (プレイヤー / モブの足元に落ちる柔らかい影) ---
     if (state.shadows && state.shadows.length > 0) {

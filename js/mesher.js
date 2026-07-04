@@ -202,6 +202,7 @@ function buildChunkMesh(world, chunk) {
 
   const opaque = { verts: [], indices: [], count: 0 };
   const water = { verts: [], indices: [], count: 0 };
+  const lava = { verts: [], indices: [], count: 0 };
 
   const data = chunk.data;
 
@@ -298,10 +299,13 @@ function buildChunkMesh(world, chunk) {
         }
 
         const isWater = id === B.WATER;
-        const target = isWater ? water : opaque;
+        const isLava = id === B.LAVA_BLOCK;
+        const isFluid = isWater || isLava;
+        const target = isWater ? water : isLava ? lava : opaque;
         const blockTop = block.height;   // ハーフブロック = 0.5
-        // 水面: 上が空気なら少し低くして水面らしく
-        const topOffset = (isWater && getNb(lx, y + 1, lz) !== B.WATER) ? -0.125 : 0;
+        // 水面: 上が空気なら少し低くして水面らしく。マグマは粘性が高く沈みは控えめ
+        const topOffset = isWater && getNb(lx, y + 1, lz) !== B.WATER ? -0.125
+          : isLava && getNb(lx, y + 1, lz) !== B.LAVA_BLOCK ? -0.06 : 0;
 
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
@@ -312,8 +316,8 @@ function buildChunkMesh(world, chunk) {
             // 底面も下が不透明ブロックでなければ描く
             if (!(blockTop < 1 && (f === 2 || (f === 3 && !isOpaque(nbId))))) continue;
           }
-          // 水中から見た水側面は省略 (上面のみ描く)
-          if (isWater && f !== 2 && nbId !== B.AIR && !BLOCKS[nbId].opaque) continue;
+          // 流体内部から見た側面は省略 (上面のみ描く)
+          if (isFluid && f !== 2 && nbId !== B.AIR && !BLOCKS[nbId].opaque) continue;
 
           const tile = f === 2 ? block.tiles[0] : f === 3 ? block.tiles[2] : block.tiles[1];
           const uv = tileUV(tile);
@@ -407,6 +411,10 @@ function buildChunkMesh(world, chunk) {
     water: {
       verts: new Float32Array(water.verts),
       indices: new Uint32Array(water.indices),
+    },
+    lava: {
+      verts: new Float32Array(lava.verts),
+      indices: new Uint32Array(lava.indices),
     },
   };
 }
