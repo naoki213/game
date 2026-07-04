@@ -1106,6 +1106,25 @@
     return c;
   }
 
+  // ネザーフォートレスの宝箱: 初めて近づいたときに一度だけ中身を詰める
+  let fortressLootGiven = localStorage.getItem("mcjs_fortloot_" + seed) === "1";
+  function updateFortressLoot() {
+    if (fortressLootGiven) return;
+    const { x: fx, z: fz, y: fy } = NETHER_FORTRESS;
+    const dx = player.pos[0] - fx, dz = player.pos[2] - (fz + 1);
+    if (dx * dx + dz * dz > 12 * 12) return;
+    if (world.getBlock(fx, fy + 1, fz + 1) !== B.CHEST) return;
+    fortressLootGiven = true;
+    localStorage.setItem("mcjs_fortloot_" + seed, "1");
+    const c = chestAt([fx, fy + 1, fz + 1].join(","));
+    c.set(I.NETHER_QUARTZ, 8);
+    c.set(I.GOLD_INGOT, 4);
+    c.set(I.GUNPOWDER, 6);
+    c.set(I.BLAZE_ROD, 2);
+    c.set(I.FLINT, 4);
+    showToast("🏰 ネザーフォートレスの宝箱を見つけた!");
+  }
+
   function makeItemCell(id, n, onClick) {
     const el = document.createElement("div");
     el.className = "inv-item";
@@ -2318,6 +2337,7 @@
       updateEndPortalTravel(dt);
       updateNetherPortalTravel(dt);
       updateLavaDamage(dt);
+      updateFortressLoot();
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
@@ -2503,6 +2523,7 @@
     enterNether,
     exitNether,
     get netherReturnPos() { return netherReturnPos; },
+    chests,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

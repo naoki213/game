@@ -499,6 +499,8 @@ class World {
     for (const [dx, dz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) {
       fill(fx + dx, fy + 1, fz + dz, fx + dx, fy + 4, fz + dz, B.NETHER_BRICK);
     }
+    // 見張り台の中央に宝箱 (中身は main.js 側で初回訪問時に埋める)
+    set(fx, fy + 1, fz + 1, B.CHEST);
   }
 
   // ネザーの (nx, y, nz) 付近で安全な (溶岩に埋まっていない, 頭上が開けた) 足場の Y を探す。
