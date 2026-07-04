@@ -42,6 +42,7 @@ class World {
     this.noiseBiome = new Perlin(seed ^ 0x9e3779b9);
     this.heightCache = new Map();     // 列の高さキャッシュ
     this.villageCache = new Map();    // 村グリッドのキャッシュ
+    this.entranceCache = new Map();   // 洞窟の入り口 (竪穴) のキャッシュ
 
     // プレイヤーの編集 (生成地形との差分): "cx,cz" -> Map(idx -> blockId)
     this.edits = new Map();
@@ -103,8 +104,9 @@ class World {
     return info;
   }
 
-  isCave(x, y, z, surfaceH) {
-    if (y <= 2 || y > surfaceH - 4) return false;
+  // 洞窟ノイズそのもの (地表付近の "ふさぐ" ゲートを含まない)。
+  // isCave() と, 入り口の竪穴が自然の洞窟にぶつかるかの探索の両方から使う
+  caveNoiseAt(x, y, z, surfaceH) {
     // 塊状の洞窟 (閾値を下げて量を増やした)
     const c = this.noiseCave.noise3(x * 0.085, y * 0.11, z * 0.085);
     if (c > 0.54) return true;
@@ -118,6 +120,52 @@ class World {
     if (y > 30 && y < surfaceH - 10 &&
         this.noiseCave.noise3(x * 0.03 + 500, y * 0.06 + 500, z * 0.03 + 500) > 0.62) return true;
     return false;
+  }
+
+  isCave(x, y, z, surfaceH) {
+    if (y <= 2 || y > surfaceH - 4) return false;
+    return this.caveNoiseAt(x, y, z, surfaceH);
+  }
+
+  // 洞窟の入り口 (地表に開く竪穴)。まばらな格子点に候補地を置き,
+  // そこから地下の自然な洞窟にぶつかるまで掘り下げる。見つからなければ
+  // 浅い袋小路の竪穴になる。戻り値は「この座標が入り口の穴なら底の Y」,
+  // 入り口でなければ -1
+  caveEntranceBottom(x, z, h) {
+    const key = x + "," + z;
+    let bottom = this.entranceCache.get(key);
+    if (bottom !== undefined) return bottom;
+    bottom = -1;
+
+    if (h > WATER_LEVEL + 3) {
+      const CELL = 8;
+      const gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
+      if (hash2(gx, gz, this.seed ^ 0x1ca7e) < 0.05) {
+        const ex = gx * CELL + 2 + Math.floor(hash2(gx, gz, this.seed ^ 0xe17a01) * (CELL - 4));
+        const ez = gz * CELL + 2 + Math.floor(hash2(gx, gz, this.seed ^ 0x0e18a2) * (CELL - 4));
+        const dx = x - ex, dz = z - ez;
+        // 不定形の縁: ノイズで半径を揺らして自然な穴の形にする
+        const rNoise = this.noiseCave2.noise2(x * 0.35 + 40, z * 0.35 - 40);
+        const radius = 1.5 + rNoise * 0.9;
+        if (dx * dx + dz * dz <= radius * radius) {
+          const eh = this.columnInfo(ex, ez).h;
+          if (eh > WATER_LEVEL + 3) {
+            const MAX_SEARCH = 24, FALLBACK_DEPTH = 14;
+            let found = -1;
+            for (let d = 4; d <= MAX_SEARCH; d++) {
+              const cy = eh - d;
+              if (cy <= 3) break;
+              if (this.caveNoiseAt(ex, cy, ez, eh)) { found = cy; break; }
+            }
+            bottom = found >= 0 ? found : Math.max(4, eh - FALLBACK_DEPTH);
+          }
+        }
+      }
+    }
+
+    if (this.entranceCache.size > 60000) this.entranceCache.clear();
+    this.entranceCache.set(key, bottom);
+    return bottom;
   }
 
   generateChunk(cx, cz) {
@@ -139,11 +187,14 @@ class World {
         const wx = ox + lx, wz = oz + lz;
         const { h, biome } = this.columnInfo(wx, wz);
         const sandy = biome === "desert" || h <= WATER_LEVEL + 1;
+        const entranceBottom = this.caveEntranceBottom(wx, wz, h);
 
         for (let y = 0; y <= h; y++) {
           let id;
           if (y === 0) {
             id = B.BEDROCK;
+          } else if (entranceBottom >= 0 && y > entranceBottom) {
+            id = B.AIR; // 洞窟の入り口 (地表からの竪穴)
           } else if (this.isCave(wx, y, wz, h)) {
             id = B.AIR;
           } else if (y === h) {

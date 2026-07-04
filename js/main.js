@@ -949,12 +949,14 @@
     randomTickTimer = 0;
     const pcx = Math.floor(player.pos[0]) >> 4;
     const pcz = Math.floor(player.pos[2]) >> 4;
+    // チャンクごとにランダムなセルを叩く (本家のランダムティック方式)。
+    // ワールドの高さが 128 に拡張された分, 密度が薄まらないよう回数も増やす
+    const ticksPerChunk = 80 * (CHUNK_H / 64);
     for (let dz = -2; dz <= 2; dz++) {
       for (let dx = -2; dx <= 2; dx++) {
         const chunk = world.getChunk(pcx + dx, pcz + dz);
         if (!chunk || !chunk.generated) continue;
-        // チャンクごとにランダムなセルを叩く (本家のランダムティック方式)
-        for (let k = 0; k < 80; k++) {
+        for (let k = 0; k < ticksPerChunk; k++) {
           const i = (Math.random() * chunk.data.length) | 0;
           const id = chunk.data[i];
           if (id === B.WHEAT_0 || id === B.WHEAT_1) {
