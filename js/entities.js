@@ -956,6 +956,21 @@ class MobManager {
       return;
     }
 
+    // --- 洞窟の暗闇: 地表から離れた閉ざされた場所には昼夜を問わず敵モブが湧く ---
+    if (Math.random() < 0.5 && this.count(true) < this.maxZombies + 4) {
+      const h = this.world.surfaceY(x, z);
+      if (h - 12 > 4) {
+        const cy = 4 + Math.floor(Math.random() * (h - 12 - 4));
+        if (this.world.getBlock(x, cy, z) === B.AIR && this.world.getBlock(x, cy + 1, z) === B.AIR &&
+            this.world.getBlock(x, cy - 1, z) !== B.AIR && this.world.getBlock(x, cy - 1, z) !== B.LAVA_BLOCK) {
+          const r = Math.random();
+          const type = r < 0.4 ? "zombie" : r < 0.7 ? "skeleton" : r < 0.85 ? "spider" : "creeper";
+          this.mobs.push(new Mob(type, x + 0.5, cy + 1.01, z + 0.5));
+          return;
+        }
+      }
+    }
+
     const y = this.world.surfaceY(x, z);
     if (y + 1 <= WATER_LEVEL) return;
 
