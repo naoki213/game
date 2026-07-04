@@ -1867,6 +1867,21 @@
         const [dir, dist] = compassBearing(STRONGHOLD.x, STRONGHOLD.z);
         sound.blip(500, 0.2, "sine", 0.18);
         showToast(`エンダーアイが ${dir} の方角へ輝きながら飛んでいった… (残り約${dist}ブロック)`);
+        // エンダーアイが実際にその方角へ飛んでいくのが見える演出
+        // (山なりに上昇してから, 重力で落ちて消える)
+        const edx = STRONGHOLD.x - player.pos[0], edz = STRONGHOLD.z - player.pos[2];
+        const elen = Math.hypot(edx, edz) || 1;
+        const eye = player.eyePos();
+        const fwd = player.forward();
+        for (let i = 0; i < 8; i++) {
+          particles.push({
+            pos: [eye[0] + fwd[0] * 0.5, eye[1] + fwd[1] * 0.5, eye[2] + fwd[2] * 0.5],
+            vel: [(edx / elen) * 6 + (Math.random() - 0.5), 5.5 + Math.random() * 1.5,
+              (edz / elen) * 6 + (Math.random() - 0.5)],
+            life: 1.2 + Math.random() * 0.4,
+            col: [0.55, 0.25, 0.85],
+          });
+        }
       }
       return;
     }
@@ -2619,6 +2634,7 @@
     chests,
     tryDetectWither,
     spawnWitherBoss,
+    particles,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());
