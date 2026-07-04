@@ -188,6 +188,50 @@ const MOB_TYPES = {
       [0.06, 0, -0.05, 0.08, 0.28, 0.08, 0.9, 0.65, 0.25],
     ],
   },
+  zombie_pigman: {
+    speed: 2.1,
+    halfW: 0.32, height: 1.9,
+    health: 14,
+    hostile: false,     // 殴られるまでは襲ってこない
+    neutral: true,
+    noBurn: true,
+    attack: 4,
+    drops: I.GOLD_INGOT, dropN: 1,
+    parts: [
+      // 脚 x2 (ズボン)
+      [-0.22, 0, -0.11, 0.2, 0.72, 0.22, 0.55, 0.4, 0.45],
+      [0.02, 0, -0.11, 0.2, 0.72, 0.22, 0.55, 0.4, 0.45],
+      // 胴体 (ピンクがかった肌)
+      [-0.25, 0.72, -0.14, 0.5, 0.62, 0.28, 0.92, 0.6, 0.58],
+      // 腕 x2
+      [-0.43, 1.08, -0.1, 0.18, 0.62, 0.22, 0.92, 0.62, 0.58],
+      [0.25, 1.08, -0.1, 0.18, 0.62, 0.22, 0.92, 0.62, 0.58],
+      // 頭 (豚鼻)
+      [-0.25, 1.34, -0.25, 0.5, 0.5, 0.5, 0.93, 0.65, 0.6],
+    ],
+  },
+  blaze: {
+    speed: 2.4,
+    halfW: 0.35, height: 1.8,
+    health: 20,
+    hostile: true,
+    flying: true,       // 重力を受けず, 目標の高さまで浮遊する
+    ranged: true,
+    noBurn: true,
+    attack: 3,
+    drops: I.BLAZE_ROD, dropN: 1,
+    parts: [
+      // 芯 (発光する黄金の柱)
+      [-0.15, 0.3, -0.15, 0.3, 1.3, 0.3, 0.95, 0.75, 0.2],
+      // 周りを回る火の棒 x4
+      [-0.55, 0.6, -0.05, 0.1, 0.7, 0.1, 0.9, 0.5, 0.1],
+      [0.45, 0.6, -0.05, 0.1, 0.7, 0.1, 0.9, 0.5, 0.1],
+      [-0.05, 0.6, -0.55, 0.1, 0.7, 0.1, 0.9, 0.5, 0.1],
+      [-0.05, 0.6, 0.45, 0.1, 0.7, 0.1, 0.9, 0.5, 0.1],
+      // 頭
+      [-0.2, 1.5, -0.2, 0.4, 0.4, 0.4, 0.95, 0.8, 0.3],
+    ],
+  },
 };
 
 const MOB_NAMES = Object.keys(MOB_TYPES);
@@ -456,14 +500,21 @@ class Mob {
     const tz = Math.cos(this.yaw) * speed;
     this.vel[0] = lerp(this.vel[0], tx, Math.min(8 * dt, 1));
     this.vel[2] = lerp(this.vel[2], tz, Math.min(8 * dt, 1));
-    this.vel[1] -= MOB_GRAVITY * dt;
-    this.vel[1] = Math.max(this.vel[1], -30);
 
-    // 水中では浮く
-    const bx = Math.floor(this.pos[0]);
-    const bz = Math.floor(this.pos[2]);
-    if (world.getBlock(bx, Math.floor(this.pos[1] + 0.3), bz) === B.WATER) {
-      this.vel[1] = Math.max(this.vel[1], 1.5);
+    if (this.def.flying) {
+      // 飛行モブ (ブレイズ): 重力を受けず, プレイヤーの目線あたりを浮遊する
+      const targetY = player.pos[1] + 2.5 + Math.sin(this.stateTime * 0.6) * 1.5;
+      this.vel[1] = clamp((targetY - this.pos[1]) * 1.2, -4, 4);
+    } else {
+      this.vel[1] -= MOB_GRAVITY * dt;
+      this.vel[1] = Math.max(this.vel[1], -30);
+
+      // 水中では浮く
+      const bx = Math.floor(this.pos[0]);
+      const bz = Math.floor(this.pos[2]);
+      if (world.getBlock(bx, Math.floor(this.pos[1] + 0.3), bz) === B.WATER) {
+        this.vel[1] = Math.max(this.vel[1], 1.5);
+      }
     }
 
     const wasBlocked = this.moveAxis(world, 0, this.vel[0] * dt) |
@@ -553,6 +604,7 @@ class MobManager {
     this.maxAnimals = 12;
     this.maxZombies = 8;
     this.maxEndermen = 3;
+    this.maxNetherMobs = 10;
     this.deaths = [];        // 今フレーム死んだモブ (演出は main 側)
     this.explosions = [];    // クリーパーの爆発 (処理は main 側)
     this.arrows = [];        // スケルトンの矢
@@ -738,6 +790,23 @@ class MobManager {
 
     const chunk = this.world.getChunk(x >> 4, z >> 4);
     if (!chunk || !chunk.generated) return;
+
+    // --- ネザー: ゾンビピッグマン / ブレイズが常時湧く (昼夜は無関係) ---
+    if (this.world.isInNether(playerPos[0], playerPos[2])) {
+      if (this.count(true) + this.countType("zombie_pigman") >= this.maxNetherMobs) return;
+      const py = Math.floor(playerPos[1]);
+      for (let dy = -10; dy <= 10; dy++) {
+        const y = py + dy;
+        if (y < 2 || y > CHUNK_H - 3) continue;
+        if (this.world.getBlock(x, y, z) === B.AIR && this.world.getBlock(x, y + 1, z) === B.AIR &&
+            this.world.getBlock(x, y, z) !== B.LAVA_BLOCK) {
+          const type = Math.random() < 0.7 ? "zombie_pigman" : "blaze";
+          this.mobs.push(new Mob(type, x + 0.5, y + 1.01, z + 0.5));
+          return;
+        }
+      }
+      return;
+    }
 
     const y = this.world.surfaceY(x, z);
     if (y + 1 <= WATER_LEVEL) return;
