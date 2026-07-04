@@ -458,6 +458,13 @@
     { out: B.STONE_BRICK_SLAB, outN: 4, in: [[B.STONE_BRICK, 2]] },
     { out: B.BRICK_SLAB, outN: 4, in: [[B.BRICK, 2]] },
     { out: B.SANDSTONE_SLAB, outN: 4, in: [[B.SANDSTONE, 2]] },
+    // 階段 (north 向きが基本の見た目で、設置時にプレイヤーの向きへ自動回転する)
+    { out: STAIR_ID_BASE + 0 * 4, outN: 2, in: [[B.STONE, 3]] },
+    { out: STAIR_ID_BASE + 1 * 4, outN: 2, in: [[B.COBBLE, 3]] },
+    { out: STAIR_ID_BASE + 2 * 4, outN: 2, in: [[B.PLANK, 3]] },
+    { out: STAIR_ID_BASE + 3 * 4, outN: 2, in: [[B.STONE_BRICK, 3]] },
+    { out: STAIR_ID_BASE + 4 * 4, outN: 2, in: [[B.BRICK, 3]] },
+    { out: STAIR_ID_BASE + 5 * 4, outN: 2, in: [[B.SANDSTONE, 3]] },
   ];
 
   // 色付き羊毛: 羊毛 1 → 各色 1
@@ -1761,6 +1768,15 @@
     }
   }
 
+  // 階段の設置向き決定: プレイヤーの水平方向の向きを 90 度刻みの
+  // north/east/south/west に丸めて、その素材の対応する ID を返す
+  function stairFacingId(id, yaw) {
+    const mi = Math.floor((id - STAIR_ID_BASE) / 4);
+    const a = ((yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const dir = Math.round(a / (Math.PI / 2)) % 4;
+    return STAIR_ID_BASE + mi * 4 + dir;
+  }
+
   function placeAction() {
     swingTimer = 0;
     // 弓: 矢を放つ
@@ -1947,7 +1963,9 @@
     if ((BLOCKS[id].torch || BLOCKS[id].cross || BLOCKS[id].height <= 0.1) &&
         !world.isSolidAt(px, py - 1, pz)) return;
     if (!consumeItem(id)) return;
-    if (world.setBlock(px, py, pz, id)) {
+    // 階段: プレイヤーの向きに合わせて north/east/south/west のいずれかに回転
+    const placeId = BLOCKS[id].stairs ? stairFacingId(id, player.yaw) : id;
+    if (world.setBlock(px, py, pz, placeId)) {
       sound.place();
       checkFalling(px, py, pz); // 空中に置いた砂は落ちる
       if (id === B.WITHER_SKULL) tryDetectWither(px, py, pz);

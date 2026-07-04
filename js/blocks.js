@@ -788,9 +788,43 @@ defBlock(B.NETHER_STAR, "nether_star", "ネザースター",
 defBlock(B.FARMLAND, "farmland", "農地", [TILE.FARMLAND, TILE.DIRT, TILE.DIRT],
   { hardness: 0.6, opaque: false, height: 0.9375, drops: B.DIRT });
 
+// --- 階段ブロック ---
+// L字形状 (下半分は全面, 上半分は奥側だけ) の専用メッシュで描画する (mesher.js)。
+// 設置時のプレイヤーの向きに応じて north/east/south/west の 4 方向のうち
+// 1 つに自動で回転する (main.js の placeAction 参照)。
+// 当たり判定はハーフブロック (height: 0.5) と同じ扱いにし、既存の低い段差
+// 自動よじ登り (player.js moveAxis) でそのまま歩いて上れるようにする。
+const STAIR_ID_BASE = 189;   // 189-212: 6 素材 x 4 方向
+const STAIR_DIRS = ["north", "east", "south", "west"]; // yaw 0/90/180/270° 順
+const STAIR_MATERIALS = [
+  ["stone_stairs", "石の階段", [TILE.STONE, TILE.STONE, TILE.STONE],
+    { hardness: 1.6, pickable: true, minTier: 1 }],
+  ["cobble_stairs", "丸石の階段", [TILE.COBBLE, TILE.COBBLE, TILE.COBBLE],
+    { hardness: 1.8, pickable: true, minTier: 1 }],
+  ["plank_stairs", "木材の階段", [TILE.PLANK, TILE.PLANK, TILE.PLANK],
+    { hardness: 1.2 }],
+  ["stone_brick_stairs", "石レンガの階段", [TILE.STONE_BRICK, TILE.STONE_BRICK, TILE.STONE_BRICK],
+    { hardness: 1.8, pickable: true, minTier: 1 }],
+  ["brick_stairs", "レンガの階段", [TILE.BRICK, TILE.BRICK, TILE.BRICK],
+    { hardness: 1.8, pickable: true, minTier: 1 }],
+  ["sandstone_stairs", "砂岩の階段", [TILE.SANDSTONE, TILE.SANDSTONE, TILE.SANDSTONE],
+    { hardness: 1.4, pickable: true, minTier: 1 }],
+];
+STAIR_MATERIALS.forEach(([name, jp, tiles, opts], mi) => {
+  const baseId = STAIR_ID_BASE + mi * 4;
+  STAIR_DIRS.forEach((dirName, di) => {
+    const id = baseId + di;
+    defBlock(id, name + "_" + dirName, jp, tiles,
+      { ...opts, opaque: false, height: 0.5, drops: baseId });
+    BLOCKS[id].stairs = true;
+    BLOCKS[id].stairDir = di;   // 0=north(-z) 1=east(+x) 2=south(+z) 3=west(-x): 低い段の開いている向き
+  });
+});
+
 // 道具の効くブロック分類
 [B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.PLANK, B.BIRCH_PLANK, B.DARK_PLANK,
  B.PLANK_SLAB, B.BOOKSHELF, B.CHEST, B.BED, B.PUMPKIN, B.JACK_O_LANTERN,
+ STAIR_ID_BASE + 2 * 4, STAIR_ID_BASE + 2 * 4 + 1, STAIR_ID_BASE + 2 * 4 + 2, STAIR_ID_BASE + 2 * 4 + 3,
 ].forEach((id) => { BLOCKS[id].axeable = true; });
 [B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.FARMLAND,
 ].forEach((id) => { BLOCKS[id].shovelable = true; });

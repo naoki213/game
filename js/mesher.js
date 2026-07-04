@@ -46,6 +46,24 @@ const FACES = [
   },
 ];
 
+// 階段ブロックの形状データ (dir: 0=north 1=east 2=south 3=west, blocks.js の
+// STAIR_DIRS と対応)。下段は常に全面のハーフブロック、上段は「開いている」
+// 方向と反対側の半分だけ一段高い箱。
+const STAIR_UPPER_BOX = [
+  { x0: 0, x1: 1, y0: 0.5, y1: 1, z0: 0.5, z1: 1 },   // north: 開放 -z, 奥は +z 側
+  { x0: 0, x1: 0.5, y0: 0.5, y1: 1, z0: 0, z1: 1 },   // east:  開放 +x, 奥は -x 側
+  { x0: 0, x1: 1, y0: 0.5, y1: 1, z0: 0, z1: 0.5 },   // south: 開放 +z, 奥は -z 側
+  { x0: 0.5, x1: 1, y0: 0.5, y1: 1, z0: 0, z1: 1 },   // west:  開放 -x, 奥は +x 側
+];
+const STAIR_OPEN_TOP = [
+  { x0: 0, x1: 1, y0: 0.5, y1: 0.5, z0: 0, z1: 0.5 },
+  { x0: 0.5, x1: 1, y0: 0.5, y1: 0.5, z0: 0, z1: 1 },
+  { x0: 0, x1: 1, y0: 0.5, y1: 0.5, z0: 0.5, z1: 1 },
+  { x0: 0, x1: 0.5, y0: 0.5, y1: 0.5, z0: 0, z1: 1 },
+];
+// 上段のうち, 踏み板との境目 (蹴込み面) は常に描画。FACES のインデックス (0=+X 1=-X 4=+Z 5=-Z)
+const STAIR_RISER_FACE = [5, 0, 4, 1];
+
 // この面を描画すべきか
 function shouldDrawFace(id, neighborId) {
   if (neighborId === B.AIR) return true;
@@ -295,6 +313,64 @@ function buildChunkMesh(world, chunk) {
             opaque.indices.push(vi + 2, vi + 1, vi, vi + 3, vi + 2, vi);
             opaque.count += 4;
           }
+          continue;
+        }
+
+        // --- 階段: 下段 (全面ハーフ) + 上段 (奥半分だけ一段高い) の2箱を積む ---
+        if (block.stairs) {
+          const dir = block.stairDir;
+          const wx = ox + lx, wz = oz + lz;
+          const sky = skyAt(lx, y, lz) / 15;
+          const blk = blkAt(lx, y, lz) / 15;
+          const tiles = block.tiles;
+
+          const pushStairFace = (f, box) => {
+            const face = FACES[f];
+            const tile = f === 2 ? tiles[0] : f === 3 ? tiles[2] : tiles[1];
+            const uv = tileUV(tile);
+            const vi = opaque.count;
+            for (let ci = 0; ci < 4; ci++) {
+              const c = face.corners[ci];
+              const xF = c[0] ? box.x1 : box.x0;
+              const yF = c[1] ? box.y1 : box.y0;
+              const zF = c[2] ? box.z1 : box.z0;
+              let u, v;
+              switch (f) {
+                case 0: u = 1 - zF; v = 1 - yF; break;
+                case 1: u = zF; v = 1 - yF; break;
+                case 2: u = xF; v = zF; break;
+                case 3: u = xF; v = 1 - zF; break;
+                case 4: u = xF; v = 1 - yF; break;
+                default: u = 1 - xF; v = 1 - yF; break;
+              }
+              opaque.verts.push(
+                wx + xF, y + yF, wz + zF,
+                lerp(uv.u0, uv.u1, u), lerp(uv.v0, uv.v1, v),
+                f * 4 + face.shade,
+                sky, blk
+              );
+            }
+            opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+            opaque.count += 4;
+          };
+
+          const lowerBox = { x0: 0, x1: 1, y0: 0, y1: 0.5, z0: 0, z1: 1 };
+          for (const f of [0, 1, 4, 5]) {
+            const [dx, , dz] = FACES[f].dir;
+            if (shouldDrawFace(id, getNb(lx + dx, y, lz + dz))) pushStairFace(f, lowerBox);
+          }
+          if (shouldDrawFace(id, getNb(lx, y - 1, lz))) pushStairFace(3, lowerBox);
+          // 下段の踏み板 (開いている側の上面) は常に露出しているので無条件に描画
+          pushStairFace(2, STAIR_OPEN_TOP[dir]);
+
+          const upperBox = STAIR_UPPER_BOX[dir];
+          const riserFace = STAIR_RISER_FACE[dir];
+          for (const f of [0, 1, 4, 5]) {
+            if (f === riserFace) { pushStairFace(f, upperBox); continue; }
+            const [dx, , dz] = FACES[f].dir;
+            if (shouldDrawFace(id, getNb(lx + dx, y, lz + dz))) pushStairFace(f, upperBox);
+          }
+          if (shouldDrawFace(id, getNb(lx, y + 1, lz))) pushStairFace(2, upperBox);
           continue;
         }
 
