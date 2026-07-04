@@ -1125,6 +1125,39 @@
     showToast("🏰 ネザーフォートレスの宝箱を見つけた!");
   }
 
+  // 砂漠の神殿: 宝物庫に踏み込んだら一度だけ宝箱を詰めて隠しトラップを起爆する
+  let templeTriggered = new Set();
+  try {
+    templeTriggered = new Set(JSON.parse(localStorage.getItem("mcjs_temple_" + seed) || "[]"));
+  } catch (e) { /* ignore */ }
+  function updateDesertTempleLoot() {
+    const t = world.desertTempleNear(player.pos[0], player.pos[2]);
+    if (!t) return;
+    const key = t.cx + "," + t.cz;
+    if (templeTriggered.has(key)) return;
+    const gy = t.y - 5; // world.js の stampDesertTemple と合わせた宝物庫の床
+    const dx = player.pos[0] - t.cx, dz = player.pos[2] - t.cz, dy = player.pos[1] - gy;
+    if (dx * dx + dz * dz > 3.5 * 3.5 || dy < -1 || dy > 4) return;
+    templeTriggered.add(key);
+    localStorage.setItem("mcjs_temple_" + seed, JSON.stringify([...templeTriggered]));
+    for (const [ddx, ddz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) {
+      const cxx = t.cx + ddx, czz = t.cz + ddz;
+      if (world.getBlock(cxx, gy, czz) !== B.CHEST) continue;
+      const c = chestAt([cxx, gy, czz].join(","));
+      c.set(I.GOLD_INGOT, 2 + ((Math.random() * 4) | 0));
+      c.set(B.DIAMOND_ORE, 1 + ((Math.random() * 2) | 0));
+      c.set(I.EYE_OF_ENDER, 1);
+      c.set(B.TNT, 2);
+    }
+    showToast("⚠️ 砂漠の神殿の宝物庫だ… 何かが怪しく光った!");
+    sound.hiss();
+    for (const [ddx, ddz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (world.getBlock(t.cx + ddx, gy - 2, t.cz + ddz) === B.TNT) {
+        igniteTNT(t.cx + ddx, gy - 2, t.cz + ddz, 1.0 + Math.random() * 0.6);
+      }
+    }
+  }
+
   function makeItemCell(id, n, onClick) {
     const el = document.createElement("div");
     el.className = "inv-item";
@@ -2375,6 +2408,7 @@
       updateNetherPortalTravel(dt);
       updateLavaDamage(dt);
       updateFortressLoot();
+      updateDesertTempleLoot();
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));

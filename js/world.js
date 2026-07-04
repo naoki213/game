@@ -7,6 +7,7 @@ const CHUNK_SIZE = 16;    // X/Z 方向
 const CHUNK_H = 128;      // Y 方向 (ワールドの高さ) — 高い山と深い海のため 2 倍に拡張
 const WATER_LEVEL = 46;   // 海面
 const VILLAGE_GRID = 320; // 村の配置グリッド (ブロック)
+const DESERT_TEMPLE_GRID = 260; // 砂漠の神殿の配置グリッド (ブロック)
 
 // エンドポータルの間 (ストロングホールド) の固定座標。シードによらず常に同じ場所
 const STRONGHOLD = { x: 260, y: 20, z: 340 };
@@ -64,6 +65,7 @@ class World {
     this.noiseBiome = new Perlin(seed ^ 0x9e3779b9);
     this.heightCache = new Map();     // 列の高さキャッシュ
     this.villageCache = new Map();    // 村グリッドのキャッシュ
+    this.templeCache = new Map();     // 砂漠の神殿グリッドのキャッシュ
     this.entranceCache = new Map();   // 洞窟の入り口 (竪穴) のキャッシュ
 
     // プレイヤーの編集 (生成地形との差分): "cx,cz" -> Map(idx -> blockId)
@@ -344,6 +346,9 @@ class World {
 
     // --- 村の建物を刻印 ---
     this.stampVillages(chunk);
+
+    // --- 砂漠の神殿を刻印 ---
+    this.stampDesertTemples(chunk);
 
     // --- ストロングホールド (エンドポータルの間) を刻印 ---
     this.stampStronghold(chunk);
@@ -656,6 +661,109 @@ class World {
 
     // 室内の松明
     set(midX, floorY + 1, midZ, B.TORCH);
+  }
+
+  // ---------------- 砂漠の神殿 ----------------
+  // 砂漠グリッドごとに決定論的に配置される, 段状の砂岩ピラミッド。
+  // 頂上中央の縦穴を降りると地下に宝物庫 (チェスト4つ + 隠しトラップ) がある
+
+  desertTempleInCell(gx, gz) {
+    const key = gx + "," + gz;
+    if (this.templeCache.has(key)) return this.templeCache.get(key);
+    let temple = null;
+    if (hash2(gx, gz, this.seed ^ 0x8a41d5) < 0.5) {
+      const G = DESERT_TEMPLE_GRID;
+      const cx = gx * G + 60 + Math.floor(hash2(gx, gz, this.seed ^ 0x1a2b) * (G - 120));
+      const cz = gz * G + 60 + Math.floor(hash2(gx, gz, this.seed ^ 0x3c4d) * (G - 120));
+      const info = this.columnInfo(cx, cz);
+      if (info.biome === "desert" && info.h > WATER_LEVEL + 1) {
+        temple = { cx, cz, y: info.h + 1 };
+      }
+    }
+    this.templeCache.set(key, temple);
+    return temple;
+  }
+
+  // (x, z) の近くの神殿を探す (main.js が宝物庫トリガーの判定に使う)
+  desertTempleNear(wx, wz) {
+    const gx = Math.floor(wx / DESERT_TEMPLE_GRID);
+    const gz = Math.floor(wz / DESERT_TEMPLE_GRID);
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const t = this.desertTempleInCell(gx + dx, gz + dz);
+        if (t && Math.abs(wx - t.cx) < 8 && Math.abs(wz - t.cz) < 8) return t;
+      }
+    }
+    return null;
+  }
+
+  stampDesertTemples(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    const R = 12;
+    const g0x = Math.floor((ox - R) / DESERT_TEMPLE_GRID);
+    const g1x = Math.floor((ox + 15 + R) / DESERT_TEMPLE_GRID);
+    const g0z = Math.floor((oz - R) / DESERT_TEMPLE_GRID);
+    const g1z = Math.floor((oz + 15 + R) / DESERT_TEMPLE_GRID);
+    for (let gz = g0z; gz <= g1z; gz++) {
+      for (let gx = g0x; gx <= g1x; gx++) {
+        const t = this.desertTempleInCell(gx, gz);
+        if (t) this.stampDesertTemple(chunk, ox, oz, t);
+      }
+    }
+  }
+
+  stampDesertTemple(chunk, ox, oz, t) {
+    const { cx, cz, y: baseY } = t;
+    const R = 9;
+    if (ox + 15 < cx - R || ox > cx + R || oz + 15 < cz - R || oz > cz + R) return;
+    const seed = this.seed;
+    const set = (wx, y, wz, id) => {
+      if (wx < ox || wx > ox + 15 || wz < oz || wz > oz + 15 || y < 1 || y >= CHUNK_H) return;
+      chunk.set(wx - ox, y, wz - oz, id);
+    };
+    const fill = (x0, y0, z0, x1, y1, z1, id) => {
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++)
+          for (let x = x0; x <= x1; x++) set(x, y, z, id);
+    };
+
+    // 段状のピラミッド本体 (砂岩, 途中に彩色テラコッタの帯を挟む)
+    const topY = baseY + 8;
+    for (let level = 0; level <= 8; level++) {
+      const r = 8 - level;
+      const y = baseY + level;
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const edge = Math.max(Math.abs(dx), Math.abs(dz)) === r;
+          let id = B.SANDSTONE;
+          if (edge && (level === 2 || level === 5)) {
+            id = TERRA_ID_BASE + (hash2(cx + dx, cz + dz, seed ^ 0x5a5a) < 0.5 ? 1 : 4); // 橙 or 青緑
+          }
+          set(cx + dx, y, cz + dz, id);
+        }
+      }
+    }
+
+    // 地下の宝物庫 (7x7, 高さ4) + 四隅にチェスト
+    const gy = baseY - 5; // 宝物庫の床
+    fill(cx - 3, gy, cz - 3, cx + 3, gy + 3, cz + 3, B.AIR);
+    fill(cx - 3, gy - 1, cz - 3, cx + 3, gy - 1, cz + 3, B.SANDSTONE);
+    fill(cx - 3, gy + 4, cz - 3, cx + 3, gy + 4, cz + 3, B.SANDSTONE);
+    for (const [wx0, wz0, wx1, wz1] of [
+      [cx - 3, cz - 3, cx + 3, cz - 3], [cx - 3, cz + 3, cx + 3, cz + 3],
+      [cx - 3, cz - 3, cx - 3, cz + 3], [cx + 3, cz - 3, cx + 3, cz + 3],
+    ]) {
+      fill(wx0, gy, wz0, wx1, gy + 3, wz1, B.SANDSTONE);
+    }
+    for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) {
+      set(cx + dx, gy, cz + dz, B.CHEST);
+    }
+    // 床下に隠した起爆用 TNT (main.js が宝物庫に入ったのを検知して着火する)
+    fill(cx - 1, gy - 2, cz - 1, cx + 1, gy - 2, cz + 1, B.TNT);
+
+    // 頂上中央から宝物庫まで貫く縦穴 (ここを掘り進んで中に入る)
+    for (let y = gy + 4; y <= topY; y++) set(cx, y, cz, B.AIR);
   }
 
   // ---------------- ストロングホールド (エンドポータルの間) ----------------
