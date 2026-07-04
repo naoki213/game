@@ -1333,7 +1333,20 @@
   function tryPunch() {
     const hit = player.raycast();
     const fwd = player.forward();
-    const mob = mobs.pick(player.eyePos(), fwd, hit ? hit.t : REACH);
+    const maxDist = hit ? hit.t : REACH;
+    // エンダードラゴン (剣で殴る)
+    if (mobs.dragon && !mobs.dragon.dead) {
+      const dt2 = mobs.dragon.rayHit(player.eyePos(), fwd, maxDist);
+      if (dt2 < maxDist) {
+        const tool = heldTool();
+        const damage = tool ? tool.damage : 2;
+        mobs.hitDragon(damage, fwd);
+        sound.thud();
+        if (tool && tool.kind === "sword") damageTool(tool.id);
+        return true;
+      }
+    }
+    const mob = mobs.pick(player.eyePos(), fwd, maxDist);
     if (mob) {
       const tool = heldTool();
       const damage = tool ? tool.damage : 2;
@@ -1353,6 +1366,7 @@
     if (!world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR)) return;
     spawnBreakParticles(hit.pos[0], hit.pos[1], hit.pos[2], hit.id);
     sound.break_();
+    if (hit.id === B.END_CRYSTAL) explodeEndCrystal(hit.pos[0], hit.pos[1], hit.pos[2]);
     if (gameMode === "survival") {
       // 階層不足のピッケルではドロップしない (本家準拠)
       const tier = tool && tool.kind === "pick" ? tool.tier : 0;
@@ -1464,6 +1478,8 @@
   let endReturnPos = null; // ジ・エンドへ渡る前のオーバーワールド座標
   let portalCooldown = 0;
 
+  let dragonDefeated = localStorage.getItem("mcjs_dragon_" + seed) === "1";
+
   function enterEnd() {
     endReturnPos = [...player.pos];
     const { x: ex, y: ey, z: ez } = END;
@@ -1476,8 +1492,43 @@
     player.pos = [ex + 0.5, ey + 3, ez - 8 + 0.5];
     player.vel = [0, 0, 0];
     player.flying = false;
-    showToast("🌌 ジ・エンドへ渡った…");
+    if (!dragonDefeated && !mobs.dragon) {
+      mobs.dragon = new Dragon(ex, ey, ez);
+      showToast("🌌 ジ・エンドへ渡った… 🐉 エンダードラゴンが待ち構えている!");
+    } else if (dragonDefeated) {
+      showToast("🌌 ジ・エンドへ渡った…");
+    } else {
+      showToast("🌌 ジ・エンドへ渡った… 🐉 エンダードラゴンがまだ生きている!");
+    }
     sound.blip(200, 0.6, "sine", 0.3);
+  }
+
+  // 目玉のクリスタルを破壊したときの演出 (地形は壊さない, 見た目と音のみ)
+  function explodeEndCrystal(x, y, z) {
+    spawnPuff(x + 0.5, y + 0.5, z + 0.5, [1, 0.7, 1]);
+    spawnPuff(x + 0.5, y + 0.5, z + 0.5, [0.8, 0.3, 0.9]);
+    sound.blip(150, 0.35, "sawtooth", 0.3);
+  }
+
+  // ドラゴンを倒したときの勝利演出 (脱出ポータルを設置)
+  function handleDragonVictory() {
+    const pos = mobs.dragonDeathPos;
+    if (!pos) return;
+    mobs.dragonDeathPos = null;
+    mobs.dragon = null;
+    dragonDefeated = true;
+    localStorage.setItem("mcjs_dragon_" + seed, "1");
+    const { x: ex, y: ey, z: ez } = END;
+    // 中央に脱出ポータルを設置 (3x3 のエンドポータル + 黒曜石の縁)
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const id = Math.max(Math.abs(dx), Math.abs(dz)) <= 1 ? B.END_PORTAL : B.OBSIDIAN;
+        world.setBlock(ex + dx, ey + 1, ez + dz, id);
+      }
+    }
+    spawnPuff(pos[0], pos[1], pos[2], [0.9, 0.5, 1]);
+    sound.blip(120, 1.2, "sine", 0.4);
+    showToast("🐉✨ エンダードラゴンを討伐した! おめでとうございます! ✨🐉");
   }
 
   function exitEnd() {
@@ -2107,6 +2158,7 @@
         explode(ex.pos[0], ex.pos[1] + 0.8, ex.pos[2]);
       }
       mobs.explosions.length = 0;
+      handleDragonVictory();
 
       updateSurvivalUI(dt);
 
@@ -2261,6 +2313,7 @@
     enterEnd,
     exitEnd,
     get endReturnPos() { return endReturnPos; },
+    get dragonDefeated() { return dragonDefeated; },
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

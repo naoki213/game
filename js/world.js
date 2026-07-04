@@ -179,6 +179,21 @@ class World {
     return Math.hypot(x - END.x, z - END.z) <= END.boundsR;
   }
 
+  // 8 本の柱の上にあるエンダークリスタルの座標 (generateEndChunk と同じ式)
+  endCrystalCoords() {
+    const { x: ex, z: ez, y: ey, pillarR } = END;
+    const N = 8;
+    const coords = [];
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2;
+      const px = Math.round(ex + Math.cos(ang) * pillarR);
+      const pz = Math.round(ez + Math.sin(ang) * pillarR);
+      const pillarTop = ey + 7 + (i % 3) * 5;
+      coords.push([px, pillarTop + 1, pz]);
+    }
+    return coords;
+  }
+
   generateChunk(cx, cz) {
     const key = World.key(cx, cz);
     let chunk = this.chunks.get(key);

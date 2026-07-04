@@ -196,6 +196,131 @@ const MOB_GRAVITY = 22;
 // 面ごとのシェーディング (上 / 側面 / 下)
 const BOX_SHADE = { top: 1.0, bottom: 0.55, north: 0.7, south: 0.75, east: 0.85, west: 0.62 };
 
+// ---------------------------------------------------------------
+// エンダードラゴン (最終ボス): 通常の Mob とは別に飛行 AI で動く
+// parts は [ox, oy, oz, w, h, d, r, g, b] (原点=胴体中心, +Z が正面)
+// ---------------------------------------------------------------
+const DRAGON_PARTS = [
+  // 胴体
+  [-1.6, -1.0, -2.6, 3.2, 2.2, 5.2, 0.4, 0.12, 0.52],
+  // 首
+  [-0.8, 0.0, 2.6, 1.6, 1.6, 2.4, 0.37, 0.11, 0.49],
+  // 頭
+  [-1.0, 0.0, 5.0, 2.0, 1.6, 2.2, 0.34, 0.1, 0.46],
+  // 鼻先
+  [-0.55, 0.1, 7.1, 1.1, 0.9, 1.1, 0.28, 0.08, 0.38],
+  // 尻尾 (先細りに 3 段)
+  [-1.3, -0.8, -6.8, 2.6, 1.6, 3.0, 0.4, 0.12, 0.52],
+  [-1.0, -0.6, -9.6, 2.0, 1.2, 2.4, 0.37, 0.11, 0.48],
+  [-0.6, -0.4, -11.8, 1.2, 0.8, 2.0, 0.34, 0.1, 0.44],
+  // 翼 x2 (左右に大きく広げる, 平ら)
+  [-9.5, 0.4, -1.5, 8.0, 0.35, 4.2, 0.44, 0.15, 0.58],
+  [1.5, 0.4, -1.5, 8.0, 0.35, 4.2, 0.44, 0.15, 0.58],
+  // 脚 x2 (下にぶら下げる)
+  [-1.6, -2.2, -0.6, 0.7, 1.3, 0.7, 0.37, 0.11, 0.48],
+  [0.9, -2.2, -0.6, 0.7, 1.3, 0.7, 0.37, 0.11, 0.48],
+  // 目 x2 (紫に発光)
+  [-0.7, 0.55, 6.9, 0.22, 0.2, 0.05, 0.9, 0.25, 1.0],
+  [0.48, 0.55, 6.9, 0.22, 0.2, 0.05, 0.9, 0.25, 1.0],
+];
+
+class Dragon {
+  constructor(cx, cy, cz) {
+    this.center = [cx, cy, cz];
+    this.radius = 22;
+    this.angle = 0;
+    this.pos = [cx + this.radius, cy + 16, cz];
+    this.yaw = 0;
+    this.health = 200;
+    this.maxHealth = 200;
+    this.hurt = 0;
+    this.state = "circle";      // circle | dive
+    this.stateTimer = 6 + Math.random() * 5;
+    this.attackCooldown = 0;
+    this.dead = false;
+  }
+
+  // クリスタルが生きているだけ緩やかに回復する
+  healFromCrystals(dt, crystalCount) {
+    if (crystalCount <= 0) return;
+    this.health = Math.min(this.maxHealth, this.health + crystalCount * 0.4 * dt);
+  }
+
+  update(dt, world, player, mgr) {
+    this.hurt = Math.max(0, this.hurt - dt);
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    this.stateTimer -= dt;
+
+    if (this.state === "circle") {
+      this.angle += dt * 0.3;
+      this.pos[0] = this.center[0] + Math.cos(this.angle) * this.radius;
+      this.pos[2] = this.center[2] + Math.sin(this.angle) * this.radius;
+      this.pos[1] = this.center[1] + 16 + Math.sin(this.angle * 0.7) * 3;
+      // 進行方向を向く (円周上の接線方向)
+      this.yaw = Math.atan2(-Math.sin(this.angle), Math.cos(this.angle));
+      if (this.stateTimer <= 0 && !player.dead) {
+        this.state = "dive";
+        this.diveTarget = [player.pos[0], player.pos[1] + 1, player.pos[2]];
+        this.stateTimer = 3.2;
+      }
+    } else if (this.state === "dive") {
+      const dx = this.diveTarget[0] - this.pos[0];
+      const dy = this.diveTarget[1] - this.pos[1];
+      const dz = this.diveTarget[2] - this.pos[2];
+      const dist = Math.hypot(dx, dy, dz) || 1;
+      const speed = 16;
+      this.pos[0] += (dx / dist) * speed * dt;
+      this.pos[1] += (dy / dist) * speed * dt;
+      this.pos[2] += (dz / dist) * speed * dt;
+      this.yaw = Math.atan2(dx, dz);
+      // プレイヤーに接触したらダメージ + ノックバック
+      const pdx = player.pos[0] - this.pos[0];
+      const pdz = player.pos[2] - this.pos[2];
+      const pdy = player.pos[1] - this.pos[1];
+      if (!player.dead && this.attackCooldown <= 0 &&
+          Math.abs(pdy) < 3 && pdx * pdx + pdz * pdz < 4 * 4) {
+        this.attackCooldown = 1.5;
+        player.takeDamage(6);
+        const pd = Math.hypot(pdx, pdz) || 1;
+        player.vel[0] += (pdx / pd) * 9;
+        player.vel[2] += (pdz / pd) * 9;
+        player.vel[1] = Math.max(player.vel[1], 6);
+      }
+      if (this.stateTimer <= 0 || dist < 3) {
+        // 現在位置に対応する角度から周回を再開する (スムーズに繋げる)
+        this.angle = Math.atan2(this.pos[2] - this.center[2], this.pos[0] - this.center[0]);
+        this.state = "circle";
+        this.stateTimer = 7 + Math.random() * 5;
+      }
+    }
+
+    if (this.health <= 0 && !this.dead) {
+      this.dead = true;
+      if (mgr) mgr.dragonDeathPos = [...this.pos];
+    }
+  }
+
+  // レイと大まかな AABB の交差 (剣で狙って殴るため)
+  rayHit(origin, dir, maxDist) {
+    const min = [this.pos[0] - 4.5, this.pos[1] - 2.5, this.pos[2] - 8];
+    const max = [this.pos[0] + 4.5, this.pos[1] + 2.5, this.pos[2] + 8];
+    let tmin = 0, tmax = maxDist;
+    for (let a = 0; a < 3; a++) {
+      if (Math.abs(dir[a]) < 1e-9) {
+        if (origin[a] < min[a] || origin[a] > max[a]) return Infinity;
+        continue;
+      }
+      let t1 = (min[a] - origin[a]) / dir[a];
+      let t2 = (max[a] - origin[a]) / dir[a];
+      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
+      if (tmin > tmax) return Infinity;
+    }
+    return tmin;
+  }
+}
+
 class Mob {
   constructor(type, x, y, z) {
     this.type = type;
@@ -434,6 +559,19 @@ class MobManager {
     this.groanRequest = false;
     this.hissRequest = false;
     this.shootRequest = false;
+    this.dragon = null;          // エンダードラゴン (ジ・エンドにいる間のみ)
+    this.dragonDeathPos = null;  // 今フレームに倒した位置 (演出は main 側)
+  }
+
+  // ダメージを与える (剣の近接攻撃から呼ぶ)
+  hitDragon(damage, dir) {
+    if (!this.dragon || this.dragon.dead) return;
+    this.dragon.health -= damage;
+    this.dragon.hurt = 0.3;
+    if (dir) {
+      this.dragon.pos[0] += dir[0] * 0.5;
+      this.dragon.pos[2] += dir[2] * 0.5;
+    }
   }
 
   shootArrow(mob, player) {
@@ -477,6 +615,17 @@ class MobManager {
       a.pos[2] += a.vel[2] * dt;
 
       if (a.fromPlayer) {
+        // エンダードラゴン (体の大まかな範囲に命中判定)
+        if (this.dragon && !this.dragon.dead) {
+          const dx = a.pos[0] - this.dragon.pos[0];
+          const dy = a.pos[1] - this.dragon.pos[1];
+          const dz = a.pos[2] - this.dragon.pos[2];
+          if (Math.abs(dx) < 3.5 && Math.abs(dz) < 7 && Math.abs(dy) < 3) {
+            this.hitDragon(6, [a.vel[0], 0, a.vel[2]]);
+            this.arrows.splice(i, 1);
+            continue;
+          }
+        }
         // プレイヤーの矢 → モブに命中
         let hitMob = null;
         for (const m of this.mobs) {
@@ -522,8 +671,17 @@ class MobManager {
     this.groanRequest = false;
     this.hissRequest = false;
     this.shootRequest = false;
+    this.dragonDeathPos = null;
     this.updateArrows(dt, player);
     const playerPos = player.pos;
+
+    // --- エンダードラゴン ---
+    if (this.dragon && !this.dragon.dead) {
+      const crystalCoords = this.world.endCrystalCoords();
+      const aliveCrystals = crystalCoords.filter(([x, y, z]) => this.world.getBlock(x, y, z) === B.END_CRYSTAL).length;
+      this.dragon.healFromCrystals(dt, aliveCrystals);
+      this.dragon.update(dt, this.world, player, this);
+    }
 
     // --- スポーン ---
     this.spawnTimer -= dt;
@@ -570,6 +728,8 @@ class MobManager {
   }
 
   trySpawn(playerPos, daylight) {
+    // ジ・エンドでは通常のモブは湧かない (エンダードラゴンのみ)
+    if (this.world.isInEnd(playerPos[0], playerPos[2])) return;
     // プレイヤーの周囲 20–50 ブロックのランダム地点
     const ang = Math.random() * Math.PI * 2;
     const dist = 20 + Math.random() * 30;
@@ -666,6 +826,22 @@ class MobManager {
       const yaw = Math.atan2(a.vel[0], a.vel[2]);
       pushBox(verts, a.pos, Math.sin(yaw), Math.cos(yaw),
         -0.035, -0.035, -0.3, 0.07, 0.07, 0.6, 0.5, 0.4, 0.28);
+    }
+
+    // エンダードラゴン
+    if (this.dragon && !this.dragon.dead) {
+      const dr = this.dragon;
+      const sin = Math.sin(dr.yaw), cos = Math.cos(dr.yaw);
+      const hurtT = dr.hurt > 0 ? 0.55 : 0;
+      for (const p of DRAGON_PARTS) {
+        let [ox, oy, oz, w, h, d, r, g, b] = p;
+        if (hurtT > 0) {
+          r = r + (1 - r) * hurtT;
+          g *= 1 - hurtT;
+          b *= 1 - hurtT;
+        }
+        pushBox(verts, dr.pos, sin, cos, ox, oy, oz, w, h, d, r, g, b);
+      }
     }
     return new Float32Array(verts);
   }
