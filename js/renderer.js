@@ -7,50 +7,160 @@ const WORLD_VS = `
 precision mediump float;
 attribute vec3 aPos;
 attribute vec2 aUV;
-attribute float aShade;
+attribute float aShade;   // AOシェード + 法線インデックス*4 をパック
 attribute float aSky;
 attribute float aBlock;
 uniform mat4 uMVP;
+uniform mat4 uLightMVP;   // 影MOD: 太陽視点のシャドウマップ行列
 uniform vec3 uCamPos;
+uniform vec3 uSunDir;
 uniform float uDaylight;
+uniform float uWave;      // 1 = 水, 2 = マグマ (波/脈動アニメーション)
+uniform float uTime;
 varying vec2 vUV;
-varying float vLight;
+varying float vShade;
+varying float vSkyTerm;
+varying float vBlockTerm;
 varying float vWarm;
+varying float vSkyShare;  // 光のうちスカイライト由来の割合 (太陽の色温度用)
 varying float vDist;
+varying vec3 vWorldPos;
+varying vec4 vShadowPos;
 void main() {
-  gl_Position = uMVP * vec4(aPos, 1.0);
+  vec3 pos = aPos;
+
+  // aShade から法線インデックスと AO シェードを取り出す
+  float idx = floor(aShade * 0.25 + 0.001);
+  float shade = aShade - idx * 4.0;
+
+  // 水面の波
+  if (uWave > 1.5) {
+    // マグマ: 粘性が高くゆっくり脈打つように微かに上下する
+    pos.y += sin(pos.x * 0.7 + uTime * 0.6) * 0.02
+           + cos(pos.z * 0.6 + uTime * 0.5) * 0.02;
+  } else if (uWave > 0.5) {
+    pos.y += sin(pos.x * 1.1 + uTime * 1.8) * 0.045
+           + cos(pos.z * 0.9 + uTime * 1.4) * 0.045;
+  }
+  // 草花の先端: 根元は揺れず, 先端だけそよ風でなびく (idx 7 = 植生の先端)
+  if (idx > 6.5) {
+    float sway = sin(uTime * 1.6 + pos.x * 0.7 + pos.z * 0.7) * 0.09;
+    pos.x += sway;
+    pos.z += sway * 0.6;
+  }
+  gl_Position = uMVP * vec4(pos, 1.0);
   vUV = aUV;
-  // スカイライトは昼夜で変動, ブロックライトは常に一定
-  float sky = aSky * mix(0.13, 1.0, uDaylight);
-  float br = max(max(sky, aBlock), 0.045);
-  vLight = aShade * br;
-  // ブロックライト優勢の場所は暖色にする
-  vWarm = clamp(aBlock - sky, 0.0, 1.0);
-  vDist = distance(aPos.xz, uCamPos.xz);
+  vWorldPos = pos;
+  vShadowPos = uLightMVP * vec4(pos, 1.0);
+
+  // 面の法線 (idx 6/7 = 植生など方向なし)
+  vec3 N = vec3(0.0);
+  if (idx < 0.5) N = vec3(1.0, 0.0, 0.0);
+  else if (idx < 1.5) N = vec3(-1.0, 0.0, 0.0);
+  else if (idx < 2.5) N = vec3(0.0, 1.0, 0.0);
+  else if (idx < 3.5) N = vec3(0.0, -1.0, 0.0);
+  else if (idx < 4.5) N = vec3(0.0, 0.0, 1.0);
+  else if (idx < 5.5) N = vec3(0.0, 0.0, -1.0);
+
+  // 太陽方向のディレクショナルライト (影MOD風の面ごとの陰影)
+  float diff = idx > 5.5 ? 0.55 : max(dot(N, uSunDir), 0.0);
+  float direct = 0.5 + 0.62 * diff;
+
+  float dayFactor = mix(0.13, 1.0, uDaylight);
+  // シャドウマップによる直射日光の遮蔽はフラグメントシェーダで乗算するため,
+  // ここでは AO シェードとスカイ/ブロック光の成分を分けて渡す
+  vSkyTerm = aSky * dayFactor * direct;
+  vBlockTerm = aBlock;
+  vShade = shade;
+  vSkyShare = vSkyTerm / max(vSkyTerm + aBlock, 0.001);
+  vWarm = clamp(aBlock - vSkyTerm, 0.0, 1.0);
+  vDist = distance(pos.xz, uCamPos.xz);
 }`;
 
 const WORLD_FS = `
 precision mediump float;
 uniform sampler2D uTex;
+uniform sampler2D uShadowMap;
 uniform vec3 uFogColor;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform vec3 uCamPos;
 uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uDaylight;
 uniform float uAlpha;
+uniform float uWave;
+uniform float uTime;
+uniform float uUseShadow;  // 影MOD: シャドウマップが有効か
 varying vec2 vUV;
-varying float vLight;
+varying float vShade;
+varying float vSkyTerm;
+varying float vBlockTerm;
 varying float vWarm;
+varying float vSkyShare;
 varying float vDist;
+varying vec3 vWorldPos;
+varying vec4 vShadowPos;
 void main() {
   vec4 tex = texture2D(uTex, vUV);
   if (uAlpha >= 1.0 && tex.a < 0.5) discard;
-  // 夜はわずかに青みがかり, 発光ブロックの近くは暖色になる
-  vec3 nightTint = mix(vec3(0.85, 0.9, 1.15), vec3(1.0), uDaylight);
-  vec3 tint = mix(nightTint, vec3(1.12, 1.0, 0.82), vWarm);
-  vec3 col = tex.rgb * vLight * tint;
+
+  // 影MOD: 太陽視点のシャドウマップで直射日光成分だけを遮蔽する
+  // (スカイライト由来のアンビエントはそのまま残るので, 影の中も真っ黒にはならない)
+  float shadow = 1.0;
+  if (uUseShadow > 0.5) {
+    vec3 sc = vShadowPos.xyz / vShadowPos.w * 0.5 + 0.5;
+    if (sc.x > 0.001 && sc.x < 0.999 && sc.y > 0.001 && sc.y < 0.999 && sc.z < 1.0) {
+      float d = texture2D(uShadowMap, sc.xy).r;
+      if (sc.z - 0.0018 > d) shadow = 0.4;
+    }
+  }
+
+  float br = max(max(vSkyTerm * shadow, vBlockTerm), 0.045);
+  // 夜は青く, 発光ブロックの近くは暖色, 太陽光は色温度つき
+  vec3 nightTint = mix(vec3(0.8, 0.88, 1.2), vec3(1.0), uDaylight);
+  vec3 tint = mix(nightTint, vec3(1.15, 1.0, 0.8), vWarm);
+  tint *= mix(vec3(1.0), uSunColor, vSkyShare);
+  vec3 col = tex.rgb * (vShade * br) * tint;
+  float alpha = tex.a * uAlpha;
+
+  // マグマ: UV は歪ませず (アトラスの滲み防止), 明滅と流動するグローで質感を出す
+  if (uWave > 1.5) {
+    float flow = sin(vWorldPos.x * 0.8 + vWorldPos.z * 0.6 + uTime * 0.35) * 0.5 + 0.5;
+    float flicker = sin(uTime * 3.0 + vWorldPos.x * 2.3 + vWorldPos.z * 1.7) * 0.09;
+    col *= 1.0 + flow * 0.22 + flicker;
+  } else if (uWave > 0.5) {
+    // 水: 太陽の鏡面反射 + フレネルで角度により透け方が変わる
+    vec3 V = normalize(uCamPos - vWorldPos);
+    vec3 N = normalize(vec3(
+      sin(vWorldPos.x * 1.4 + uTime * 1.9) * 0.10,
+      1.0,
+      cos(vWorldPos.z * 1.2 + uTime * 1.5) * 0.10));
+    float spec = pow(max(dot(reflect(-uSunDir, N), V), 0.0), 90.0);
+    col += vec3(1.0, 0.95, 0.8) * spec * 1.2 * uDaylight;
+    float fres = pow(1.0 - max(dot(V, N), 0.0), 2.5);
+    alpha = uAlpha * mix(0.82, 1.5, fres);
+    alpha = min(alpha, 0.95);
+    // 空の色を少し映り込ませる
+    col = mix(col, uFogColor * 1.1, fres * 0.45 * uDaylight);
+    // ゆっくり流れる水流のきらめき (流動感)
+    float current = sin(vWorldPos.x * 0.5 - vWorldPos.z * 0.35 + uTime * 0.8) * 0.5 + 0.5;
+    col += vec3(0.04, 0.05, 0.07) * current * uDaylight;
+  }
+
+  // フォグ + 太陽方向の大気散乱 (夕日が霞に滲む)
+  vec3 viewDir = normalize(vWorldPos - uCamPos);
+  float sunAmt = pow(max(dot(viewDir, uSunDir), 0.0), 10.0);
+  vec3 fogCol = mix(uFogColor, vec3(1.0, 0.75, 0.5), sunAmt * 0.65 * uDaylight);
   float fog = clamp((vDist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
-  col = mix(col, uFogColor, fog * fog);
-  gl_FragColor = vec4(col, tex.a * uAlpha);
+  col = mix(col, fogCol, fog * fog);
+
+  // 軽いトーンマッピング (コントラストと彩度をわずかに強調)
+  col = col * 1.06 - 0.015;
+  float grey = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(grey), col, 1.08);
+
+  gl_FragColor = vec4(col, alpha);
 }`;
 
 const SKY_VS = `
@@ -124,6 +234,73 @@ void main() {
   gl_FragColor = vec4(vCol * uLight, 1.0);
 }`;
 
+const ENTITY_TEX_VS = `
+attribute vec3 aPos;
+attribute vec2 aUV;
+attribute float aShade;
+attribute vec3 aTint;
+uniform mat4 uMVP;
+varying vec2 vUV;
+varying float vShade;
+varying vec3 vTint;
+void main() {
+  gl_Position = uMVP * vec4(aPos, 1.0);
+  vUV = aUV;
+  vShade = aShade;
+  vTint = aTint;
+}`;
+
+const ENTITY_TEX_FS = `
+precision mediump float;
+uniform sampler2D uTex;
+uniform float uLight;
+varying vec2 vUV;
+varying float vShade;
+varying vec3 vTint;
+void main() {
+  vec4 tex = texture2D(uTex, vUV);
+  if (tex.a < 0.5) discard;
+  gl_FragColor = vec4(tex.rgb * vShade * uLight * vTint, 1.0);
+}`;
+
+const SHADOW_VS = `
+attribute vec3 aPos;
+attribute vec2 aUV;
+attribute float aAlpha;
+uniform mat4 uMVP;
+varying vec2 vUV;
+varying float vAlpha;
+void main() {
+  gl_Position = uMVP * vec4(aPos, 1.0);
+  vUV = aUV;
+  vAlpha = aAlpha;
+}`;
+
+const SHADOW_FS = `
+precision mediump float;
+varying vec2 vUV;
+varying float vAlpha;
+void main() {
+  float d = length(vUV);
+  if (d > 1.0) discard;
+  float a = (1.0 - d * d) * vAlpha;
+  gl_FragColor = vec4(0.0, 0.0, 0.0, a * 0.45);
+}`;
+
+// 影MOD: 太陽視点の深度だけを描く軽量シェーダ (シャドウマップ生成用)
+const SUNDEPTH_VS = `
+attribute vec3 aPos;
+uniform mat4 uLightMVP;
+void main() {
+  gl_Position = uLightMVP * vec4(aPos, 1.0);
+}`;
+
+const SUNDEPTH_FS = `
+precision mediump float;
+void main() {
+  gl_FragColor = vec4(1.0);
+}`;
+
 const COLOR_VS = `
 attribute vec3 aPos;
 uniform mat4 uMVP;
@@ -154,10 +331,42 @@ class Renderer {
     this.progSky = this.createProgram(SKY_VS, SKY_FS);
     this.progColor = this.createProgram(COLOR_VS, COLOR_FS);
     this.progPoint = this.createProgram(POINT_VS, POINT_FS);
+    this.progShadow = this.createProgram(SHADOW_VS, SHADOW_FS);
+    this.progEntityTex = this.createProgram(ENTITY_TEX_VS, ENTITY_TEX_FS);
+    this.progSunDepth = this.createProgram(SUNDEPTH_VS, SUNDEPTH_FS);
+
+    // --- 影MOD: 太陽方向のシャドウマップ (深度テクスチャ) ---
+    this.shadowSize = 1024;
+    this.shadowRadius = 32;   // シャドウマップが覆う半径 (ブロック数)
+    this.shadowReady = false;
+    const depthExt = gl.getExtension("WEBGL_depth_texture");
+    if (depthExt) {
+      this.shadowTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, this.shadowSize, this.shadowSize, 0,
+        gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.shadowFbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shadowTex, 0);
+      this.shadowReady = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (!this.shadowReady) console.warn("シャドウマップ用 FBO が不完全なため影MODを無効化します");
+    } else {
+      console.warn("WEBGL_depth_texture が使えないため影MODを無効化します");
+    }
+    this.lightMVP = Mat4.create();
+    this.lightView = Mat4.create();
+    this.lightProj = Mat4.create();
 
     // パーティクル用の動的バッファ
     this.particleBuf = gl.createBuffer();
     this.entityBuf = gl.createBuffer();
+    this.shadowBuf = gl.createBuffer();
+    this.entityTexBuf = gl.createBuffer();
 
     // --- テクスチャアトラス ---
     this.atlas = gl.createTexture();
@@ -301,13 +510,14 @@ class Renderer {
     chunk.mesh = {
       opaque: make(meshData.opaque),
       water: make(meshData.water),
+      lava: make(meshData.lava),
     };
   }
 
   deleteChunkMesh(chunk) {
     const gl = this.gl;
     if (!chunk.mesh) return;
-    for (const part of ["opaque", "water"]) {
+    for (const part of ["opaque", "water", "lava"]) {
       const m = chunk.mesh[part];
       if (m) {
         gl.deleteBuffer(m.vbo);
@@ -334,6 +544,61 @@ class Renderer {
     gl.vertexAttribPointer(a.aBlock, 1, gl.FLOAT, false, stride, 28);
   }
 
+  // 影MOD: 太陽視点のシャドウマップを構築する (プレイヤー周辺の一定範囲のみ)
+  renderSunDepth(camPos, sunDir, chunks) {
+    const gl = this.gl;
+    const R = this.shadowRadius;
+    const texel = (2 * R) / this.shadowSize;
+    const cx = Math.floor(camPos[0] / texel) * texel;
+    const cz = Math.floor(camPos[2] / texel) * texel;
+    const center = [cx, camPos[1], cz];
+
+    const up = Math.abs(sunDir[1]) > 0.99 ? [0, 0, 1] : [0, 1, 0];
+    const eyeOffset = 140;
+    const eye = [
+      center[0] + sunDir[0] * eyeOffset,
+      center[1] + sunDir[1] * eyeOffset,
+      center[2] + sunDir[2] * eyeOffset,
+    ];
+    const forward = [-sunDir[0], -sunDir[1], -sunDir[2]];
+    Mat4.lookDir(this.lightView, eye, forward, up);
+    Mat4.ortho(this.lightProj, -R, R, -R, R, 1, 300);
+    Mat4.multiply(this.lightMVP, this.lightProj, this.lightView);
+
+    const shadowChunks = [];
+    for (const chunk of chunks) {
+      if (!chunk.mesh) continue;
+      const ccx = chunk.cx * CHUNK_SIZE + CHUNK_SIZE / 2;
+      const ccz = chunk.cz * CHUNK_SIZE + CHUNK_SIZE / 2;
+      if (Math.abs(ccx - center[0]) > R + CHUNK_SIZE || Math.abs(ccz - center[2]) > R + CHUNK_SIZE) continue;
+      shadowChunks.push(chunk);
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
+    gl.viewport(0, 0, this.shadowSize, this.shadowSize);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.disable(gl.CULL_FACE);   // 階段など巻き順を保証しない特殊メッシュもあるため無効化
+
+    const psd = this.progSunDepth;
+    gl.useProgram(psd.prog);
+    gl.uniformMatrix4fv(psd.uniforms.uLightMVP, false, this.lightMVP);
+    gl.enableVertexAttribArray(psd.attribs.aPos);
+    for (const chunk of shadowChunks) {
+      for (const part of ["opaque", "lava"]) {
+        const m = chunk.mesh[part];
+        if (!m) continue;
+        gl.bindBuffer(gl.ARRAY_BUFFER, m.vbo);
+        gl.vertexAttribPointer(psd.attribs.aPos, 3, gl.FLOAT, false, 32, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
+        gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
+      }
+    }
+
+    gl.enable(gl.CULL_FACE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+  }
+
   // メインの描画
   render(state) {
     const gl = this.gl;
@@ -347,6 +612,18 @@ class Renderer {
     Mat4.multiply(this.mvp, this.proj, this.view);
     extractFrustumPlanes(this.mvp, this.frustum);
 
+    // --- 影MOD: 太陽視点のシャドウマップ (夜間や非対応環境では無効化) ---
+    // 太陽はゆっくりとしか動かないため, 毎フレームではなく数フレームに1回だけ
+    // 再構築して負荷を抑える (見た目にはほぼ影響しない)
+    const useShadow = this.shadowReady && env.daylight > 0.05 && !env.noClouds;
+    if (useShadow) {
+      this._shadowFrame = (this._shadowFrame || 0) + 1;
+      if (this._shadowFrame % 3 === 0 || !this._shadowInit) {
+        this.renderSunDepth(camPos, env.sunDir, chunks);
+        this._shadowInit = true;
+      }
+    }
+
     gl.clearColor(env.fog[0], env.fog[1], env.fog[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -359,13 +636,22 @@ class Renderer {
     gl.uniformMatrix4fv(pw.uniforms.uMVP, false, this.mvp);
     gl.uniform3fv(pw.uniforms.uCamPos, camPos);
     gl.uniform3fv(pw.uniforms.uFogColor, env.fog);
+    gl.uniform3fv(pw.uniforms.uSunDir, env.sunDir);
+    gl.uniform3fv(pw.uniforms.uSunColor, env.sunColor || [1, 1, 1]);
     gl.uniform1f(pw.uniforms.uFogStart, env.fogStart);
     gl.uniform1f(pw.uniforms.uFogEnd, env.fogEnd);
     gl.uniform1f(pw.uniforms.uDaylight, env.daylight);
     gl.uniform1f(pw.uniforms.uAlpha, 1.0);
+    gl.uniform1f(pw.uniforms.uWave, 0);
+    gl.uniform1f(pw.uniforms.uTime, time);
+    gl.uniform1f(pw.uniforms.uUseShadow, useShadow ? 1 : 0);
+    gl.uniformMatrix4fv(pw.uniforms.uLightMVP, false, this.lightMVP);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.atlas);
     gl.uniform1i(pw.uniforms.uTex, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, useShadow ? this.shadowTex : this.atlas);
+    gl.uniform1i(pw.uniforms.uShadowMap, 1);
 
     const R = CHUNK_SIZE / 2;
     const chunkRadius = Math.hypot(R, CHUNK_H / 2, R);
@@ -387,6 +673,42 @@ class Renderer {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
       drawCalls++;
+    }
+
+    // --- マグマ (不透明だがゆっくり脈打ち発光が流動するように揺らめく) ---
+    gl.uniform1f(pw.uniforms.uWave, 2);
+    for (const chunk of visible) {
+      const m = chunk.mesh.lava;
+      if (!m) continue;
+      this.bindWorldAttribs(m.vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
+      gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
+      drawCalls++;
+    }
+    gl.uniform1f(pw.uniforms.uWave, 0);
+
+    // --- 接地シャドウ (プレイヤー / モブの足元に落ちる柔らかい影) ---
+    if (state.shadows && state.shadows.length > 0) {
+      const ps = this.progShadow;
+      gl.useProgram(ps.prog);
+      gl.uniformMatrix4fv(ps.uniforms.uMVP, false, this.mvp);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.disable(gl.CULL_FACE);
+      gl.depthMask(false);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, state.shadows, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(ps.attribs.aPos);
+      gl.vertexAttribPointer(ps.attribs.aPos, 3, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(ps.attribs.aUV);
+      gl.vertexAttribPointer(ps.attribs.aUV, 2, gl.FLOAT, false, 24, 12);
+      gl.enableVertexAttribArray(ps.attribs.aAlpha);
+      gl.vertexAttribPointer(ps.attribs.aAlpha, 1, gl.FLOAT, false, 24, 20);
+      gl.drawArrays(gl.TRIANGLES, 0, state.shadows.length / 6);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.CULL_FACE);
+      gl.useProgram(pw.prog);
     }
 
     // --- 破壊ひび割れ (対象ブロックに重ねる) ---
@@ -418,10 +740,36 @@ class Renderer {
       gl.useProgram(pw.prog);
     }
 
+    // --- エンティティ (模様入りテクスチャつきモブ) ---
+    if (state.entitiesTex && state.entitiesTex.length > 0) {
+      const pt = this.progEntityTex;
+      gl.useProgram(pt.prog);
+      gl.disable(gl.CULL_FACE); // ボックスの面順は保証しないため両面描画
+      gl.uniformMatrix4fv(pt.uniforms.uMVP, false, this.mvp);
+      gl.uniform1f(pt.uniforms.uLight, lerp(0.22, 1.0, env.daylight));
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.atlas);
+      gl.uniform1i(pt.uniforms.uTex, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.entityTexBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, state.entitiesTex, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(pt.attribs.aPos);
+      gl.vertexAttribPointer(pt.attribs.aPos, 3, gl.FLOAT, false, 36, 0);
+      gl.enableVertexAttribArray(pt.attribs.aUV);
+      gl.vertexAttribPointer(pt.attribs.aUV, 2, gl.FLOAT, false, 36, 12);
+      gl.enableVertexAttribArray(pt.attribs.aShade);
+      gl.vertexAttribPointer(pt.attribs.aShade, 1, gl.FLOAT, false, 36, 20);
+      gl.enableVertexAttribArray(pt.attribs.aTint);
+      gl.vertexAttribPointer(pt.attribs.aTint, 3, gl.FLOAT, false, 36, 24);
+      gl.drawArrays(gl.TRIANGLES, 0, state.entitiesTex.length / 9);
+      gl.enable(gl.CULL_FACE);
+      gl.useProgram(pw.prog);
+    }
+
     // --- 水パス (半透明, 奥から手前へ) ---
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniform1f(pw.uniforms.uAlpha, 0.62);
+    gl.uniform1f(pw.uniforms.uWave, 1);
     gl.disable(gl.CULL_FACE); // 水面は下からも見えるように
     for (let i = visible.length - 1; i >= 0; i--) {
       const m = visible[i].mesh.water;
@@ -431,6 +779,7 @@ class Renderer {
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
       drawCalls++;
     }
+    gl.uniform1f(pw.uniforms.uWave, 0);
     gl.enable(gl.CULL_FACE);
 
     // --- 破壊パーティクル (点スプライト) ---
@@ -465,8 +814,8 @@ class Renderer {
       gl.drawArrays(gl.LINES, 0, this.highlightCount);
     }
 
-    // --- 雲 ---
-    this.drawClouds(camPos, env, time);
+    // --- 雲 (ジ・エンドには存在しない) ---
+    if (!env.noClouds) this.drawClouds(camPos, env, time);
 
     // --- 手持ちブロック ---
     if (state.held) {
@@ -498,7 +847,7 @@ class Renderer {
           c[2] === 1 ? 1 + e : -e,
           lerp(uv.u0, uv.u1, face.uvs[ci][0]),
           lerp(uv.v0, uv.v1, face.uvs[ci][1]),
-          1.0, 1.0, 1.0
+          25.0, 1.0, 1.0
         );
       }
       indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
@@ -579,14 +928,14 @@ class Renderer {
     if (mesh) return mesh;
 
     const gl = this.gl;
-    const block = BLOCKS[blockId];
+    const block = getDef(blockId);
     const verts = [];
     const indices = [];
     let count = 0;
 
-    if (block.cross || block.torch) {
-      // X 字植生 / 松明: 2 枚の対角クアッド (原点中心)
-      const uv = tileUV(block.tiles[0]);
+    if (!block.tiles || block.cross || block.torch) {
+      // アイテム / X 字植生 / 松明: 2 枚の対角クアッド (原点中心)
+      const uv = tileUV(block.tiles ? block.tiles[0] : block.tile);
       const quads = [
         [[-0.5, 0.5, -0.5], [-0.5, -0.5, -0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5]],
         [[0.5, 0.5, -0.5], [0.5, -0.5, -0.5], [-0.5, -0.5, 0.5], [-0.5, 0.5, 0.5]],
@@ -594,7 +943,7 @@ class Renderer {
       const quadUV = [[uv.u0, uv.v0], [uv.u0, uv.v1], [uv.u1, uv.v1], [uv.u1, uv.v0]];
       for (const q of quads) {
         for (let ci = 0; ci < 4; ci++) {
-          verts.push(q[ci][0], q[ci][1], q[ci][2], quadUV[ci][0], quadUV[ci][1], 1.0, 1.0, 0.0);
+          verts.push(q[ci][0], q[ci][1], q[ci][2], quadUV[ci][0], quadUV[ci][1], 25.0, 1.0, 0.0);
         }
         indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
         indices.push(count + 2, count + 1, count, count + 3, count + 2, count);
@@ -602,22 +951,23 @@ class Renderer {
       }
     } else {
       const blk = block.emissive ? 1.0 : 0.0;
-      for (const face of FACES) {
+      const hgt = block.height || 1; // ハーフブロックは低く表示
+      FACES.forEach((face, fi) => {
         const tile = face.dir[1] === 1 ? block.tiles[0]
           : face.dir[1] === -1 ? block.tiles[2] : block.tiles[1];
         const uv = tileUV(tile);
         for (let ci = 0; ci < 4; ci++) {
           const c = face.corners[ci];
           verts.push(
-            c[0] - 0.5, c[1] - 0.5, c[2] - 0.5,
+            c[0] - 0.5, c[1] * hgt - 0.5, c[2] - 0.5,
             lerp(uv.u0, uv.u1, face.uvs[ci][0]),
             lerp(uv.v0, uv.v1, face.uvs[ci][1]),
-            face.shade, 1.0, blk
+            fi * 4 + face.shade, 1.0, blk
           );
         }
         indices.push(count, count + 1, count + 2, count, count + 2, count + 3);
         count += 4;
-      }
+      });
     }
 
     const vbo = gl.createBuffer();

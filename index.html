@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>MineCraft.js — ボクセルサンドボックス</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -14,13 +14,37 @@
 <div id="hud">
   <div id="status-bars">
     <div id="hearts"></div>
-    <div id="bubbles"></div>
+    <div id="right-bars">
+      <div id="bubbles"></div>
+      <div id="hunger"></div>
+    </div>
   </div>
   <div id="hotbar"></div>
 </div>
 
 <div id="hurt-overlay"></div>
+<div id="vignette"></div>
 <div id="toast"></div>
+
+<div id="chest-modal" class="hidden">
+  <div id="chest-inner">
+    <h2>チェスト <span class="hint">— クリックで移動 (E で閉じる)</span></h2>
+    <h3>チェストの中身</h3>
+    <div id="chest-grid" class="item-grid"></div>
+    <h3>自分の持ち物</h3>
+    <div id="chest-inv-grid" class="item-grid"></div>
+  </div>
+</div>
+
+<div id="sleep-overlay"></div>
+
+<div id="rotate-overlay" class="hidden">
+  <div>
+    <div class="rotate-icon">📱</div>
+    <h2>端末を横向きにしてください</h2>
+    <p>このゲームは横画面でプレイします</p>
+  </div>
+</div>
 
 <div id="touch-ui" class="hidden">
   <div id="joystick">
@@ -32,6 +56,7 @@
     <button id="btn-jump" class="touch-btn">⬆</button>
   </div>
   <button id="btn-pause" class="touch-btn">⏸</button>
+  <button id="btn-inventory" class="touch-btn">🎒</button>
 </div>
 
 <div id="death-overlay" class="hidden">
@@ -46,7 +71,7 @@
 
 <div id="inventory" class="hidden">
   <div id="inventory-inner">
-    <h2>ブロック選択 <span class="hint">— クリックでホットバーの選択枠にセット (E で閉じる)</span></h2>
+    <h2>ブロック選択 <span class="hint">— クリックでホットバーの選択枠にセット (E / 背景タップで閉じる)</span></h2>
     <div id="inventory-grid"></div>
     <div id="craft-section" class="hidden">
       <h2>クラフト</h2>
@@ -60,6 +85,10 @@
     <h1>⛏ MineCraft.js</h1>
     <p class="sub">ブラウザで動くボクセルサンドボックス</p>
     <button id="play-btn">クリックしてプレイ</button>
+    <div>
+      <button id="mode-btn">モード: クリエイティブ (押して切替)</button>
+      <button id="newworld-btn">🌍 新しいワールドを作る</button>
+    </div>
     <div class="controls">
       <table>
         <tr><td>W A S D</td><td>移動</td></tr>
@@ -76,10 +105,11 @@
         <tr><td>M</td><td>BGM オン / オフ</td></tr>
         <tr><td>P</td><td>スクリーンショット保存</td></tr>
         <tr><td>F3</td><td>デバッグ情報</td></tr>
-        <tr><td>N</td><td>新しいワールド生成</td></tr>
+        <tr><td>N / 🌍 ボタン</td><td>新しいワールド生成</td></tr>
         <tr><td>Esc</td><td>ポーズ</td></tr>
       </table>
     </div>
+    <p class="touch-note">📱 スマホでは横画面・全画面でプレイします</p>
     <p class="note">ワールドの変更は自動でブラウザに保存されます</p>
   </div>
 </div>

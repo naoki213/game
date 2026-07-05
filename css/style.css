@@ -50,7 +50,10 @@ html, body {
   background: rgba(0, 0, 0, 0.45);
   border: 2px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
+  pointer-events: auto;   /* タップでスロット選択できるように */
 }
+
+.slot { cursor: pointer; }
 
 .slot {
   width: 52px;
@@ -95,6 +98,23 @@ html, body {
   text-shadow: 1px 1px 0 #000;
 }
 
+.slot .durbar {
+  position: absolute;
+  bottom: 3px;
+  left: 5px;
+  right: 5px;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+  display: none;
+}
+
+.slot .durbar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
 .slot .name {
   position: absolute;
   bottom: -20px;
@@ -118,11 +138,33 @@ html, body {
   padding: 0 4px;
 }
 
-#hearts, #bubbles {
+#hearts, #bubbles, #hunger {
   display: flex;
   gap: 1px;
   font-size: 18px;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+#right-bars {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+/* 満腹度: 灰色ベース + 色付きの重ね (兄弟要素で構成) */
+.food { position: relative; }
+
+.food .base {
+  filter: grayscale(1) brightness(0.45);
+}
+
+.food .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .heart {
@@ -161,6 +203,15 @@ html, body {
 }
 
 #toast.show { opacity: 1; }
+
+/* ---- vignette (映画的な周辺減光) ---- */
+#vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center,
+    transparent 58%, rgba(0, 0, 10, 0.28) 100%);
+  pointer-events: none;
+}
 
 /* ---- hurt flash ---- */
 #hurt-overlay {
@@ -286,6 +337,17 @@ html, body {
   width: 46px;
   height: 46px;
   font-size: 18px;
+  z-index: 6; /* モーダルより前面 (開いたまま閉じられるように) */
+}
+
+#btn-inventory {
+  position: absolute;
+  top: 14px;
+  right: calc(70px + env(safe-area-inset-right, 0px));
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+  z-index: 6;
 }
 
 /* ---- inventory ---- */
@@ -307,6 +369,8 @@ html, body {
   border-radius: 10px;
   padding: 18px 22px;
   max-width: 640px;
+  max-height: 88vh;
+  overflow-y: auto;
 }
 
 #inventory-inner h2 {
@@ -325,6 +389,35 @@ html, body {
   display: grid;
   grid-template-columns: repeat(6, 64px);
   gap: 8px;
+}
+
+.inv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  background: rgba(20, 26, 40, 0.97);
+  padding: 6px 0;
+  z-index: 1;
+}
+
+.inv-tabs button {
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: #cde;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.inv-tabs button.active {
+  background: rgba(120, 200, 255, 0.3);
+  border-color: #8cf;
+  color: #fff;
 }
 
 .inv-item {
@@ -371,6 +464,45 @@ html, body {
   text-shadow: 1px 1px 0 #000;
 }
 
+/* ---- 縦向き警告 (タッチデバイスでプレイ中のみ JS が表示) ---- */
+#rotate-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 10, 18, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #eee;
+  z-index: 30;
+}
+
+#rotate-overlay.hidden { display: none; }
+
+#rotate-overlay .rotate-icon {
+  font-size: 64px;
+  animation: rotate-hint 1.6s ease-in-out infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes rotate-hint {
+  0%, 25% { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(90deg); }
+}
+
+#rotate-overlay h2 { margin-bottom: 8px; }
+#rotate-overlay p { color: #9ab; font-size: 14px; }
+
+/* タッチデバイス向けの表示切替 */
+.touch-note { display: none; margin-top: 16px; font-size: 14px; color: #ffd75e; }
+body.touch .touch-note { display: block; }
+body.touch .controls { display: none; }
+
+/* セーフエリア (ノッチ) を避ける */
+#joystick { left: calc(26px + env(safe-area-inset-left, 0px)); }
+#touch-buttons { right: calc(22px + env(safe-area-inset-right, 0px)); }
+#btn-pause { right: calc(14px + env(safe-area-inset-right, 0px)); }
+
 /* ---- 小さい画面向け ---- */
 @media (max-width: 760px) {
   .slot { width: 40px; height: 40px; }
@@ -381,6 +513,108 @@ html, body {
   .controls { display: none; }  /* タッチでは操作表を隠す */
   #inventory-grid { grid-template-columns: repeat(4, 56px); }
 }
+
+/* ---- 横向きスマホ (高さが低い画面) ---- */
+@media (max-height: 500px) {
+  .slot { width: 38px; height: 38px; }
+  .slot canvas { width: 26px; height: 26px; }
+  .slot .key { font-size: 8px; }
+  .slot .count { font-size: 10px; }
+  #hotbar { gap: 3px; padding: 3px; }
+  #hud { bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+  #hearts, #bubbles { font-size: 13px; }
+  #joystick {
+    width: 104px;
+    height: 104px;
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+  #joystick-knob { width: 42px; height: 42px; }
+  .touch-btn { width: 52px; height: 52px; font-size: 22px; }
+  #touch-buttons { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  #btn-pause { width: 40px; height: 40px; font-size: 15px; top: 10px; }
+  #overlay-inner h1 { font-size: 26px; }
+  #overlay-inner .sub { margin-bottom: 10px; }
+  #play-btn { font-size: 16px; padding: 9px 32px; }
+  .touch-note { margin-top: 10px; font-size: 12px; }
+  .note { margin-top: 8px; }
+  #inventory-inner { padding: 10px 14px; max-height: 92vh; overflow-y: auto; }
+  #inventory-grid { grid-template-columns: repeat(8, 48px); gap: 5px; }
+  .inv-item { width: 48px; height: 48px; }
+  .inv-item canvas { width: 26px; height: 26px; }
+  #craft-list { max-height: 120px; }
+}
+
+/* ---- chest ---- */
+#chest-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 24, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+#chest-modal.hidden { display: none; }
+
+#chest-inner {
+  background: rgba(20, 26, 40, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  padding: 18px 22px;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+#chest-inner h2 {
+  color: #eee;
+  font-size: 17px;
+  margin-bottom: 10px;
+}
+
+#chest-inner .hint { font-size: 12px; font-weight: normal; color: #9ab; }
+
+#chest-inner h3 {
+  color: #bcd;
+  font-size: 13px;
+  margin: 10px 0 6px;
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 56px);
+  gap: 6px;
+  min-height: 60px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+}
+
+.empty-note {
+  grid-column: 1 / -1;
+  color: #678;
+  font-size: 12px;
+  align-self: center;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.item-grid .inv-item { width: 56px; height: 56px; }
+.item-grid .inv-item canvas { width: 30px; height: 30px; }
+
+/* ---- sleep fade ---- */
+#sleep-overlay {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s;
+  z-index: 9;
+}
+
+#sleep-overlay.show { opacity: 1; }
 
 /* ---- crafting ---- */
 #craft-section {
@@ -489,6 +723,33 @@ html, body {
 
 #play-btn:hover { filter: brightness(1.1); }
 #play-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #235818; }
+
+#mode-btn {
+  margin-top: 14px;
+  font-size: 14px;
+  padding: 8px 22px;
+  cursor: pointer;
+  color: #dfe8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+}
+
+#mode-btn:hover { background: rgba(255, 255, 255, 0.18); }
+
+#newworld-btn {
+  margin-top: 14px;
+  margin-left: 10px;
+  font-size: 14px;
+  padding: 8px 22px;
+  cursor: pointer;
+  color: #dfe8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+}
+
+#newworld-btn:hover { background: rgba(255, 255, 255, 0.18); }
 
 .controls {
   margin: 24px auto 0;

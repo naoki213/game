@@ -46,6 +46,24 @@ const FACES = [
   },
 ];
 
+// 階段ブロックの形状データ (dir: 0=north 1=east 2=south 3=west, blocks.js の
+// STAIR_DIRS と対応)。下段は常に全面のハーフブロック、上段は「開いている」
+// 方向と反対側の半分だけ一段高い箱。
+const STAIR_UPPER_BOX = [
+  { x0: 0, x1: 1, y0: 0.5, y1: 1, z0: 0.5, z1: 1 },   // north: 開放 -z, 奥は +z 側
+  { x0: 0, x1: 0.5, y0: 0.5, y1: 1, z0: 0, z1: 1 },   // east:  開放 +x, 奥は -x 側
+  { x0: 0, x1: 1, y0: 0.5, y1: 1, z0: 0, z1: 0.5 },   // south: 開放 +z, 奥は -z 側
+  { x0: 0.5, x1: 1, y0: 0.5, y1: 1, z0: 0, z1: 1 },   // west:  開放 -x, 奥は +x 側
+];
+const STAIR_OPEN_TOP = [
+  { x0: 0, x1: 1, y0: 0.5, y1: 0.5, z0: 0, z1: 0.5 },
+  { x0: 0.5, x1: 1, y0: 0.5, y1: 0.5, z0: 0, z1: 1 },
+  { x0: 0, x1: 1, y0: 0.5, y1: 0.5, z0: 0.5, z1: 1 },
+  { x0: 0, x1: 0.5, y0: 0.5, y1: 0.5, z0: 0, z1: 1 },
+];
+// 上段のうち, 踏み板との境目 (蹴込み面) は常に描画。FACES のインデックス (0=+X 1=-X 4=+Z 5=-Z)
+const STAIR_RISER_FACE = [5, 0, 4, 1];
+
 // この面を描画すべきか
 function shouldDrawFace(id, neighborId) {
   if (neighborId === B.AIR) return true;
@@ -115,16 +133,16 @@ function computeLight(world, chunk) {
   // --- スカイライト: 各列の最初の不透明ブロックまで 15 ---
   for (let rz = 0; rz < LSZ; rz++) {
     for (let rx = 0; rx < LSX; rx++) {
+      let level = 15;
       for (let y = CHUNK_H - 1; y >= 0; y--) {
         const i = lIdx(rx, y, rz);
         const id = lightBlocks[i];
         if (OPAQUE_LUT[id]) break;
-        // 水中はスカイライトを減衰させる (2/ブロック)
-        lightSky[i] = 15;
+        lightSky[i] = level;
         lightQueue[tail++] = i;
         if (id === B.WATER) {
-          // 水面から下は別途減衰伝播に任せる
-          for (let wy = y, l = 15; wy >= 0; wy--) {
+          // 水面から下は別途減衰伝播に任せる (2/ブロック)
+          for (let wy = y, l = level; wy >= 0; wy--) {
             const wi = lIdx(rx, wy, rz);
             const wid = lightBlocks[wi];
             if (OPAQUE_LUT[wid]) break;
@@ -134,6 +152,8 @@ function computeLight(world, chunk) {
           }
           break;
         }
+        // 葉は不透明ではないが光をわずかに遮る (木の下に木漏れ日の木陰ができる)
+        if (id === B.LEAVES) level = Math.max(0, level - 2);
       }
     }
   }
@@ -200,6 +220,7 @@ function buildChunkMesh(world, chunk) {
 
   const opaque = { verts: [], indices: [], count: 0 };
   const water = { verts: [], indices: [], count: 0 };
+  const lava = { verts: [], indices: [], count: 0 };
 
   const data = chunk.data;
 
@@ -257,7 +278,7 @@ function buildChunkMesh(world, chunk) {
             const uvs = [[qu0, qv0], [qu0, qv1], [qu1, qv1], [qu1, qv0]];
             for (let ci = 0; ci < 4; ci++) {
               opaque.verts.push(q.c[ci][0], q.c[ci][1], q.c[ci][2],
-                uvs[ci][0], uvs[ci][1], 1.0, 1.0, 1.0);
+                uvs[ci][0], uvs[ci][1], 25.0, 1.0, 1.0);
             }
             opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
             opaque.count += 4;
@@ -280,8 +301,12 @@ function buildChunkMesh(world, chunk) {
           for (const q of quads) {
             const vi = opaque.count;
             for (let ci = 0; ci < 4; ci++) {
+              // 24 + shade = 法線インデックス 6 (方向なし)。
+              // 先端 (ci 0,3) は 28 + shade = インデックス 7 にして, 頂点シェーダで
+              // 根元は揺れず先端だけそよ風で揺れるようにする
+              const top = ci === 0 || ci === 3;
               opaque.verts.push(q[ci][0], q[ci][1], q[ci][2],
-                quadUV[ci][0], quadUV[ci][1], 0.95, sky, blk);
+                quadUV[ci][0], quadUV[ci][1], top ? 28.95 : 24.95, sky, blk);
             }
             // 両面 (表裏の三角形を両方積む)
             opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
@@ -291,18 +316,84 @@ function buildChunkMesh(world, chunk) {
           continue;
         }
 
+        // --- 階段: 下段 (全面ハーフ) + 上段 (奥半分だけ一段高い) の2箱を積む ---
+        if (block.stairs) {
+          const dir = block.stairDir;
+          const wx = ox + lx, wz = oz + lz;
+          const sky = skyAt(lx, y, lz) / 15;
+          const blk = blkAt(lx, y, lz) / 15;
+          const tiles = block.tiles;
+
+          const pushStairFace = (f, box) => {
+            const face = FACES[f];
+            const tile = f === 2 ? tiles[0] : f === 3 ? tiles[2] : tiles[1];
+            const uv = tileUV(tile);
+            const vi = opaque.count;
+            for (let ci = 0; ci < 4; ci++) {
+              const c = face.corners[ci];
+              const xF = c[0] ? box.x1 : box.x0;
+              const yF = c[1] ? box.y1 : box.y0;
+              const zF = c[2] ? box.z1 : box.z0;
+              let u, v;
+              switch (f) {
+                case 0: u = 1 - zF; v = 1 - yF; break;
+                case 1: u = zF; v = 1 - yF; break;
+                case 2: u = xF; v = zF; break;
+                case 3: u = xF; v = 1 - zF; break;
+                case 4: u = xF; v = 1 - yF; break;
+                default: u = 1 - xF; v = 1 - yF; break;
+              }
+              opaque.verts.push(
+                wx + xF, y + yF, wz + zF,
+                lerp(uv.u0, uv.u1, u), lerp(uv.v0, uv.v1, v),
+                f * 4 + face.shade,
+                sky, blk
+              );
+            }
+            opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+            opaque.count += 4;
+          };
+
+          const lowerBox = { x0: 0, x1: 1, y0: 0, y1: 0.5, z0: 0, z1: 1 };
+          for (const f of [0, 1, 4, 5]) {
+            const [dx, , dz] = FACES[f].dir;
+            if (shouldDrawFace(id, getNb(lx + dx, y, lz + dz))) pushStairFace(f, lowerBox);
+          }
+          if (shouldDrawFace(id, getNb(lx, y - 1, lz))) pushStairFace(3, lowerBox);
+          // 下段の踏み板 (開いている側の上面) は常に露出しているので無条件に描画
+          pushStairFace(2, STAIR_OPEN_TOP[dir]);
+
+          const upperBox = STAIR_UPPER_BOX[dir];
+          const riserFace = STAIR_RISER_FACE[dir];
+          for (const f of [0, 1, 4, 5]) {
+            if (f === riserFace) { pushStairFace(f, upperBox); continue; }
+            const [dx, , dz] = FACES[f].dir;
+            if (shouldDrawFace(id, getNb(lx + dx, y, lz + dz))) pushStairFace(f, upperBox);
+          }
+          if (shouldDrawFace(id, getNb(lx, y + 1, lz))) pushStairFace(2, upperBox);
+          continue;
+        }
+
         const isWater = id === B.WATER;
-        const target = isWater ? water : opaque;
-        // 水面: 上が空気なら少し低くして水面らしく
-        const topOffset = (isWater && getNb(lx, y + 1, lz) !== B.WATER) ? -0.125 : 0;
+        const isLava = id === B.LAVA_BLOCK;
+        const isFluid = isWater || isLava;
+        const target = isWater ? water : isLava ? lava : opaque;
+        const blockTop = block.height;   // ハーフブロック = 0.5
+        // 水面: 上が空気なら少し低くして水面らしく。マグマは粘性が高く沈みは控えめ
+        const topOffset = isWater && getNb(lx, y + 1, lz) !== B.WATER ? -0.125
+          : isLava && getNb(lx, y + 1, lz) !== B.LAVA_BLOCK ? -0.06 : 0;
 
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
           const [dx, dy, dz] = face.dir;
           const nbId = getNb(lx + dx, y + dy, lz + dz);
-          if (!shouldDrawFace(id, nbId)) continue;
-          // 水中から見た水側面は省略 (上面のみ描く)
-          if (isWater && f !== 2 && nbId !== B.AIR && !BLOCKS[nbId].opaque) continue;
+          if (!shouldDrawFace(id, nbId)) {
+            // ハーフブロック: 上面は常に描く (上のブロックとの間に隙間がある)。
+            // 底面も下が不透明ブロックでなければ描く
+            if (!(blockTop < 1 && (f === 2 || (f === 3 && !isOpaque(nbId))))) continue;
+          }
+          // 流体内部から見た側面は省略 (上面のみ描く)
+          if (isFluid && f !== 2 && nbId !== B.AIR && !BLOCKS[nbId].opaque) continue;
 
           const tile = f === 2 ? block.tiles[0] : f === 3 ? block.tiles[2] : block.tiles[1];
           const uv = tileUV(tile);
@@ -358,18 +449,19 @@ function buildChunkMesh(world, chunk) {
             blks[ci] = bSum / n / 15;
           }
 
-          // 頂点を追加
+          // 頂点を追加 (ハーフブロックは高さと側面 UV を圧縮)
+          const sideVTop = (blockTop < 1 && f !== 2 && f !== 3) ? 1 - blockTop : 0;
           const vi = target.count;
           for (let ci = 0; ci < 4; ci++) {
             const c = face.corners[ci];
-            const cy = c[1] === 1 ? 1 + topOffset : 0;
+            const cy = c[1] === 1 ? blockTop + topOffset : 0;
             target.verts.push(
               ox + lx + c[0],
               y + cy,
               oz + lz + c[2],
               lerp(uv.u0, uv.u1, face.uvs[ci][0]),
-              lerp(uv.v0, uv.v1, face.uvs[ci][1]),
-              shades[ci],
+              lerp(uv.v0, uv.v1, face.uvs[ci][1] === 0 ? sideVTop : face.uvs[ci][1]),
+              f * 4 + shades[ci],   // 法線インデックスをパック
               skys[ci],
               blks[ci]
             );
@@ -395,6 +487,10 @@ function buildChunkMesh(world, chunk) {
     water: {
       verts: new Float32Array(water.verts),
       indices: new Uint32Array(water.indices),
+    },
+    lava: {
+      verts: new Float32Array(lava.verts),
+      indices: new Uint32Array(lava.indices),
     },
   };
 }

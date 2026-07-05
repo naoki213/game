@@ -8,6 +8,40 @@ class Sound {
     this.ctx = null;
     this.musicTimer = null;
     this.musicGain = null;
+    this.rainSrc = null;
+    this.rainGain = null;
+  }
+
+  // 雨音ループの開始 / 停止
+  startRain() {
+    const ctx = this.ensure();
+    if (!ctx || this.rainSrc) return;
+    const dur = 2;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 1.5);
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+    this.rainSrc = src;
+    this.rainGain = gain;
+  }
+
+  stopRain() {
+    if (!this.rainSrc || !this.ctx) return;
+    const src = this.rainSrc;
+    this.rainGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1.5);
+    setTimeout(() => { try { src.stop(); } catch (e) { /* ignore */ } }, 1600);
+    this.rainSrc = null;
+    this.rainGain = null;
   }
 
   // ブラウザの自動再生制限のため, 最初のユーザー操作後に初期化する
@@ -71,6 +105,63 @@ class Sound {
     osc.connect(filter).connect(gain).connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.6);
+  }
+
+  // 食べる音 (もぐもぐ)
+  eat() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => this.blip(160 + Math.random() * 60, 0.08, "square", 0.12), i * 130);
+    }
+  }
+
+  // 弓を放つ音
+  bow() {
+    this.blip(700, 0.1, "triangle", 0.15);
+  }
+
+  // クリーパーの導火線 (シューッ)
+  hiss() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const dur = 1.2;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      d[i] = (Math.random() * 2 - 1) * (0.3 + 0.7 * (i / d.length));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 2500;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.14;
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
+  }
+
+  // 爆発 (低いドーン)
+  explosion() {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const dur = 0.8;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.6);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(400, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + dur);
+    const gain = ctx.createGain();
+    gain.gain.value = 0.55;
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start();
   }
 
   // アイテム回収音 (上昇チャイム)

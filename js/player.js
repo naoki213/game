@@ -33,6 +33,9 @@ class Player {
     this.health = 20;
     this.maxAir = 10;          // 秒
     this.air = 10;
+    this.maxFood = 20;         // 満腹度
+    this.food = 20;
+    this.starveTimer = 0;
     this.dead = false;
     this.hurtFlash = 0;        // ダメージ演出の残り時間
     this.time = 0;             // 内部時計
@@ -115,6 +118,12 @@ class Player {
     this.sneaking = input.sneak && !this.flying && !this.inWater;
     if (this.sneaking) speed *= 0.35;
 
+    // ソウルサンドの上は歩きにくい (本家準拠)
+    if (this.onGround && !this.flying &&
+        this.world.getBlock(Math.floor(this.pos[0]), Math.floor(this.pos[1] - 0.05), Math.floor(this.pos[2])) === B.SOUL_SAND) {
+      speed *= 0.5;
+    }
+
     // 水平速度は即応 (地上) / 少し慣性 (空中)
     const accel = this.onGround || this.flying ? 20 : 6;
     this.vel[0] = lerp(this.vel[0], dx * speed, Math.min(accel * dt, 1));
@@ -133,12 +142,14 @@ class Player {
       if (input.jump && this.onGround) {
         this.vel[1] = JUMP_SPEED;
         this.onGround = false;
+        if (!this.creative) this.food = Math.max(0, this.food - 0.12);
       }
       this.vel[1] = Math.max(this.vel[1], -50);
     }
 
     // --- 軸ごとの衝突解決 ---
     const sneakGuard = this.sneaking && this.onGround;
+    this._wasGrounded = this.onGround;   // 自動ステップ判定用 (リセット前の値)
     this.onGround = false;
     for (const axis of [0, 2]) {
       const old = this.pos[axis];
@@ -172,12 +183,31 @@ class Player {
       this.drownTimer = 0;
     }
 
-    // --- 自然回復 (6 秒間ダメージなしで 2.5 秒ごとに +1) ---
-    if (this.health < this.maxHealth && this.time - this.lastDamageTime > 6) {
+    // --- 満腹度の消費と飢餓 ---
+    if (!this.creative) {
+      const moving = Math.hypot(this.vel[0], this.vel[2]) > 0.5;
+      let drain = 0.012;                        // 基礎代謝
+      if (input.sprint && moving) drain += 0.05; // ダッシュは腹が減る
+      this.food = Math.max(0, this.food - drain * dt);
+      if (this.food <= 0) {
+        this.starveTimer += dt;
+        if (this.starveTimer >= 4) {
+          this.starveTimer -= 4;
+          if (this.health > 1) this.takeDamage(1); // 飢餓では死なない
+        }
+      } else {
+        this.starveTimer = 0;
+      }
+    }
+
+    // --- 自然回復 (満腹度が高く 6 秒間ダメージなしのとき, 食料を消費して回復) ---
+    if (this.health < this.maxHealth && this.time - this.lastDamageTime > 6 &&
+        (this.creative || this.food >= 18)) {
       this.regenTimer += dt;
       if (this.regenTimer >= 2.5) {
         this.regenTimer -= 2.5;
         this.health++;
+        if (!this.creative) this.food = Math.max(0, this.food - 0.6);
       }
     } else if (this.health >= this.maxHealth) {
       this.regenTimer = 0;
@@ -192,10 +222,13 @@ class Player {
   respawn() {
     this.health = this.maxHealth;
     this.air = this.maxAir;
+    this.food = this.maxFood;
     this.dead = false;
     this.vel = [0, 0, 0];
     this.flying = false;
-    this.spawn(8.5, 8.5);
+    // ベッドで設定したリスポーン地点があればそこへ
+    if (this.spawnPoint) this.spawn(this.spawnPoint[0], this.spawnPoint[2]);
+    else this.spawn(8.5, 8.5);
   }
 
   // AABB を 1 軸だけ動かして衝突解決
@@ -221,8 +254,20 @@ class Player {
     for (let y = y0; y <= y1; y++) {
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
-          if (!this.world.isSolidAt(x, y, z)) continue;
+          const bh = this.world.blockHeightAt(x, y, z);
+          if (bh === 0) continue;
+          const blockTop = y + bh;
+          // ハーフブロックの上半分は空: AABB が実体と重ならなければ無視
+          if (this.pos[1] >= blockTop - 1e-6) continue;
+
           // 衝突: 移動方向に応じて押し戻す
+          if (axis === 0 || axis === 2) {
+            // 低い段差 (ハーフブロック) は自動で登る
+            if (this._wasGrounded && bh < 1 && blockTop - this.pos[1] <= 0.55) {
+              this.pos[1] = blockTop + 1e-4;
+              continue;
+            }
+          }
           if (axis === 0) {
             this.pos[0] = delta > 0
               ? x - PLAYER_HALF_W - 1e-4
@@ -237,7 +282,7 @@ class Player {
             if (delta > 0) {
               this.pos[1] = y - PLAYER_HEIGHT - 1e-4;
             } else {
-              this.pos[1] = y + 1 + 1e-4;
+              this.pos[1] = blockTop + 1e-4;
               this.onGround = true;
               // 着地速度を記録 (落下ダメージ用)
               this.landImpact = Math.max(this.landImpact, -this.vel[1]);
@@ -291,6 +336,52 @@ class Player {
     while (t <= REACH) {
       const id = world.getBlock(x, y, z);
       if (id !== B.AIR && id !== B.WATER) {
+        return { pos: [x, y, z], prev: [px, py, pz], id, t };
+      }
+      px = x; py = y; pz = z;
+      if (tX < tY && tX < tZ) {
+        x += stepX; t = tX; tX += invX;
+      } else if (tY < tZ) {
+        y += stepY; t = tY; tY += invY;
+      } else {
+        z += stepZ; t = tZ; tZ += invZ;
+      }
+    }
+    return null;
+  }
+
+  // バケツ用: raycast() と違い水も透過せず, 最初に当たったブロック
+  // (水/マグマ含む) で止まる
+  raycastFluid() {
+    const world = this.world;
+    const origin = this.eyePos();
+    const dir = this.forward();
+
+    let x = Math.floor(origin[0]);
+    let y = Math.floor(origin[1]);
+    let z = Math.floor(origin[2]);
+
+    const stepX = dir[0] > 0 ? 1 : -1;
+    const stepY = dir[1] > 0 ? 1 : -1;
+    const stepZ = dir[2] > 0 ? 1 : -1;
+
+    const invX = dir[0] !== 0 ? Math.abs(1 / dir[0]) : Infinity;
+    const invY = dir[1] !== 0 ? Math.abs(1 / dir[1]) : Infinity;
+    const invZ = dir[2] !== 0 ? Math.abs(1 / dir[2]) : Infinity;
+
+    let tX = dir[0] !== 0
+      ? (dir[0] > 0 ? (x + 1 - origin[0]) : (origin[0] - x)) * invX : Infinity;
+    let tY = dir[1] !== 0
+      ? (dir[1] > 0 ? (y + 1 - origin[1]) : (origin[1] - y)) * invY : Infinity;
+    let tZ = dir[2] !== 0
+      ? (dir[2] > 0 ? (z + 1 - origin[2]) : (origin[2] - z)) * invZ : Infinity;
+
+    let px = x, py = y, pz = z;
+    let t = 0;
+
+    while (t <= REACH) {
+      const id = world.getBlock(x, y, z);
+      if (id !== B.AIR) {
         return { pos: [x, y, z], prev: [px, py, pz], id, t };
       }
       px = x; py = y; pz = z;
