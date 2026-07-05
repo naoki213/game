@@ -424,6 +424,10 @@ const TILE = {
   DOOR_WOOD: 212,
   CRAFTING_TABLE_TOP: 213,
   CRAFTING_TABLE_SIDE: 214,
+  DOOR_WOOD_TOP: 215,
+  BED_HEAD_TOP: 216,
+  BED_FOOT_TOP: 217,
+  BED_SIDE: 218,
 };
 
 // 各ブロックの属性
@@ -844,22 +848,56 @@ STAIR_MATERIALS.forEach(([name, jp, tiles, opts], mi) => {
   });
 });
 
-// --- ドア: 薄い板状の専用メッシュ (mesher.js)。設置時のプレイヤーの向きに応じて
-// north/east/south/west で自動回転し, 常に閉状態で設置される。右クリックで
-// 開閉をトグル (main.js の placeAction 参照)。開いている間は当たり判定なし ---
-const DOOR_ID_BASE = 216;   // 216-219: 閉 (north/east/south/west), 220-223: 開
+// --- ドア: 本家同様に下段+上段の2マス1組。薄い板状の専用メッシュ (mesher.js)。
+// 設置時のプレイヤーの向きに応じて north/east/south/west で自動回転し,
+// 常に閉状態で設置される (上段が自動でついてくる)。右クリックでどちらの段を
+// 見ても開閉をトグルし, 上下段が連動する (main.js の placeAction 参照)。
+// 開いている間は当たり判定なし ---
+const DOOR_ID_BASE = 216;      // 216-219: 下段-閉, 220-223: 下段-開
+const DOOR_TOP_ID_BASE = 227;  // 227-230: 上段-閉, 231-234: 上段-開
 const DOOR_DIRS = ["north", "east", "south", "west"];
 DOOR_DIRS.forEach((dirName, di) => {
   const closedId = DOOR_ID_BASE + di;
   const openId = DOOR_ID_BASE + 4 + di;
+  const topClosedId = DOOR_TOP_ID_BASE + di;
+  const topOpenId = DOOR_TOP_ID_BASE + 4 + di;
   defBlock(closedId, "door_wood_" + dirName + "_closed", "木のドア",
     [TILE.DOOR_WOOD, TILE.DOOR_WOOD, TILE.DOOR_WOOD],
     { opaque: false, hardness: 1.0, drops: DOOR_ID_BASE });
   defBlock(openId, "door_wood_" + dirName + "_open", "木のドア (開)",
     [TILE.DOOR_WOOD, TILE.DOOR_WOOD, TILE.DOOR_WOOD],
     { opaque: false, solid: false, hardness: 1.0, drops: DOOR_ID_BASE });
+  defBlock(topClosedId, "door_wood_" + dirName + "_top_closed", "木のドア (上)",
+    [TILE.DOOR_WOOD_TOP, TILE.DOOR_WOOD_TOP, TILE.DOOR_WOOD_TOP],
+    { opaque: false, hardness: 1.0, drops: null });
+  defBlock(topOpenId, "door_wood_" + dirName + "_top_open", "木のドア (上・開)",
+    [TILE.DOOR_WOOD_TOP, TILE.DOOR_WOOD_TOP, TILE.DOOR_WOOD_TOP],
+    { opaque: false, solid: false, hardness: 1.0, drops: null });
   BLOCKS[closedId].door = true; BLOCKS[closedId].doorDir = di; BLOCKS[closedId].doorOpen = false;
   BLOCKS[openId].door = true; BLOCKS[openId].doorDir = di; BLOCKS[openId].doorOpen = true;
+  BLOCKS[topClosedId].door = true; BLOCKS[topClosedId].doorDir = di; BLOCKS[topClosedId].doorOpen = false;
+  BLOCKS[topClosedId].doorTop = true;
+  BLOCKS[topOpenId].door = true; BLOCKS[topOpenId].doorDir = di; BLOCKS[topOpenId].doorOpen = true;
+  BLOCKS[topOpenId].doorTop = true;
+});
+
+// --- ベッド: 本家同様に頭側+足側の2マス1組, 高さの低い箱で描画 (mesher.js)。
+// 設置時のプレイヤーの向きに応じて自動回転する。B.BED (レガシーの単体ブロック,
+// 通常は直接設置されない) を持ち物としての基準アイテムとして扱い, 実際の設置は
+// この BED_ID_BASE の頭/足ペアに変換する (main.js の placeAction 参照) ---
+const BED_ID_BASE = 235;   // 235-238: 頭 (north/east/south/west), 239-242: 足
+const BED_DIRS = ["north", "east", "south", "west"];
+BED_DIRS.forEach((dirName, di) => {
+  const headId = BED_ID_BASE + di;
+  const footId = BED_ID_BASE + 4 + di;
+  defBlock(headId, "bed_" + dirName + "_head", "ベッド (頭)",
+    [TILE.BED_HEAD_TOP, TILE.BED_SIDE, TILE.PLANK],
+    { opaque: false, hardness: 0.5, drops: B.BED });
+  defBlock(footId, "bed_" + dirName + "_foot", "ベッド (足)",
+    [TILE.BED_FOOT_TOP, TILE.BED_SIDE, TILE.PLANK],
+    { opaque: false, hardness: 0.5, drops: null });
+  BLOCKS[headId].bed = true; BLOCKS[headId].bedDir = di; BLOCKS[headId].bedFoot = false;
+  BLOCKS[footId].bed = true; BLOCKS[footId].bedDir = di; BLOCKS[footId].bedFoot = true;
 });
 
 // --- フェンス: 中央の支柱 + 隣接するフェンスへ自動でつながる横木 (mesher.js) ---
@@ -878,6 +916,10 @@ defBlock(B.CRAFTING_TABLE, "crafting_table", "作業台",
  STAIR_ID_BASE + 2 * 4, STAIR_ID_BASE + 2 * 4 + 1, STAIR_ID_BASE + 2 * 4 + 2, STAIR_ID_BASE + 2 * 4 + 3,
  DOOR_ID_BASE, DOOR_ID_BASE + 1, DOOR_ID_BASE + 2, DOOR_ID_BASE + 3,
  DOOR_ID_BASE + 4, DOOR_ID_BASE + 5, DOOR_ID_BASE + 6, DOOR_ID_BASE + 7,
+ DOOR_TOP_ID_BASE, DOOR_TOP_ID_BASE + 1, DOOR_TOP_ID_BASE + 2, DOOR_TOP_ID_BASE + 3,
+ DOOR_TOP_ID_BASE + 4, DOOR_TOP_ID_BASE + 5, DOOR_TOP_ID_BASE + 6, DOOR_TOP_ID_BASE + 7,
+ BED_ID_BASE, BED_ID_BASE + 1, BED_ID_BASE + 2, BED_ID_BASE + 3,
+ BED_ID_BASE + 4, BED_ID_BASE + 5, BED_ID_BASE + 6, BED_ID_BASE + 7,
  B.FENCE_PLANK, B.CRAFTING_TABLE,
 ].forEach((id) => { BLOCKS[id].axeable = true; });
 [B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.FARMLAND,
