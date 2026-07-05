@@ -1031,6 +1031,33 @@ function buildTextureAtlas(seed) {
   paintTile(TILE.WATER_BUCKET, (x, y) => bucketShape(x, y, [50, 90, 210]));
   paintTile(TILE.LAVA_BUCKET, (x, y) => bucketShape(x, y, [255, 140, 30]));
 
+  // 木のドア (縁の枠 + 上下2枚の羽目板 + ノブ)
+  paintTile(TILE.DOOR_WOOD, (x, y) => {
+    const frame = x < 1 || x > 14;
+    if (frame) return px(96, 70, 42, jitter(1, 0.05));
+    const panelGap = (y > 6 && y < 8);
+    if (panelGap) return px(96, 70, 42, jitter(1, 0.05));
+    const knob = x >= 11 && x <= 12 && y >= 7 && y <= 9;
+    if (knob) return px(225, 195, 90, jitter(1, 0.06));
+    return px(150, 111, 66, jitter(1, 0.07));
+  });
+
+  // 作業台 (天板: 木目 + 格子の切り込み, 側面: 板材 + 道具のシルエット)
+  paintTile(TILE.CRAFTING_TABLE_TOP, (x, y) => {
+    const grid = (x % 8 === 0) || (y % 8 === 0);
+    if (grid) return px(90, 65, 40, jitter(1, 0.05));
+    const plank = Math.floor(x / 4) % 2 === 0;
+    return px(plank ? 168 : 152, plank ? 122 : 110, plank ? 72 : 65, jitter(1, 0.06));
+  });
+  paintTile(TILE.CRAFTING_TABLE_SIDE, (x, y) => {
+    const border = x === 0 || x === 15;
+    if (border) return px(96, 70, 42, jitter(1, 0.05));
+    // ノコギリのシルエット
+    const sawTooth = y > 9 && y < 13 && Math.abs(((x + y) % 4) - 2) < 1;
+    if (sawTooth) return px(180, 182, 186, 1);
+    return px(150, 111, 66, jitter(1, 0.07));
+  });
+
   // --- モブの模様入りスキン ---
 
   // ゾンビの肌 (緑, まだらな腐敗の斑点)
