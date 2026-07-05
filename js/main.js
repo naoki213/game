@@ -1011,6 +1011,64 @@
     }
   }
 
+  // ---------------- 水/マグマの流動 (平地では十字状に広がる, 本家準拠) ----------------
+  // 世界の全ブロックにレベルを持たせるとデータ量が大きくなるので, 広がった
+  // セルの「発生源からの距離」だけを一時的な Map で追う (再読み込み後は消える)
+  const fluidLevel = new Map();     // "x,y,z" -> 0..maxDist
+  const fluidQueue = new Set();     // "x,y,z" (次にチェックするセル)
+  const FLUID_BUDGET = 60;          // 1 ティックで処理する上限 (負荷対策)
+  const FLUID_DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const FLUID_DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+  function queueFluidCheck(x, y, z) {
+    const id = world.getBlock(x, y, z);
+    if (id === B.WATER || id === B.LAVA_BLOCK) fluidQueue.add(x + "," + y + "," + z);
+  }
+  // 破壊などで新しくできた空気マスの隣に水/マグマがあれば, そこから広がれるようにする
+  function queueFluidNeighbors(x, y, z) {
+    for (const [dx, dy, dz] of FLUID_DIRS6) queueFluidCheck(x + dx, y + dy, z + dz);
+  }
+
+  let fluidTickTimer = 0;
+  function updateFluidSpread(dt) {
+    fluidTickTimer += dt;
+    if (fluidTickTimer < 0.35) return;
+    fluidTickTimer = 0;
+    if (fluidQueue.size === 0) return;
+    // レベル (発生源からの距離) の昇順で処理し, 十字方向で偏りなく均等に広がるようにする
+    const ordered = [...fluidQueue].sort(
+      (a, b) => (fluidLevel.get(a) || 0) - (fluidLevel.get(b) || 0));
+    let budget = FLUID_BUDGET;
+    for (const key of ordered) {
+      if (budget-- <= 0) break;
+      fluidQueue.delete(key);
+      const [x, y, z] = key.split(",").map(Number);
+      const id = world.getBlock(x, y, z);
+      if (id !== B.WATER && id !== B.LAVA_BLOCK) continue;
+      const isLava = id === B.LAVA_BLOCK;
+      const maxDist = isLava ? 4 : 7;
+      const level = fluidLevel.get(key) || 0;
+
+      // 下が空気なら落下 (落下中は横に広がらない, 本家準拠)
+      if (world.getBlock(x, y - 1, z) === B.AIR) {
+        world.setBlock(x, y - 1, z, id);
+        fluidLevel.set([x, y - 1, z].join(","), 0);
+        queueFluidCheck(x, y - 1, z);
+        continue;
+      }
+      // 地面に接地していれば, 最大距離まで四方 (十字) に広がる
+      if (level >= maxDist) continue;
+      for (const [dx, dz] of FLUID_DIRS4) {
+        const nx = x + dx, nz = z + dz;
+        if (world.getBlock(nx, y, nz) === B.AIR) {
+          world.setBlock(nx, y, nz, id);
+          fluidLevel.set([nx, y, nz].join(","), level + 1);
+          queueFluidCheck(nx, y, nz);
+        }
+      }
+    }
+  }
+
   // ---------------- 葉の腐敗 (木を切ると葉が枯れる) ----------------
 
   const leafDecay = [];         // {x, y, z, t}
@@ -1513,6 +1571,17 @@
     checkFalling(bx, by + 1, bz);
     // 原木を切ったら周囲の葉が枯れ始める
     if (hit.id === B.LOG) queueLeafDecayAround(bx, by, bz);
+    // 隣に水/マグマがあれば, できた空気マスへ広がってくる
+    queueFluidNeighbors(bx, by, bz);
+    // ドア (上下段) / ベッド (頭足) はどちらか片方を壊すともう片方も消える
+    if (block.door) {
+      const py2 = by + (block.doorTop ? -1 : 1);
+      if (BLOCKS[world.getBlock(bx, py2, bz)].door) world.setBlock(bx, py2, bz, B.AIR);
+    } else if (block.bed) {
+      const [odx, , odz] = BED_DIR_OFFSET[block.bedDir];
+      const [px2, pz2] = block.bedFoot ? [bx - odx, bz - odz] : [bx + odx, bz + odz];
+      if (BLOCKS[world.getBlock(px2, by, pz2)].bed) world.setBlock(px2, by, pz2, B.AIR);
+    }
   }
 
   // 右クリック / タップでの設置 (弓を持っていれば射撃)
@@ -1802,11 +1871,20 @@
     const mi = Math.floor((id - STAIR_ID_BASE) / 4);
     return STAIR_ID_BASE + mi * 4 + yawToDir4(yaw);
   }
-  // ドアの開閉をトグル (右クリックで開ける/閉める)
+  // ドアの開閉をトグル (右クリックで開ける/閉める)。上下段が連動する
   function toggleDoor(pos, id) {
     const b = BLOCKS[id];
-    const newId = b.doorOpen ? DOOR_ID_BASE + b.doorDir : DOOR_ID_BASE + 4 + b.doorDir;
+    const base = b.doorTop ? DOOR_TOP_ID_BASE : DOOR_ID_BASE;
+    const newId = base + (b.doorOpen ? 0 : 4) + b.doorDir;
     world.setBlock(pos[0], pos[1], pos[2], newId);
+    // 相方の段 (上/下) も一緒に切り替える
+    const py2 = pos[1] + (b.doorTop ? -1 : 1);
+    const otherId = world.getBlock(pos[0], py2, pos[2]);
+    if (BLOCKS[otherId].door && BLOCKS[otherId].doorTop !== b.doorTop) {
+      const ob = BLOCKS[otherId];
+      const obase = ob.doorTop ? DOOR_TOP_ID_BASE : DOOR_ID_BASE;
+      world.setBlock(pos[0], py2, pos[2], obase + (ob.doorOpen ? 0 : 4) + ob.doorDir);
+    }
     sound.step();
   }
 
@@ -1921,6 +1999,7 @@
             addItem(I.BUCKET);
             sound.place();
             checkFalling(px, py, pz);
+            queueFluidCheck(px, py, pz); // 平地に注いだ場合, 十字状に広がっていく
           } else if (gameMode === "survival") {
             addItem(tool.id); // 失敗したら返却
           }
@@ -1932,7 +2011,7 @@
     const hitFirst = player.raycast();
     if (hitFirst && !player.sneaking) {
       if (hitFirst.id === B.CHEST) { openChest(hitFirst.pos); return; }
-      if (hitFirst.id === B.BED) { trySleep(hitFirst.pos); return; }
+      if (hitFirst.id === B.BED || BLOCKS[hitFirst.id].bed) { trySleep(hitFirst.pos); return; }
       if (BLOCKS[hitFirst.id].door) { toggleDoor(hitFirst.pos, hitFirst.id); return; }
     }
     // エンダーアイ: フレームに埋め込むか, 使ってストロングホールドの方角を知る
@@ -2028,12 +2107,38 @@
     // 松明・植生・カーペットは下が固体ブロックのときだけ置ける
     if ((BLOCKS[id].torch || BLOCKS[id].cross || BLOCKS[id].height <= 0.1) &&
         !world.isSolidAt(px, py - 1, pz)) return;
+    // ドア: 本家同様に上にもう1マス必要 (2マス構造)。閉状態で下段+上段を同時に設置
+    if (BLOCKS[id].door && !BLOCKS[id].doorTop) {
+      if (world.getBlock(px, py + 1, pz) !== B.AIR) {
+        showToast("ドアの上にスペースが必要");
+        return;
+      }
+      if (!consumeItem(id)) return;
+      const dir = yawToDir4(player.yaw);
+      world.setBlock(px, py, pz, DOOR_ID_BASE + dir);
+      world.setBlock(px, py + 1, pz, DOOR_TOP_ID_BASE + dir);
+      sound.place();
+      return;
+    }
+    // ベッド: 本家同様に頭側+足側の2マス構造。プレイヤーの向きに応じて自動回転
+    if (id === B.BED) {
+      const dir = yawToDir4(player.yaw);
+      const [odx, , odz] = BED_DIR_OFFSET[dir];
+      const fx = px + odx, fz = pz + odz;
+      const footCur = world.getBlock(fx, py, fz);
+      if (footCur !== B.AIR && footCur !== B.WATER) {
+        showToast("ベッドを置くスペースが足りない");
+        return;
+      }
+      if (!consumeItem(id)) return;
+      world.setBlock(px, py, pz, BED_ID_BASE + dir);
+      world.setBlock(fx, py, fz, BED_ID_BASE + 4 + dir);
+      sound.place();
+      return;
+    }
     if (!consumeItem(id)) return;
-    // 階段・ドア: プレイヤーの向きに合わせて north/east/south/west のいずれかに回転
-    // (ドアは常に閉状態で設置される)
-    const placeId = BLOCKS[id].stairs ? stairFacingId(id, player.yaw)
-      : BLOCKS[id].door ? DOOR_ID_BASE + yawToDir4(player.yaw)
-      : id;
+    // 階段: プレイヤーの向きに合わせて north/east/south/west のいずれかに回転
+    const placeId = BLOCKS[id].stairs ? stairFacingId(id, player.yaw) : id;
     if (world.setBlock(px, py, pz, placeId)) {
       sound.place();
       checkFalling(px, py, pz); // 空中に置いた砂は落ちる
@@ -2401,16 +2506,17 @@
         noClouds: true,
       };
     }
-    // ネザー: 太陽も昼夜もない, 赤黒く霞んだ空間
+    // ネザー: 太陽も昼夜もない, 赤黒く霞んだ空間 (ただし真っ暗にはならないよう底上げ)
     if (world.isInNether(player.pos[0], player.pos[2])) {
       return {
         sunDir: [0, 1, 0],
-        daylight: 0.5,
-        zenith: [0.14, 0.03, 0.02],
-        horizon: [0.32, 0.09, 0.04],
-        fog: [0.28, 0.08, 0.04],
-        fogStart: 8,
-        fogEnd: 42,
+        daylight: 0.75,
+        minLight: 0.4,
+        zenith: [0.22, 0.06, 0.04],
+        horizon: [0.42, 0.14, 0.07],
+        fog: [0.36, 0.12, 0.06],
+        fogStart: 14,
+        fogEnd: 58,
         fov,
         sunColor: [1.15, 0.7, 0.5],
         noClouds: true,
@@ -2542,6 +2648,7 @@
       updatePrimedTNT(dt);
       updateLeafDecay(dt);
       updateRandomTicks(dt);
+      updateFluidSpread(dt);
       updateFishing(dt);
       bowCooldown = Math.max(0, bowCooldown - dt);
 

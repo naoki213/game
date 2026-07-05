@@ -92,6 +92,7 @@ uniform float uAlpha;
 uniform float uWave;
 uniform float uTime;
 uniform float uUseShadow;  // 影MOD: シャドウマップが有効か
+uniform float uMinLight;   // 最低限の明るさ (ネザーなど真っ暗にしたくない次元用)
 varying vec2 vUV;
 varying float vShade;
 varying float vSkyTerm;
@@ -116,7 +117,7 @@ void main() {
     }
   }
 
-  float br = max(max(vSkyTerm * shadow, vBlockTerm), 0.045);
+  float br = max(max(vSkyTerm * shadow, vBlockTerm), uMinLight);
   // 夜は青く, 発光ブロックの近くは暖色, 太陽光は色温度つき
   vec3 nightTint = mix(vec3(0.8, 0.88, 1.2), vec3(1.0), uDaylight);
   vec3 tint = mix(nightTint, vec3(1.15, 1.0, 0.8), vWarm);
@@ -641,6 +642,7 @@ class Renderer {
     gl.uniform1f(pw.uniforms.uFogStart, env.fogStart);
     gl.uniform1f(pw.uniforms.uFogEnd, env.fogEnd);
     gl.uniform1f(pw.uniforms.uDaylight, env.daylight);
+    gl.uniform1f(pw.uniforms.uMinLight, env.minLight !== undefined ? env.minLight : 0.045);
     gl.uniform1f(pw.uniforms.uAlpha, 1.0);
     gl.uniform1f(pw.uniforms.uWave, 0);
     gl.uniform1f(pw.uniforms.uTime, time);

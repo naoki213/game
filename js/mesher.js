@@ -86,13 +86,21 @@ const FENCE_POST = { x0: 0.375, x1: 0.625, y0: 0, y1: 1, z0: 0.375, z1: 0.625 };
 const FENCE_ARM_DIRS = [[1, 0, "x"], [-1, 0, "x"], [0, 1, "z"], [0, -1, "z"]];
 const FENCE_RAIL_Y = [[0.75, 0.9375], [0.375, 0.5]];
 
+// ベッドの形状: 高さの低い箱 (本家同様, 頭側/足側の2マス1組)。
+// dir (0=north 1=east 2=south 3=west) は頭から足に向かう方向
+const BED_HEIGHT = 0.5625;
+const BED_DIR_OFFSET = [[0, 0, -1], [1, 0, 0], [0, 0, 1], [-1, 0, 0]];
+
 // 汎用の箱を1個メッシュに積む (階段/ドア/フェンスなど非立方体の特殊形状で共用)。
 // 通常ブロックと同じ UV 規則 (角のローカル座標に応じて面ごとに割り当て) を使う
-function pushLitBox(target, wx, y, wz, box, tile, sky, blk, skipFaces) {
-  const uv = tileUV(tile);
+// tiles は単一タイル番号, または通常ブロックと同じ [top, side, bottom] 配列
+function pushLitBox(target, wx, y, wz, box, tiles, sky, blk, skipFaces) {
+  const tileArr = Array.isArray(tiles) ? tiles : [tiles, tiles, tiles];
   for (let f = 0; f < 6; f++) {
     if (skipFaces && skipFaces[f]) continue;
     const face = FACES[f];
+    const tile = f === 2 ? tileArr[0] : f === 3 ? tileArr[2] : tileArr[1];
+    const uv = tileUV(tile);
     const vi = target.count;
     for (let ci = 0; ci < 4; ci++) {
       const c = face.corners[ci];
@@ -369,6 +377,27 @@ function buildChunkMesh(world, chunk) {
             opaque.indices.push(vi + 2, vi + 1, vi, vi + 3, vi + 2, vi);
             opaque.count += 4;
           }
+          continue;
+        }
+
+        // --- ベッド: 高さの低い箱を1つ積む (頭/足の間の面は常に描かない) ---
+        if (block.bed) {
+          const wx = ox + lx, wz = oz + lz;
+          const sky = skyAt(lx, y, lz) / 15;
+          const blk = blkAt(lx, y, lz) / 15;
+          const box = { x0: 0, x1: 1, y0: 0, y1: BED_HEIGHT, z0: 0, z1: 1 };
+          const [odx, , odz] = BED_DIR_OFFSET[block.bedDir];
+          const towardPartner = block.bedFoot ? [-odx, 0, -odz] : [odx, 0, odz];
+          const skip = [false, false, false, false, false, false];
+          for (let f = 0; f < 6; f++) {
+            const fd = FACES[f].dir;
+            if (fd[0] === towardPartner[0] && fd[1] === towardPartner[1] && fd[2] === towardPartner[2]) {
+              skip[f] = true;
+              continue;
+            }
+            if (!shouldDrawFace(id, getNb(lx + fd[0], y + fd[1], lz + fd[2]))) skip[f] = true;
+          }
+          pushLitBox(opaque, wx, y, wz, box, block.tiles, sky, blk, skip);
           continue;
         }
 

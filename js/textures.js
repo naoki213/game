@@ -1042,6 +1042,39 @@ function buildTextureAtlas(seed) {
     return px(150, 111, 66, jitter(1, 0.07));
   });
 
+  // ドア上段 (小窓つき)
+  paintTile(TILE.DOOR_WOOD_TOP, (x, y) => {
+    const frame = x < 1 || x > 14;
+    if (frame) return px(96, 70, 42, jitter(1, 0.05));
+    const window = x >= 4 && x <= 11 && y >= 3 && y <= 9;
+    if (window) {
+      const pane = (x === 7 || x === 8 || y === 6) ? 0 : 1;
+      return pane ? px(120, 165, 175, jitter(1, 0.06)) : px(90, 65, 40, 1);
+    }
+    return px(150, 111, 66, jitter(1, 0.07));
+  });
+
+  // ベッド: 頭側 (枕) / 足側 (毛布) の上面, 側面 (マットレス + 脚)
+  paintTile(TILE.BED_HEAD_TOP, (x, y) => {
+    const pillow = y < 6;
+    if (pillow) return px(235, 235, 240, jitter(1, 0.04));
+    return px(200, 55, 50, jitter(1, 0.05));
+  });
+  paintTile(TILE.BED_FOOT_TOP, (x, y) => {
+    const fold = y < 2;
+    if (fold) return px(220, 225, 230, jitter(1, 0.04));
+    const stripe = Math.floor(y / 3) % 2 === 0;
+    return px(stripe ? 200 : 178, stripe ? 55 : 45, stripe ? 50 : 42, jitter(1, 0.05));
+  });
+  // ベッドは高さの低い箱 (height ~0.56) なので, 側面テクスチャは上から
+  // 高さの割合分しか使われない (箱の高さ→UVの規則は他の低い箱と共通)。
+  // そのため見える範囲 (上側 9px 程度) にだけ模様を入れる
+  paintTile(TILE.BED_SIDE, (x, y) => {
+    if (y > 9) return [0, 0, 0, 0];
+    const frame = y > 7;
+    return frame ? px(150, 40, 38, jitter(1, 0.05)) : px(200, 55, 50, jitter(1, 0.06));
+  });
+
   // 作業台 (天板: 木目 + 格子の切り込み, 側面: 板材 + 道具のシルエット)
   paintTile(TILE.CRAFTING_TABLE_TOP, (x, y) => {
     const grid = (x % 8 === 0) || (y % 8 === 0);
