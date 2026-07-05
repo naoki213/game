@@ -64,6 +64,62 @@ const STAIR_OPEN_TOP = [
 // 上段のうち, 踏み板との境目 (蹴込み面) は常に描画。FACES のインデックス (0=+X 1=-X 4=+Z 5=-Z)
 const STAIR_RISER_FACE = [5, 0, 4, 1];
 
+// ドアの形状データ (dir: 0=north 1=east 2=south 3=west, blocks.js の DOOR_DIRS と対応)。
+// 閉状態は dir 側の壁際に張り付く薄い板, 開状態は隣接する壁際まで 90 度回転した板
+// (どちらも共通のヒンジ角を軸に回転させた形なので寸法に矛盾がない)
+const DOOR_THICK = 0.1875;
+const DOOR_CLOSED_BOX = [
+  { x0: 0, x1: 1, y0: 0, y1: 1, z0: 0, z1: DOOR_THICK },
+  { x0: 1 - DOOR_THICK, x1: 1, y0: 0, y1: 1, z0: 0, z1: 1 },
+  { x0: 0, x1: 1, y0: 0, y1: 1, z0: 1 - DOOR_THICK, z1: 1 },
+  { x0: 0, x1: DOOR_THICK, y0: 0, y1: 1, z0: 0, z1: 1 },
+];
+const DOOR_OPEN_BOX = [
+  { x0: 0, x1: DOOR_THICK, y0: 0, y1: 1, z0: 0, z1: 1 },
+  { x0: 0, x1: 1, y0: 0, y1: 1, z0: 0, z1: DOOR_THICK },
+  { x0: 1 - DOOR_THICK, x1: 1, y0: 0, y1: 1, z0: 0, z1: 1 },
+  { x0: 0, x1: 1, y0: 0, y1: 1, z0: 1 - DOOR_THICK, z1: 1 },
+];
+
+// フェンスの形状データ: 中央の支柱 + 隣接フェンスへ繋がる横木 (2段)
+const FENCE_POST = { x0: 0.375, x1: 0.625, y0: 0, y1: 1, z0: 0.375, z1: 0.625 };
+const FENCE_ARM_DIRS = [[1, 0, "x"], [-1, 0, "x"], [0, 1, "z"], [0, -1, "z"]];
+const FENCE_RAIL_Y = [[0.75, 0.9375], [0.375, 0.5]];
+
+// 汎用の箱を1個メッシュに積む (階段/ドア/フェンスなど非立方体の特殊形状で共用)。
+// 通常ブロックと同じ UV 規則 (角のローカル座標に応じて面ごとに割り当て) を使う
+function pushLitBox(target, wx, y, wz, box, tile, sky, blk, skipFaces) {
+  const uv = tileUV(tile);
+  for (let f = 0; f < 6; f++) {
+    if (skipFaces && skipFaces[f]) continue;
+    const face = FACES[f];
+    const vi = target.count;
+    for (let ci = 0; ci < 4; ci++) {
+      const c = face.corners[ci];
+      const xF = c[0] ? box.x1 : box.x0;
+      const yF = c[1] ? box.y1 : box.y0;
+      const zF = c[2] ? box.z1 : box.z0;
+      let u, v;
+      switch (f) {
+        case 0: u = 1 - zF; v = 1 - yF; break;
+        case 1: u = zF; v = 1 - yF; break;
+        case 2: u = xF; v = zF; break;
+        case 3: u = xF; v = 1 - zF; break;
+        case 4: u = xF; v = 1 - yF; break;
+        default: u = 1 - xF; v = 1 - yF; break;
+      }
+      target.verts.push(
+        wx + xF, y + yF, wz + zF,
+        lerp(uv.u0, uv.u1, u), lerp(uv.v0, uv.v1, v),
+        f * 4 + face.shade,
+        sky, blk
+      );
+    }
+    target.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+    target.count += 4;
+  }
+}
+
 // この面を描画すべきか
 function shouldDrawFace(id, neighborId) {
   if (neighborId === B.AIR) return true;
@@ -312,6 +368,40 @@ function buildChunkMesh(world, chunk) {
             opaque.indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
             opaque.indices.push(vi + 2, vi + 1, vi, vi + 3, vi + 2, vi);
             opaque.count += 4;
+          }
+          continue;
+        }
+
+        // --- ドア: 開閉状態に応じた薄い板を1枚積む ---
+        if (block.door) {
+          const wx = ox + lx, wz = oz + lz;
+          const sky = skyAt(lx, y, lz) / 15;
+          const blk = blkAt(lx, y, lz) / 15;
+          const box = (block.doorOpen ? DOOR_OPEN_BOX : DOOR_CLOSED_BOX)[block.doorDir];
+          pushLitBox(opaque, wx, y, wz, box, block.tiles[1], sky, blk);
+          continue;
+        }
+
+        // --- フェンス: 中央の支柱 + 隣接フェンスへつながる横木2段 ---
+        if (block.fence) {
+          const wx = ox + lx, wz = oz + lz;
+          const sky = skyAt(lx, y, lz) / 15;
+          const blk = blkAt(lx, y, lz) / 15;
+          const tile = block.tiles[1];
+          pushLitBox(opaque, wx, y, wz, FENCE_POST, tile, sky, blk);
+          for (const [dx, dz, axis] of FENCE_ARM_DIRS) {
+            const nb = BLOCKS[getNb(lx + dx, y, lz + dz)];
+            if (!nb || !nb.fence) continue;
+            for (const [ry0, ry1] of FENCE_RAIL_Y) {
+              const box = axis === "x"
+                ? (dx > 0
+                  ? { x0: 0.625, x1: 1, y0: ry0, y1: ry1, z0: 0.4375, z1: 0.5625 }
+                  : { x0: 0, x1: 0.375, y0: ry0, y1: ry1, z0: 0.4375, z1: 0.5625 })
+                : (dz > 0
+                  ? { x0: 0.4375, x1: 0.5625, y0: ry0, y1: ry1, z0: 0.625, z1: 1 }
+                  : { x0: 0.4375, x1: 0.5625, y0: ry0, y1: ry1, z0: 0, z1: 0.375 });
+              pushLitBox(opaque, wx, y, wz, box, tile, sky, blk);
+            }
           }
           continue;
         }

@@ -103,6 +103,9 @@ const B = {
   // ドロップで T 字に組むと召喚される) 関連
   WITHER_SKULL: 186,
   NETHER_STAR: 187,
+  // 216-224 はドア (8方向x開閉, DOOR_ID_BASE) で使用済みのため 225 以降を使う
+  FENCE_PLANK: 225,
+  CRAFTING_TABLE: 226,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -417,6 +420,10 @@ const TILE = {
   BUCKET: 209,
   WATER_BUCKET: 210,
   LAVA_BUCKET: 211,
+  // 建具 / 作業台
+  DOOR_WOOD: 212,
+  CRAFTING_TABLE_TOP: 213,
+  CRAFTING_TABLE_SIDE: 214,
 };
 
 // 各ブロックの属性
@@ -837,10 +844,41 @@ STAIR_MATERIALS.forEach(([name, jp, tiles, opts], mi) => {
   });
 });
 
+// --- ドア: 薄い板状の専用メッシュ (mesher.js)。設置時のプレイヤーの向きに応じて
+// north/east/south/west で自動回転し, 常に閉状態で設置される。右クリックで
+// 開閉をトグル (main.js の placeAction 参照)。開いている間は当たり判定なし ---
+const DOOR_ID_BASE = 216;   // 216-219: 閉 (north/east/south/west), 220-223: 開
+const DOOR_DIRS = ["north", "east", "south", "west"];
+DOOR_DIRS.forEach((dirName, di) => {
+  const closedId = DOOR_ID_BASE + di;
+  const openId = DOOR_ID_BASE + 4 + di;
+  defBlock(closedId, "door_wood_" + dirName + "_closed", "木のドア",
+    [TILE.DOOR_WOOD, TILE.DOOR_WOOD, TILE.DOOR_WOOD],
+    { opaque: false, hardness: 1.0, drops: DOOR_ID_BASE });
+  defBlock(openId, "door_wood_" + dirName + "_open", "木のドア (開)",
+    [TILE.DOOR_WOOD, TILE.DOOR_WOOD, TILE.DOOR_WOOD],
+    { opaque: false, solid: false, hardness: 1.0, drops: DOOR_ID_BASE });
+  BLOCKS[closedId].door = true; BLOCKS[closedId].doorDir = di; BLOCKS[closedId].doorOpen = false;
+  BLOCKS[openId].door = true; BLOCKS[openId].doorDir = di; BLOCKS[openId].doorOpen = true;
+});
+
+// --- フェンス: 中央の支柱 + 隣接するフェンスへ自動でつながる横木 (mesher.js) ---
+defBlock(B.FENCE_PLANK, "fence_plank", "木のフェンス", [TILE.PLANK, TILE.PLANK, TILE.PLANK],
+  { opaque: false, hardness: 1.2 });
+BLOCKS[B.FENCE_PLANK].fence = true;
+
+// --- 作業台: 見た目は通常の立方体ブロック。一部の道具レシピはこれの近くでしか
+// クラフトできない (main.js の nearCraftingTable / RECIPES の needsTable 参照) ---
+defBlock(B.CRAFTING_TABLE, "crafting_table", "作業台",
+  [TILE.CRAFTING_TABLE_TOP, TILE.CRAFTING_TABLE_SIDE, TILE.PLANK], { hardness: 1.2 });
+
 // 道具の効くブロック分類
 [B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.PLANK, B.BIRCH_PLANK, B.DARK_PLANK,
  B.PLANK_SLAB, B.BOOKSHELF, B.CHEST, B.BED, B.PUMPKIN, B.JACK_O_LANTERN,
  STAIR_ID_BASE + 2 * 4, STAIR_ID_BASE + 2 * 4 + 1, STAIR_ID_BASE + 2 * 4 + 2, STAIR_ID_BASE + 2 * 4 + 3,
+ DOOR_ID_BASE, DOOR_ID_BASE + 1, DOOR_ID_BASE + 2, DOOR_ID_BASE + 3,
+ DOOR_ID_BASE + 4, DOOR_ID_BASE + 5, DOOR_ID_BASE + 6, DOOR_ID_BASE + 7,
+ B.FENCE_PLANK, B.CRAFTING_TABLE,
 ].forEach((id) => { BLOCKS[id].axeable = true; });
 [B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.FARMLAND,
 ].forEach((id) => { BLOCKS[id].shovelable = true; });

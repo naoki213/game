@@ -467,6 +467,10 @@
     { out: STAIR_ID_BASE + 4 * 4, outN: 2, in: [[B.BRICK, 3]] },
     { out: STAIR_ID_BASE + 5 * 4, outN: 2, in: [[B.SANDSTONE, 3]] },
     { out: I.BUCKET, outN: 1, in: [[I.IRON_INGOT, 3]] },
+    // 建具・作業台 (north 向きが基本の見た目で、設置時にプレイヤーの向きへ自動回転する)
+    { out: B.CRAFTING_TABLE, outN: 1, in: [[B.PLANK, 4]] },
+    { out: DOOR_ID_BASE, outN: 1, in: [[B.PLANK, 3]] },
+    { out: B.FENCE_PLANK, outN: 2, in: [[B.PLANK, 2]] },
   ];
 
   // 色付き羊毛: 羊毛 1 → 各色 1
@@ -603,18 +607,36 @@
     craftRows.push({ recipe, desc, btn });
   }
 
+  // 道具レシピは作業台の近く (半径4ブロック以内) でしかクラフトできない
+  // (クリエイティブでは制限なし)
+  function recipeNeedsTable(recipe) {
+    return !!getDef(recipe.out).tool;
+  }
+  function nearCraftingTable() {
+    const px = Math.floor(player.pos[0]), py = Math.floor(player.pos[1]), pz = Math.floor(player.pos[2]);
+    for (let dx = -4; dx <= 4; dx++)
+      for (let dy = -2; dy <= 2; dy++)
+        for (let dz = -4; dz <= 4; dz++)
+          if (world.getBlock(px + dx, py + dy, pz + dz) === B.CRAFTING_TABLE) return true;
+    return false;
+  }
+
   function canCraft(recipe) {
+    if (gameMode !== "creative" && recipeNeedsTable(recipe) && !nearCraftingTable()) return false;
     return recipe.in.every(([id, n]) => (invCounts.get(id) || 0) >= n);
   }
 
   function refreshCraftUI() {
+    const tableNearby = gameMode === "creative" || nearCraftingTable();
     for (const { recipe, desc, btn } of craftRows) {
       const parts = recipe.in.map(([id, n]) => {
         const have = invCounts.get(id) || 0;
         const cls = have >= n ? "" : ' class="lack"';
         return `<span${cls}>${getDef(id).jp} ×${n} (所持 ${have})</span>`;
       });
-      desc.innerHTML = `${getDef(recipe.out).jp} ×${recipe.outN} ← ` + parts.join(" + ");
+      const needsTable = recipeNeedsTable(recipe) && !tableNearby;
+      const tableNote = needsTable ? ' <span class="lack">(作業台が近くに必要)</span>' : "";
+      desc.innerHTML = `${getDef(recipe.out).jp} ×${recipe.outN} ← ` + parts.join(" + ") + tableNote;
       btn.disabled = !canCraft(recipe);
     }
   }
@@ -1770,13 +1792,22 @@
     }
   }
 
-  // 階段の設置向き決定: プレイヤーの水平方向の向きを 90 度刻みの
-  // north/east/south/west に丸めて、その素材の対応する ID を返す
+  // プレイヤーの水平方向の向きを 90 度刻みの north/east/south/west (0-3) に丸める
+  function yawToDir4(yaw) {
+    const a = ((yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    return Math.round(a / (Math.PI / 2)) % 4;
+  }
+  // 階段の設置向き決定: 素材はそのままに, 向きだけプレイヤーの方向に合わせる
   function stairFacingId(id, yaw) {
     const mi = Math.floor((id - STAIR_ID_BASE) / 4);
-    const a = ((yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    const dir = Math.round(a / (Math.PI / 2)) % 4;
-    return STAIR_ID_BASE + mi * 4 + dir;
+    return STAIR_ID_BASE + mi * 4 + yawToDir4(yaw);
+  }
+  // ドアの開閉をトグル (右クリックで開ける/閉める)
+  function toggleDoor(pos, id) {
+    const b = BLOCKS[id];
+    const newId = b.doorOpen ? DOOR_ID_BASE + b.doorDir : DOOR_ID_BASE + 4 + b.doorDir;
+    world.setBlock(pos[0], pos[1], pos[2], newId);
+    sound.step();
   }
 
   function placeAction() {
@@ -1897,11 +1928,12 @@
         }
       }
     }
-    // チェスト / ベッドは右クリックで開く・眠る (スニーク中は通常設置)
+    // チェスト / ベッド / ドアは右クリックで開く・眠る・開閉 (スニーク中は通常設置)
     const hitFirst = player.raycast();
     if (hitFirst && !player.sneaking) {
       if (hitFirst.id === B.CHEST) { openChest(hitFirst.pos); return; }
       if (hitFirst.id === B.BED) { trySleep(hitFirst.pos); return; }
+      if (BLOCKS[hitFirst.id].door) { toggleDoor(hitFirst.pos, hitFirst.id); return; }
     }
     // エンダーアイ: フレームに埋め込むか, 使ってストロングホールドの方角を知る
     const heldDef = getDef(HOTBAR_BLOCKS[selectedSlot]);
@@ -1997,8 +2029,11 @@
     if ((BLOCKS[id].torch || BLOCKS[id].cross || BLOCKS[id].height <= 0.1) &&
         !world.isSolidAt(px, py - 1, pz)) return;
     if (!consumeItem(id)) return;
-    // 階段: プレイヤーの向きに合わせて north/east/south/west のいずれかに回転
-    const placeId = BLOCKS[id].stairs ? stairFacingId(id, player.yaw) : id;
+    // 階段・ドア: プレイヤーの向きに合わせて north/east/south/west のいずれかに回転
+    // (ドアは常に閉状態で設置される)
+    const placeId = BLOCKS[id].stairs ? stairFacingId(id, player.yaw)
+      : BLOCKS[id].door ? DOOR_ID_BASE + yawToDir4(player.yaw)
+      : id;
     if (world.setBlock(px, py, pz, placeId)) {
       sound.place();
       checkFalling(px, py, pz); // 空中に置いた砂は落ちる
