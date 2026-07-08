@@ -86,6 +86,10 @@ const FENCE_POST = { x0: 0.375, x1: 0.625, y0: 0, y1: 1, z0: 0.375, z1: 0.625 };
 const FENCE_ARM_DIRS = [[1, 0, "x"], [-1, 0, "x"], [0, 1, "z"], [0, -1, "z"]];
 const FENCE_RAIL_Y = [[0.75, 0.9375], [0.375, 0.5]];
 
+// 窓ガラスの形状データ: フェンスと同じ考え方だが薄い板が全高 (1段) でつながる
+const PANE_POST = { x0: 0.4375, x1: 0.5625, y0: 0, y1: 1, z0: 0.4375, z1: 0.5625 };
+const PANE_ARM_DIRS = FENCE_ARM_DIRS;
+
 // ベッドの形状: 高さの低い箱 (本家同様, 頭側/足側の2マス1組)。
 // dir (0=north 1=east 2=south 3=west) は頭から足に向かう方向
 const BED_HEIGHT = 0.5625;
@@ -133,6 +137,10 @@ function shouldDrawFace(id, neighborId) {
   if (neighborId === B.AIR) return true;
   const nb = BLOCKS[neighborId];
   if (nb.opaque) return false;
+  // 同種の流体同士 (水源-流れる水など, レベル違いで ID が異なる): 基本は内部面を
+  // 張らないが, 相手の水面が自分より低ければ段差の露出部だけ側面を描く
+  const bl = BLOCKS[id];
+  if (bl.fluid && bl.fluid === nb.fluid) return bl.fluidLevel > nb.fluidLevel;
   // 透明ブロック同士 (水-水, ガラス-ガラス, 葉-葉) の内部面は張らない
   return neighborId !== id;
 }
@@ -204,7 +212,7 @@ function computeLight(world, chunk) {
         if (OPAQUE_LUT[id]) break;
         lightSky[i] = level;
         lightQueue[tail++] = i;
-        if (id === B.WATER) {
+        if (WATER_LUT[id]) {
           // 水面から下は別途減衰伝播に任せる (2/ブロック)
           for (let wy = y, l = level; wy >= 0; wy--) {
             const wi = lIdx(rx, wy, rz);
@@ -212,7 +220,7 @@ function computeLight(world, chunk) {
             if (OPAQUE_LUT[wid]) break;
             lightSky[wi] = l;
             lightQueue[tail++] = wi;
-            if (wid === B.WATER) l = Math.max(l - 2, 0);
+            if (WATER_LUT[wid]) l = Math.max(l - 2, 0);
           }
           break;
         }
@@ -247,7 +255,7 @@ function propagate(channel, queue, tail) {
   const spread = (i, next) => {
     if (channel[i] >= next || OPAQUE_LUT[lightBlocks[i]]) return;
     // 水中はさらに減衰
-    const v = lightBlocks[i] === B.WATER ? next - 1 : next;
+    const v = WATER_LUT[lightBlocks[i]] ? next - 1 : next;
     if (v > 0 && channel[i] < v) {
       channel[i] = v;
       if (tail < queue.length) queue[tail++] = i;
@@ -435,6 +443,28 @@ function buildChunkMesh(world, chunk) {
           continue;
         }
 
+        // --- 窓ガラス: 中央の支柱 + 隣接する窓ガラスへつながる全高の板 ---
+        if (block.pane) {
+          const wx = ox + lx, wz = oz + lz;
+          const sky = skyAt(lx, y, lz) / 15;
+          const blk = blkAt(lx, y, lz) / 15;
+          const tile = block.tiles[1];
+          pushLitBox(opaque, wx, y, wz, PANE_POST, tile, sky, blk);
+          for (const [dx, dz, axis] of PANE_ARM_DIRS) {
+            const nb = BLOCKS[getNb(lx + dx, y, lz + dz)];
+            if (!nb || !nb.pane) continue;
+            const box = axis === "x"
+              ? (dx > 0
+                ? { x0: 0.5625, x1: 1, y0: 0, y1: 1, z0: 0.4375, z1: 0.5625 }
+                : { x0: 0, x1: 0.4375, y0: 0, y1: 1, z0: 0.4375, z1: 0.5625 })
+              : (dz > 0
+                ? { x0: 0.4375, x1: 0.5625, y0: 0, y1: 1, z0: 0.5625, z1: 1 }
+                : { x0: 0.4375, x1: 0.5625, y0: 0, y1: 1, z0: 0, z1: 0.4375 });
+            pushLitBox(opaque, wx, y, wz, box, tile, sky, blk);
+          }
+          continue;
+        }
+
         // --- 階段: 下段 (全面ハーフ) + 上段 (奥半分だけ一段高い) の2箱を積む ---
         if (block.stairs) {
           const dir = block.stairDir;
@@ -493,14 +523,18 @@ function buildChunkMesh(world, chunk) {
           continue;
         }
 
-        const isWater = id === B.WATER;
-        const isLava = id === B.LAVA_BLOCK;
+        const isWater = block.fluid === "water";
+        const isLava = block.fluid === "lava";
         const isFluid = isWater || isLava;
         const target = isWater ? water : isLava ? lava : opaque;
         const blockTop = block.height;   // ハーフブロック = 0.5
-        // 水面: 上が空気なら少し低くして水面らしく。マグマは粘性が高く沈みは控えめ
-        const topOffset = isWater && getNb(lx, y + 1, lz) !== B.WATER ? -0.125
-          : isLava && getNb(lx, y + 1, lz) !== B.LAVA_BLOCK ? -0.06 : 0;
+        // 水面: 上に同じ流体があれば満水柱 (滝)。なければレベルに応じて低く描画
+        // (源 = 水0.875 / マグマ0.94 で従来と同じ高さ, 流れはレベルが下がるほど低い)
+        let topOffset = 0;
+        if (isFluid && BLOCKS[getNb(lx, y + 1, lz)].fluid !== block.fluid) {
+          const maxLv = isWater ? 8 : 4;
+          topOffset = (isWater ? 0.875 : 0.94) * (block.fluidLevel / maxLv) - 1;
+        }
 
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
@@ -511,8 +545,10 @@ function buildChunkMesh(world, chunk) {
             // 底面も下が不透明ブロックでなければ描く
             if (!(blockTop < 1 && (f === 2 || (f === 3 && !isOpaque(nbId))))) continue;
           }
-          // 流体内部から見た側面は省略 (上面のみ描く)
-          if (isFluid && f !== 2 && nbId !== B.AIR && !BLOCKS[nbId].opaque) continue;
+          // 流体内部から見た側面は省略 (上面のみ描く)。ただし同種の流体の
+          // 水面段差 (相手のレベルが低い) は露出するので描く
+          if (isFluid && f !== 2 && nbId !== B.AIR && !BLOCKS[nbId].opaque &&
+              !(BLOCKS[nbId].fluid === block.fluid && BLOCKS[nbId].fluidLevel < block.fluidLevel)) continue;
 
           const tile = f === 2 ? block.tiles[0] : f === 3 ? block.tiles[2] : block.tiles[1];
           const uv = tileUV(tile);

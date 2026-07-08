@@ -381,6 +381,7 @@
 
   const gridDefs = [
     ...BLOCKS.filter((b) => b && b.id !== B.AIR && b.id !== B.WATER && b.id !== B.BEDROCK &&
+      !(b.fluid && !b.fluidSource) &&     // 流れる水/マグマは持ち物に出さない
       !(b.stairs && b.stairDir !== 0)),   // 階段は方向違いの重複表示を避け, 基準の1つだけ出す
     ...Object.values(ITEMS),
   ];
@@ -471,6 +472,7 @@
     { out: B.CRAFTING_TABLE, outN: 1, in: [[B.PLANK, 4]] },
     { out: DOOR_ID_BASE, outN: 1, in: [[B.PLANK, 3]] },
     { out: B.FENCE_PLANK, outN: 2, in: [[B.PLANK, 2]] },
+    { out: B.GLASS_PANE, outN: 4, in: [[B.GLASS, 2]] },
   ];
 
   // 色付き羊毛: 羊毛 1 → 各色 1
@@ -1011,58 +1013,158 @@
     }
   }
 
-  // ---------------- 水/マグマの流動 (平地では十字状に広がる, 本家準拠) ----------------
-  // 世界の全ブロックにレベルを持たせるとデータ量が大きくなるので, 広がった
-  // セルの「発生源からの距離」だけを一時的な Map で追う (再読み込み後は消える)
-  const fluidLevel = new Map();     // "x,y,z" -> 0..maxDist
-  const fluidQueue = new Set();     // "x,y,z" (次にチェックするセル)
-  const FLUID_BUDGET = 60;          // 1 ティックで処理する上限 (負荷対策)
+  // ---------------- 水/マグマの流動 (本家準拠のレベル制シミュレーション) ----------------
+  // 水源はレベル8 / マグマ源はレベル4。流れブロックは供給元より 1 低いレベルを
+  // 持ち (ブロック ID にエンコード, blocks.js の WATER_FLOW_BASE / LAVA_FLOW_BASE),
+  // レベルが低いほど水面が低く描画される。ルールは本家準拠:
+  //   - 下へ落ちられる間は横に広がらない。落下柱は満水位で, 着地点から改めて全幅で広がる
+  //   - 水は 4 ブロック以内にある「落ちられる穴」への最短方向だけに流れる
+  //     (重力で低い地形へ吸い寄せられる挙動)。穴が無ければ全方向へ
+  //   - 供給が絶たれた流れは再計算で段階的に引いて消える (水源をすくうと乾く)
+  //   - マグマはゆっくり流れ (4ティックに1回), 水と触れると黒曜石/丸石/石になる
+  const fluidQueue = new Set();     // "x,y,z" (次に再計算するセル)
+  const FLUID_BUDGET = 80;          // 1 ティックで処理する上限 (負荷対策)
   const FLUID_DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   const FLUID_DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
-  function queueFluidCheck(x, y, z) {
-    const id = world.getBlock(x, y, z);
-    if (id === B.WATER || id === B.LAVA_BLOCK) fluidQueue.add(x + "," + y + "," + z);
+  const fluidMax = (type) => type === "water" ? 8 : 4;          // 源のレベル
+  const fluidMaxFlow = (type) => type === "water" ? 7 : 3;      // 流れの最大レベル (落下柱)
+  const fluidFlowId = (type, lv) => type === "water"
+    ? WATER_FLOW_BASE + Math.min(lv, 7) - 1
+    : LAVA_FLOW_BASE + Math.min(lv, 3) - 1;
+
+  // 流体がレベル lv で入り込めるマスか (空気 / 草花 / より低いレベルの同種の流れ)
+  function fluidCanEnter(id, type, lv) {
+    if (id === B.AIR) return true;
+    const b = BLOCKS[id];
+    if (b.cross) return true;   // 草花・小麦は押し流す
+    return b.fluid === type && !b.fluidSource && b.fluidLevel < lv;
   }
-  // 破壊などで新しくできた空気マスの隣に水/マグマがあれば, そこから広がれるようにする
+
+  function queueFluidCheck(x, y, z) {
+    if (BLOCKS[world.getBlock(x, y, z)].fluid) fluidQueue.add(x + "," + y + "," + z);
+  }
+  // ブロックの破壊/設置で状況が変わったとき, 隣接する流体を再計算の対象にする
   function queueFluidNeighbors(x, y, z) {
     for (const [dx, dy, dz] of FLUID_DIRS6) queueFluidCheck(x + dx, y + dy, z + dz);
   }
 
-  let fluidTickTimer = 0;
+  // 水とマグマの接触 (本家準拠): 水に触れたマグマは源なら黒曜石, 流れなら丸石に。
+  // マグマが水へ流れ込むと, その水は石になる
+  function fluidContact(x, y, z, intoType) {
+    const b = BLOCKS[world.getBlock(x, y, z)];
+    if (!b.fluid || b.fluid === intoType) return false;
+    if (intoType === "water") {
+      world.setBlock(x, y, z, b.fluidSource ? B.OBSIDIAN : B.COBBLE);
+    } else {
+      world.setBlock(x, y, z, B.STONE);
+    }
+    queueFluidNeighbors(x, y, z);
+    return true;
+  }
+
+  // このマスを流体 (通り道/落ち先) として通れるか
+  function fluidPassable(x, y, z) {
+    const b = BLOCKS[world.getBlock(x, y, z)];
+    return !b.solid || b.cross;
+  }
+
+  // 水の横方向の流れ先: 本家同様, 一歩目から 4 ブロック以内で「下に落ちられる」
+  // マスへの最短方向だけに流す。穴が見つからなければ全方向へ広がる
+  function waterFlowDirs(x, y, z) {
+    const costs = [];
+    let best = Infinity;
+    for (const [dx, dz] of FLUID_DIRS4) {
+      let cost = Infinity;
+      const sx = x + dx, sz = z + dz;
+      if (fluidPassable(sx, y, sz)) {
+        const visited = new Set([sx + "," + sz]);
+        let frontier = [[sx, sz]];
+        outer:
+        for (let d = 0; d < 4 && frontier.length; d++) {
+          const next = [];
+          for (const [cx, cz] of frontier) {
+            if (fluidPassable(cx, y - 1, cz)) { cost = d; break outer; }
+            for (const [ex, ez] of FLUID_DIRS4) {
+              const tx = cx + ex, tz = cz + ez;
+              const k = tx + "," + tz;
+              if (visited.has(k)) continue;
+              visited.add(k);
+              if (fluidPassable(tx, y, tz)) next.push([tx, tz]);
+            }
+          }
+          frontier = next;
+        }
+      }
+      costs.push(cost);
+      if (cost < best) best = cost;
+    }
+    if (best === Infinity) return FLUID_DIRS4;
+    return FLUID_DIRS4.filter((_, i) => costs[i] === best);
+  }
+
+  let fluidTickTimer = 0, fluidTickNo = 0;
   function updateFluidSpread(dt) {
     fluidTickTimer += dt;
-    if (fluidTickTimer < 0.35) return;
+    if (fluidTickTimer < 0.25) return;
     fluidTickTimer = 0;
+    fluidTickNo++;
     if (fluidQueue.size === 0) return;
-    // レベル (発生源からの距離) の昇順で処理し, 十字方向で偏りなく均等に広がるようにする
-    const ordered = [...fluidQueue].sort(
-      (a, b) => (fluidLevel.get(a) || 0) - (fluidLevel.get(b) || 0));
     let budget = FLUID_BUDGET;
-    for (const key of ordered) {
-      if (budget-- <= 0) break;
-      fluidQueue.delete(key);
+    const pending = [...fluidQueue];
+    fluidQueue.clear();
+    for (const key of pending) {
       const [x, y, z] = key.split(",").map(Number);
-      const id = world.getBlock(x, y, z);
-      if (id !== B.WATER && id !== B.LAVA_BLOCK) continue;
-      const isLava = id === B.LAVA_BLOCK;
-      const maxDist = isLava ? 4 : 7;
-      const level = fluidLevel.get(key) || 0;
+      const b = BLOCKS[world.getBlock(x, y, z)];
+      if (!b.fluid) continue;
+      const type = b.fluid;
+      // マグマは本家同様ゆっくり流れる
+      if (type === "lava" && fluidTickNo % 4 !== 0) { fluidQueue.add(key); continue; }
+      if (budget-- <= 0) { fluidQueue.add(key); continue; }
 
-      // 下が空気なら落下 (落下中は横に広がらない, 本家準拠)
-      if (world.getBlock(x, y - 1, z) === B.AIR) {
-        world.setBlock(x, y - 1, z, id);
-        fluidLevel.set([x, y - 1, z].join(","), 0);
+      // --- 流れブロック: 供給の再計算 (供給が絶たれたら引いていく) ---
+      let lv = fluidMax(type);
+      if (!b.fluidSource) {
+        let wanted = 0;
+        if (BLOCKS[world.getBlock(x, y + 1, z)].fluid === type) {
+          wanted = fluidMaxFlow(type);   // 上から注がれる落下柱は満水位
+        } else {
+          for (const [dx, dz] of FLUID_DIRS4) {
+            const nb = BLOCKS[world.getBlock(x + dx, y, z + dz)];
+            if (nb.fluid === type) wanted = Math.max(wanted, nb.fluidLevel - 1);
+          }
+        }
+        if (wanted <= 0) {           // 供給なし → 消えて, 下流にも再計算を伝える
+          world.setBlock(x, y, z, B.AIR);
+          queueFluidNeighbors(x, y, z);
+          continue;
+        }
+        if (wanted !== b.fluidLevel) {   // 供給が変わった → レベル更新して伝播
+          world.setBlock(x, y, z, fluidFlowId(type, wanted));
+          fluidQueue.add(key);
+          queueFluidNeighbors(x, y, z);
+          continue;
+        }
+        lv = b.fluidLevel;
+      }
+
+      // --- 下へ流れる (落下中は横に広がらない, 本家準拠) ---
+      if (fluidContact(x, y - 1, z, type)) continue;
+      const belowId = world.getBlock(x, y - 1, z);
+      if (fluidCanEnter(belowId, type, fluidMaxFlow(type))) {
+        world.setBlock(x, y - 1, z, fluidFlowId(type, fluidMaxFlow(type)));
         queueFluidCheck(x, y - 1, z);
         continue;
       }
-      // 地面に接地していれば, 最大距離まで四方 (十字) に広がる
-      if (level >= maxDist) continue;
-      for (const [dx, dz] of FLUID_DIRS4) {
+
+      // --- 横へ広がる: 水は近くの穴へ向かう方向を優先 (マグマは全方向) ---
+      if (lv <= 1) continue;
+      const dirs = type === "water" ? waterFlowDirs(x, y, z) : FLUID_DIRS4;
+      for (const [dx, dz] of dirs) {
         const nx = x + dx, nz = z + dz;
-        if (world.getBlock(nx, y, nz) === B.AIR) {
-          world.setBlock(nx, y, nz, id);
-          fluidLevel.set([nx, y, nz].join(","), level + 1);
+        if (fluidContact(nx, y, nz, type)) continue;
+        if (fluidCanEnter(world.getBlock(nx, y, nz), type, lv - 1)) {
+          world.setBlock(nx, y, nz, fluidFlowId(type, lv - 1));
           queueFluidCheck(nx, y, nz);
         }
       }
@@ -1478,7 +1580,7 @@
         const landY = Math.floor(f.pos[1] - 0.02) + 1;
         fallingBlocks.splice(i, 1);
         const cur = world.getBlock(cx, landY, cz);
-        if ((cur === B.AIR || cur === B.WATER) && world.setBlock(cx, landY, cz, f.id)) {
+        if ((cur === B.AIR || BLOCKS[cur].fluid) && world.setBlock(cx, landY, cz, f.id)) {
           sound.thud();
         } else if (gameMode === "survival") {
           items.spawn(f.id, cx, landY, cz); // 置けなければアイテム化
@@ -1850,8 +1952,8 @@
   // 溶岩に触れるとダメージ (水中と違って燃え続ける)
   let lavaBurnAccum = 0;
   function updateLavaDamage(dt) {
-    const inLava = world.getBlock(
-      Math.floor(player.pos[0]), Math.floor(player.pos[1] + 0.5), Math.floor(player.pos[2])) === B.LAVA_BLOCK;
+    const inLava = BLOCKS[world.getBlock(
+      Math.floor(player.pos[0]), Math.floor(player.pos[1] + 0.5), Math.floor(player.pos[2]))].fluid === "lava";
     if (!inLava) { lavaBurnAccum = 0; return; }
     lavaBurnAccum += dt;
     if (lavaBurnAccum >= 0.5) {
@@ -1960,7 +2062,7 @@
           Math.floor(eye[0] + fwd[0] * t),
           Math.floor(eye[1] + fwd[1] * t),
           Math.floor(eye[2] + fwd[2] * t));
-        if (id === B.WATER) { foundWater = true; break; }
+        if (BLOCKS[id].fluid === "water") { foundWater = true; break; }
         if (id !== B.AIR) break;
       }
       if (!foundWater) {
@@ -1982,6 +2084,8 @@
         const filledId = hit.id === B.WATER ? I.WATER_BUCKET : I.LAVA_BUCKET;
         if (!consumeItem(I.BUCKET)) return;
         world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR);
+        // 源を失った周囲の流れが引いていくように再計算を促す
+        queueFluidNeighbors(hit.pos[0], hit.pos[1], hit.pos[2]);
         addItem(filledId);
         sound.place();
         return;
@@ -1993,13 +2097,13 @@
       if (hit) {
         const [px, py, pz] = hit.prev;
         const cur = world.getBlock(px, py, pz);
-        if (cur === B.AIR || cur === B.WATER) {
+        if (cur === B.AIR || BLOCKS[cur].fluid) {
           if (!consumeItem(tool.id)) return;
           if (world.setBlock(px, py, pz, tool.fluid)) {
             addItem(I.BUCKET);
             sound.place();
             checkFalling(px, py, pz);
-            queueFluidCheck(px, py, pz); // 平地に注いだ場合, 十字状に広がっていく
+            queueFluidCheck(px, py, pz); // 注いだ源から低い方へ流れ出す
           } else if (gameMode === "survival") {
             addItem(tool.id); // 失敗したら返却
           }
@@ -2100,7 +2204,7 @@
     if (!hit) return;
     const [px, py, pz] = hit.prev;
     const cur = world.getBlock(px, py, pz);
-    if (cur !== B.AIR && cur !== B.WATER) return;
+    if (cur !== B.AIR && !BLOCKS[cur].fluid) return;
     const id = HOTBAR_BLOCKS[selectedSlot];
     if (!BLOCKS[id]) return; // 道具・素材は設置できない
     if (isSolid(id) && player.intersectsBlock(px, py, pz)) return;
@@ -2126,7 +2230,7 @@
       const [odx, , odz] = BED_DIR_OFFSET[dir];
       const fx = px + odx, fz = pz + odz;
       const footCur = world.getBlock(fx, py, fz);
-      if (footCur !== B.AIR && footCur !== B.WATER) {
+      if (footCur !== B.AIR && !BLOCKS[footCur].fluid) {
         showToast("ベッドを置くスペースが足りない");
         return;
       }
@@ -2142,6 +2246,7 @@
     if (world.setBlock(px, py, pz, placeId)) {
       sound.place();
       checkFalling(px, py, pz); // 空中に置いた砂は落ちる
+      queueFluidNeighbors(px, py, pz); // 流れを塞いだ場合, 下流が引いていく
       if (id === B.WITHER_SKULL) tryDetectWither(px, py, pz);
     } else if (gameMode === "survival") {
       addItem(id); // 失敗したら返却
@@ -2860,6 +2965,8 @@
     particles,
     buildShadowQuads,
     renderer,
+    queueFluidCheck,
+    queueFluidNeighbors,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

@@ -57,6 +57,45 @@ class Chunk {
   }
 }
 
+// 切妻屋根: 建物 (x0,z0)-(w x d) の上に, 短い方の軸を傾斜方向にして棟を通す。
+// stairBase は STAIR_ID_BASE + 素材インデックス*4 (0=north 1=east 2=south 3=west
+// が閉じた並び。低い段の開いている向きが「下り方向」になるようにする)。
+// maxRise で棟の高さを頭打ちにし, 幅が広い建物では平らな棟が続くようにする
+function buildGableRoof(set, x0, z0, w, d, y0, stairBase, wallMat, maxRise) {
+  const ridgeAxis = w >= d ? "x" : "z";
+  const span = ridgeAxis === "x" ? d : w;
+  const half = (span - 1) / 2;
+  for (let i = 0; i < span; i++) {
+    const distFromCenter = Math.abs(i - half);
+    const rise = Math.min(Math.round(half - distFromCenter), maxRise);
+    const y = y0 + rise;
+    const isRidge = rise >= maxRise;
+    const lowSideIsNear = i < half;
+    if (ridgeAxis === "x") {
+      const dir = lowSideIsNear ? 0 : 2;
+      for (let dx = 0; dx < w; dx++) set(x0 + dx, y, z0 + i, isRidge ? wallMat : stairBase + dir);
+    } else {
+      const dir = lowSideIsNear ? 3 : 1;
+      for (let dz = 0; dz < d; dz++) set(x0 + i, y, z0 + dz, isRidge ? wallMat : stairBase + dir);
+    }
+  }
+  // 妻壁 (棟の傾斜に合わせた三角の壁を両端に埋める)
+  for (let i = 0; i < span; i++) {
+    const distFromCenter = Math.abs(i - half);
+    const rise = Math.min(Math.round(half - distFromCenter), maxRise);
+    const roofY = y0 + rise;
+    for (let y = y0; y <= roofY; y++) {
+      if (ridgeAxis === "x") {
+        set(x0, y, z0 + i, wallMat);
+        set(x0 + w - 1, y, z0 + i, wallMat);
+      } else {
+        set(x0 + i, y, z0, wallMat);
+        set(x0 + i, y, z0 + d - 1, wallMat);
+      }
+    }
+  }
+}
+
 class World {
   constructor(seed) {
     this.seed = seed;
@@ -623,10 +662,11 @@ class World {
       // 平地にしか村はできない
       if (center.h > WATER_LEVEL + 1 && center.h < WATER_LEVEL + 20) {
         const buildings = [{ type: "well", x: cx - 1, z: cz - 1, w: 3, d: 3 }];
-        const n = 4 + Math.floor(hash2(gx, gz, this.seed ^ 0x3333) * 3);
+        // 本家より規模の大きい村: 家の軒数と広がりを拡張
+        const n = 7 + Math.floor(hash2(gx, gz, this.seed ^ 0x3333) * 5);
         for (let i = 0; i < n; i++) {
           const ang = (i / n) * Math.PI * 2 + hash2(gx, gz + i * 7, this.seed ^ 0x4444) * 0.8;
-          const dist = 9 + hash2(gx + i * 7, gz, this.seed ^ 0x5555) * 12;
+          const dist = 10 + hash2(gx + i * 7, gz, this.seed ^ 0x5555) * 26;
           const w = 5 + 2 * Math.floor(hash2(i, gx ^ gz, this.seed ^ 0x66) * 2);   // 5 or 7
           const d = 5 + 2 * Math.floor(hash2(i * 3, gx ^ gz, this.seed ^ 0x77) * 2);
           const bx = Math.round(cx + Math.cos(ang) * dist) - (w >> 1);
@@ -635,6 +675,37 @@ class World {
           if (bh <= WATER_LEVEL || bh > WATER_LEVEL + 20) continue;
           buildings.push({ type: "house", x: bx, z: bz, w, d, door: i % 4 });
         }
+
+        // 教会: 村の北側, 尖塔 (鐘楼) つき。ドアは南向き固定 (村の中心を向く)
+        const churchDist = 26 + hash2(gx, gz, this.seed ^ 0x7001) * 10;
+        const churchAng = -Math.PI / 2 + (hash2(gx, gz, this.seed ^ 0x7002) - 0.5) * 0.5;
+        const chW = 9, chD = 17;
+        const cbx = Math.round(cx + Math.cos(churchAng) * churchDist) - (chW >> 1);
+        const cbz = Math.round(cz + Math.sin(churchAng) * churchDist) - (chD >> 1);
+        const chH = this.columnInfo(cbx + (chW >> 1), cbz + (chD >> 1)).h;
+        if (chH > WATER_LEVEL && chH < WATER_LEVEL + 20)
+          buildings.push({ type: "church", x: cbx, z: cbz, w: chW, d: chD });
+
+        // 見張り塔: 村の南側, 螺旋階段で登れる。ドアは北向き固定 (村の中心を向く)
+        const towerDist = 28 + hash2(gx, gz, this.seed ^ 0x7003) * 10;
+        const towerAng = Math.PI / 2 + (hash2(gx, gz, this.seed ^ 0x7004) - 0.5) * 0.5;
+        const twW = 5, twD = 5;
+        const tbx = Math.round(cx + Math.cos(towerAng) * towerDist) - (twW >> 1);
+        const tbz = Math.round(cz + Math.sin(towerAng) * towerDist) - (twD >> 1);
+        const twH = this.columnInfo(tbx + (twW >> 1), tbz + (twD >> 1)).h;
+        if (twH > WATER_LEVEL && twH < WATER_LEVEL + 20)
+          buildings.push({ type: "tower", x: tbx, z: tbz, w: twW, d: twD });
+
+        // 神殿: 村の東側, 大理石の柱廊 (壁のない開放的な西洋神殿風)
+        const templeDist = 24 + hash2(gx, gz, this.seed ^ 0x7005) * 12;
+        const templeAng = (hash2(gx, gz, this.seed ^ 0x7006) - 0.5) * 0.5;
+        const tpW = 11, tpD = 9;
+        const tpx = Math.round(cx + Math.cos(templeAng) * templeDist) - (tpW >> 1);
+        const tpz = Math.round(cz + Math.sin(templeAng) * templeDist) - (tpD >> 1);
+        const tpH = this.columnInfo(tpx + (tpW >> 1), tpz + (tpD >> 1)).h;
+        if (tpH > WATER_LEVEL && tpH < WATER_LEVEL + 20)
+          buildings.push({ type: "temple", x: tpx, z: tpz, w: tpW, d: tpD });
+
         village = { cx, cz, buildings };
       }
     }
@@ -645,11 +716,11 @@ class World {
   stampVillages(chunk) {
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
-    // 建物は村の中心から最大 ~30 ブロック → 隣接グリッドセルも確認
-    const g0x = Math.floor((ox - 48) / VILLAGE_GRID);
-    const g1x = Math.floor((ox + 64) / VILLAGE_GRID);
-    const g0z = Math.floor((oz - 48) / VILLAGE_GRID);
-    const g1z = Math.floor((oz + 64) / VILLAGE_GRID);
+    // 建物は村の中心から最大 ~40 ブロック (教会/塔/神殿を含め拡張) → 隣接グリッドセルも確認
+    const g0x = Math.floor((ox - 80) / VILLAGE_GRID);
+    const g1x = Math.floor((ox + 96) / VILLAGE_GRID);
+    const g0z = Math.floor((oz - 80) / VILLAGE_GRID);
+    const g1z = Math.floor((oz + 96) / VILLAGE_GRID);
     for (let gz = g0z; gz <= g1z; gz++) {
       for (let gx = g0x; gx <= g1x; gx++) {
         const v = this.villageInCell(gx, gz);
@@ -690,55 +761,257 @@ class World {
       return;
     }
 
-    // 家: 丸石基礎 + 木材の壁 + 原木の柱 + ハーフブロックの屋根
+    if (b.type === "house") {
+      // 洋風の家: 丸石基礎 + 木材の壁 (原木の角柱 + 中段の原木の梁で半木造風) +
+      // 切妻屋根 (石レンガの階段) + 本家同様の2マスドア + 窓ガラス + 煙突
+      const floorY = baseY;
+      const topY = floorY + 3;   // 壁の最上段 (この上から屋根)
+      const midX = b.x + (b.w >> 1);
+      const midZ = b.z + (b.d >> 1);
+      const doorDirMap = [0, 2, 3, 1]; // b.door (0=北 1=南 2=西 3=東の壁) → ドアの向き
+
+      for (let dz = 0; dz < b.d; dz++) {
+        for (let dx = 0; dx < b.w; dx++) {
+          const wx = b.x + dx, wz = b.z + dz;
+          const edge = dx === 0 || dz === 0 || dx === b.w - 1 || dz === b.d - 1;
+          const corner = (dx === 0 || dx === b.w - 1) && (dz === 0 || dz === b.d - 1);
+
+          // 床と基礎 (地形の低いところは丸石で埋める)
+          const gh = this.columnInfo(wx, wz).h;
+          for (let y = Math.min(gh, floorY); y < floorY; y++) {
+            set(wx, y, wz, hash3(wx, y, wz, seed ^ 0xa0a0) < 0.25 ? B.MOSSY_COBBLE : B.COBBLE);
+          }
+          set(wx, floorY, wz, B.PLANK);
+
+          // 内部と上空をくり抜く (丘や木を除去)
+          for (let y = floorY + 1; y <= topY + b.w + 2; y++) set(wx, y, wz, B.AIR);
+
+          // 壁 (角は原木の柱, 中段 (floorY+2) は原木の梁で半木造 (Tudor) 風に)
+          if (edge) {
+            set(wx, floorY + 1, wz, corner ? B.LOG : B.PLANK);
+            set(wx, floorY + 2, wz, corner ? B.LOG : B.LOG);
+            set(wx, floorY + 3, wz, corner ? B.LOG : B.PLANK);
+          }
+        }
+      }
+
+      // 切妻屋根 (石レンガの階段) + 妻壁
+      buildGableRoof(set, b.x, b.z, b.w, b.d, topY + 1,
+        STAIR_ID_BASE + 3 * 4, B.PLANK, 3);
+
+      // ドア (向きに応じた辺の中央, 本家同様の下段+上段の2マス構造)
+      let doorX = midX, doorZ = b.z;
+      if (b.door === 1) doorZ = b.z + b.d - 1;
+      else if (b.door === 2) { doorX = b.x; doorZ = midZ; }
+      else if (b.door === 3) { doorX = b.x + b.w - 1; doorZ = midZ; }
+      const doorDir = doorDirMap[b.door];
+      set(doorX, floorY + 1, doorZ, DOOR_ID_BASE + doorDir);
+      set(doorX, floorY + 2, doorZ, DOOR_TOP_ID_BASE + doorDir);
+
+      // 窓 (ドア以外の辺の中央に窓ガラス)
+      const sides = [[midX, b.z], [midX, b.z + b.d - 1], [b.x, midZ], [b.x + b.w - 1, midZ]];
+      sides.forEach(([wx, wz], i) => {
+        if (i !== b.door) set(wx, floorY + 2, wz, B.GLASS_PANE);
+      });
+
+      // 煙突 (隅の1つに, 屋根を突き抜けて立つ丸石の柱)
+      const chimX = b.x + 1, chimZ = b.z + 1;
+      for (let y = floorY + 1; y <= topY + 5; y++) set(chimX, y, chimZ, B.COBBLE);
+
+      // 室内の松明
+      set(midX, floorY + 1, midZ, B.TORCH);
+      return;
+    }
+
+    if (b.type === "church") {
+      this.stampChurch(chunk, ox, oz, b, set, baseY);
+      return;
+    }
+
+    if (b.type === "tower") {
+      this.stampTower(chunk, ox, oz, b, set, baseY);
+      return;
+    }
+
+    if (b.type === "temple") {
+      this.stampVillageTemple(chunk, ox, oz, b, set, baseY);
+      return;
+    }
+  }
+
+  // ---------------- 教会 ----------------
+  // 石レンガの身廊 + 切妻屋根 + 正面の鐘塔 (十字架つき尖塔) + アーチ窓
+  stampChurch(chunk, ox, oz, b, set, baseY) {
     const floorY = baseY;
-    const topY = floorY + 4;
+    const topY = floorY + 6;
     const midX = b.x + (b.w >> 1);
-    const midZ = b.z + (b.d >> 1);
 
     for (let dz = 0; dz < b.d; dz++) {
       for (let dx = 0; dx < b.w; dx++) {
         const wx = b.x + dx, wz = b.z + dz;
         const edge = dx === 0 || dz === 0 || dx === b.w - 1 || dz === b.d - 1;
-        const corner = (dx === 0 || dx === b.w - 1) && (dz === 0 || dz === b.d - 1);
-
-        // 床と基礎 (地形の低いところは丸石で埋める)
         const gh = this.columnInfo(wx, wz).h;
-        for (let y = Math.min(gh, floorY); y < floorY; y++) {
-          set(wx, y, wz, hash3(wx, y, wz, seed ^ 0xa0a0) < 0.25 ? B.MOSSY_COBBLE : B.COBBLE);
-        }
-        set(wx, floorY, wz, B.PLANK);
-
-        // 内部と上空をくり抜く (丘や木を除去)
-        for (let y = floorY + 1; y <= topY + 2; y++) set(wx, y, wz, B.AIR);
-
-        // 壁
-        if (edge) {
-          for (let y = floorY + 1; y <= floorY + 3; y++) {
-            set(wx, y, wz, corner ? B.LOG : B.PLANK);
-          }
-        }
-        // 屋根
-        set(wx, topY, wz, edge ? B.PLANK : B.PLANK_SLAB);
+        for (let y = Math.min(gh, floorY); y < floorY; y++) set(wx, y, wz, B.STONE_BRICK);
+        set(wx, floorY, wz, B.SMOOTH_STONE);
+        for (let y = floorY + 1; y <= topY + 12; y++) set(wx, y, wz, B.AIR);
+        if (edge) for (let y = floorY + 1; y <= topY; y++) set(wx, y, wz, B.STONE_BRICK);
       }
     }
 
-    // ドア (向きに応じた辺の中央, 2 マス分の開口)
-    let doorX = midX, doorZ = b.z;
-    if (b.door === 1) doorZ = b.z + b.d - 1;
-    else if (b.door === 2) { doorX = b.x; doorZ = midZ; }
-    else if (b.door === 3) { doorX = b.x + b.w - 1; doorZ = midZ; }
-    set(doorX, floorY + 1, doorZ, B.AIR);
-    set(doorX, floorY + 2, doorZ, B.AIR);
+    // 側面のアーチ窓 (2マスの縦長窓ガラス)
+    for (let dz = 2; dz < b.d - 2; dz += 3) {
+      set(b.x, floorY + 2, b.z + dz, B.GLASS_PANE);
+      set(b.x, floorY + 3, b.z + dz, B.GLASS_PANE);
+      set(b.x + b.w - 1, floorY + 2, b.z + dz, B.GLASS_PANE);
+      set(b.x + b.w - 1, floorY + 3, b.z + dz, B.GLASS_PANE);
+    }
 
-    // 窓 (ドア以外の辺の中央にガラス)
-    const sides = [[midX, b.z], [midX, b.z + b.d - 1], [b.x, midZ], [b.x + b.w - 1, midZ]];
-    sides.forEach(([wx, wz], i) => {
-      if (i !== b.door) set(wx, floorY + 2, wz, B.GLASS);
-    });
+    // 切妻屋根 (石レンガの階段) + 妻壁
+    buildGableRoof(set, b.x, b.z, b.w, b.d, topY + 1, STAIR_ID_BASE + 3 * 4, B.STONE_BRICK, 5);
 
-    // 室内の松明
-    set(midX, floorY + 1, midZ, B.TORCH);
+    // 正面 (南側) のドア: 本家同様の下段+上段の2マス構造, 南向き固定
+    const doorZ = b.z + b.d - 1;
+    set(midX, floorY + 1, doorZ, DOOR_ID_BASE + 2);
+    set(midX, floorY + 2, doorZ, DOOR_TOP_ID_BASE + 2);
+
+    // 鐘塔: 正面中央に立つ, 屋根より高い石レンガの塔。四面に鐘楼の開口部
+    const twX0 = midX - 1, twZ0 = b.z + b.d - 3;
+    const twBase = topY + 1, twTop = topY + 9;
+    for (let y = twBase; y <= twTop; y++) {
+      for (let dz = 0; dz < 3; dz++) {
+        for (let dx = 0; dx < 3; dx++) {
+          const wx = twX0 + dx, wz = twZ0 + dz;
+          const edge = dx === 0 || dx === 2 || dz === 0 || dz === 2;
+          if (edge) set(wx, y, wz, B.STONE_BRICK);
+          else set(wx, y, wz, B.AIR);
+        }
+      }
+    }
+    // 鐘楼の開口部 (四面の中央を2段くり抜く)
+    const belfryY0 = twBase + 3;
+    set(twX0 + 1, belfryY0, twZ0, B.AIR); set(twX0 + 1, belfryY0 + 1, twZ0, B.AIR);
+    set(twX0 + 1, belfryY0, twZ0 + 2, B.AIR); set(twX0 + 1, belfryY0 + 1, twZ0 + 2, B.AIR);
+    set(twX0, belfryY0, twZ0 + 1, B.AIR); set(twX0, belfryY0 + 1, twZ0 + 1, B.AIR);
+    set(twX0 + 2, belfryY0, twZ0 + 1, B.AIR); set(twX0 + 2, belfryY0 + 1, twZ0 + 1, B.AIR);
+
+    // 尖塔の先端 + 十字架
+    const midZTower = twZ0 + 1;
+    for (let dz = 0; dz < 3; dz++) for (let dx = 0; dx < 3; dx++) set(twX0 + dx, twTop + 1, twZ0 + dz, B.STONE_BRICK);
+    set(midX, twTop + 2, midZTower, B.STONE_BRICK);
+    set(midX, twTop + 3, midZTower, B.FENCE_PLANK);
+    set(midX, twTop + 4, midZTower, B.FENCE_PLANK);
+    set(midX - 1, twTop + 4, midZTower, B.FENCE_PLANK);
+    set(midX + 1, twTop + 4, midZTower, B.FENCE_PLANK);
+
+    // 内陣の祭壇 + 松明
+    const midZ = b.z + (b.d >> 1);
+    set(midX, floorY + 1, b.z + 1, B.QUARTZ);
+    set(midX, floorY + 1, b.z + 2, B.TORCH);
+    set(b.x + 2, floorY + 2, midZ, B.TORCH);
+    set(b.x + b.w - 3, floorY + 2, midZ, B.TORCH);
+  }
+
+  // ---------------- 見張り塔 ----------------
+  // 石レンガの塔。内部は螺旋階段で最上階 (胸壁つき) まで登れる
+  stampTower(chunk, ox, oz, b, set, baseY) {
+    const floorY = baseY;
+    const topY = floorY + 20;
+    const midX = b.x + (b.w >> 1), midZ = b.z + (b.d >> 1);
+
+    for (let dz = 0; dz < b.d; dz++) {
+      for (let dx = 0; dx < b.w; dx++) {
+        const wx = b.x + dx, wz = b.z + dz;
+        const edge = dx === 0 || dz === 0 || dx === b.w - 1 || dz === b.d - 1;
+        const gh = this.columnInfo(wx, wz).h;
+        for (let y = Math.min(gh, floorY); y < floorY; y++) set(wx, y, wz, B.COBBLE);
+        set(wx, floorY, wz, B.STONE_BRICK);
+        for (let y = floorY + 1; y < topY; y++) set(wx, y, wz, edge ? B.STONE_BRICK : B.AIR);
+        // 窓 (四面それぞれ中央に小窓を並べる)
+        if (edge) {
+          for (let y = floorY + 3; y < topY - 1; y += 4) {
+            const onWindowFace =
+              (dz === 0 && dx === midX - b.x) || (dz === b.d - 1 && dx === midX - b.x) ||
+              (dx === 0 && dz === midZ - b.z) || (dx === b.w - 1 && dz === midZ - b.z);
+            if (onWindowFace) set(wx, y, wz, B.GLASS_PANE);
+          }
+        }
+      }
+    }
+
+    // ドア: 北向き固定 (村の中心を向く)
+    set(midX, floorY + 1, b.z, DOOR_ID_BASE + 0);
+    set(midX, floorY + 2, b.z, DOOR_TOP_ID_BASE + 0);
+
+    // 螺旋階段 (内側 3x3 の壁沿いを1周8マスで, 最上階近くまで登る。
+    // 中央 (1,1) は吹き抜けのまま開けておく)
+    const ring = [[1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1], [0, 0]];
+    const steps = topY - floorY - 1;
+    for (let h = 0; h < steps; h++) {
+      const [rdx, rdz] = ring[h % ring.length];
+      const dir = rdz === 0 ? 0 : rdx === 2 ? 1 : rdz === 2 ? 2 : 3;
+      set(b.x + 1 + rdx, floorY + 1 + h, b.z + 1 + rdz, STAIR_ID_BASE + 1 * 4 + dir);
+    }
+
+    // 最上階の床 + 胸壁 (交互に高い丸石の凹凸)
+    for (let dz = 0; dz < b.d; dz++) {
+      for (let dx = 0; dx < b.w; dx++) {
+        set(b.x + dx, topY, b.z + dz, B.STONE_BRICK);
+      }
+    }
+    for (let dz = 0; dz < b.d; dz++) {
+      for (let dx = 0; dx < b.w; dx++) {
+        const edge = dx === 0 || dz === 0 || dx === b.w - 1 || dz === b.d - 1;
+        if (edge && (dx + dz) % 2 === 0) set(b.x + dx, topY + 1, b.z + dz, B.COBBLE);
+      }
+    }
+    set(midX, topY + 1, midZ, B.TORCH);
+  }
+
+  // ---------------- 神殿 (村用) ----------------
+  // 壁のない大理石の柱廊 (西洋の神殿風): 高台 + 柱 + 平らな屋根 + 中央の祭壇
+  stampVillageTemple(chunk, ox, oz, b, set, baseY) {
+    const floorY = baseY + 1; // 数段の階段で一段高くする
+    const topY = floorY + 5;
+    const midX = b.x + (b.w >> 1), midZ = b.z + (b.d >> 1);
+
+    for (let dz = -1; dz < b.d + 1; dz++) {
+      for (let dx = -1; dx < b.w + 1; dx++) {
+        const wx = b.x + dx, wz = b.z + dz;
+        const inside = dx >= 0 && dx < b.w && dz >= 0 && dz < b.d;
+        const gh = this.columnInfo(wx, wz).h;
+        for (let y = Math.min(gh, floorY - 1); y < floorY; y++) set(wx, y, wz, B.SANDSTONE);
+        if (inside) {
+          set(wx, floorY, wz, B.MARBLE);
+          for (let y = floorY + 1; y <= topY + 2; y++) set(wx, y, wz, B.AIR);
+        } else {
+          set(wx, floorY - 1, wz, B.MARBLE); // 高台の縁
+        }
+      }
+    }
+
+    // 柱 (外周の四隅 + 各辺の中間に配置)
+    const colXs = [0, Math.floor((b.w - 1) / 2), b.w - 1];
+    const colZs = [0, Math.floor((b.d - 1) / 2), b.d - 1];
+    const cols = new Set();
+    for (const dx of colXs) for (const dz of [0, b.d - 1]) cols.add(dx + "," + dz);
+    for (const dz of colZs) for (const dx of [0, b.w - 1]) cols.add(dx + "," + dz);
+    for (const key of cols) {
+      const [dx, dz] = key.split(",").map(Number);
+      for (let y = floorY + 1; y <= topY; y++) set(b.x + dx, y, b.z + dz, B.PILLAR);
+    }
+
+    // 平らな屋根 (大理石)
+    for (let dz = -1; dz < b.d + 1; dz++) {
+      for (let dx = -1; dx < b.w + 1; dx++) {
+        set(b.x + dx, topY + 1, b.z + dz, B.MARBLE);
+      }
+    }
+
+    // 中央の祭壇 (石英 + 金塊 + 松明)
+    set(midX, floorY + 1, midZ, B.QUARTZ);
+    set(midX, floorY + 2, midZ, B.GOLD_BLOCK);
+    set(midX - 1, floorY + 1, midZ, B.TORCH);
+    set(midX + 1, floorY + 1, midZ, B.TORCH);
   }
 
   // ---------------- 砂漠の神殿 ----------------

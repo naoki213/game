@@ -103,9 +103,11 @@ const B = {
   // ドロップで T 字に組むと召喚される) 関連
   WITHER_SKULL: 186,
   NETHER_STAR: 187,
-  // 216-224 はドア (8方向x開閉, DOOR_ID_BASE) で使用済みのため 225 以降を使う
+  // 216-224 はドア (8方向x開閉, DOOR_ID_BASE), 235-242 はベッド (BED_ID_BASE)
+  // で使用済みのため, それ以外の空きを使う
   FENCE_PLANK: 225,
   CRAFTING_TABLE: 226,
+  GLASS_PANE: 243,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -910,6 +912,39 @@ BLOCKS[B.FENCE_PLANK].fence = true;
 defBlock(B.CRAFTING_TABLE, "crafting_table", "作業台",
   [TILE.CRAFTING_TABLE_TOP, TILE.CRAFTING_TABLE_SIDE, TILE.PLANK], { hardness: 1.2 });
 
+// --- 窓ガラス (ガラス板): フェンスと同様に中央の薄い支柱 + 隣接する窓ガラスへ
+// 自動でつながる全高のガラス板 (mesher.js) ---
+defBlock(B.GLASS_PANE, "glass_pane", "窓ガラス", [TILE.GLASS, TILE.GLASS, TILE.GLASS],
+  { opaque: false, hardness: 0.35, drops: null });
+BLOCKS[B.GLASS_PANE].pane = true;
+
+// --- 流れる水/マグマ (本家準拠の流体シミュレーション: main.js の updateFluidSpread) ---
+// 水源 (B.WATER, レベル8) / マグマ源 (B.LAVA_BLOCK, レベル4) から, 供給元より
+// 1 低いレベルを持つ「流れ」ブロックとして広がる。レベルはブロック ID に
+// エンコードされ, 低いほど水面が低く描画される (mesher.js)。供給が絶たれた
+// 流れは main.js の再計算で段階的に引いて消える
+const WATER_FLOW_BASE = 244;   // 244-250: 水の流れ レベル 1-7 (id = BASE + level - 1)
+const LAVA_FLOW_BASE = 251;    // 251-253: マグマの流れ レベル 1-3
+for (let lv = 1; lv <= 7; lv++) {
+  const id = WATER_FLOW_BASE + lv - 1;
+  defBlock(id, "water_flow_" + lv, "水 (流れ)", [TILE.WATER, TILE.WATER, TILE.WATER],
+    { opaque: false, solid: false, hardness: Infinity, drops: null });
+  BLOCKS[id].fluid = "water"; BLOCKS[id].fluidLevel = lv;
+}
+for (let lv = 1; lv <= 3; lv++) {
+  const id = LAVA_FLOW_BASE + lv - 1;
+  defBlock(id, "lava_flow_" + lv, "溶岩 (流れ)",
+    [TILE.LAVA_BLOCK, TILE.LAVA_BLOCK, TILE.LAVA_BLOCK],
+    { opaque: false, solid: false, hardness: Infinity, drops: null, emissive: true });
+  BLOCKS[id].fluid = "lava"; BLOCKS[id].fluidLevel = lv;
+}
+BLOCKS[B.WATER].fluid = "water";
+BLOCKS[B.WATER].fluidLevel = 8;
+BLOCKS[B.WATER].fluidSource = true;
+BLOCKS[B.LAVA_BLOCK].fluid = "lava";
+BLOCKS[B.LAVA_BLOCK].fluidLevel = 4;
+BLOCKS[B.LAVA_BLOCK].fluidSource = true;
+
 // 道具の効くブロック分類
 [B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.PLANK, B.BIRCH_PLANK, B.DARK_PLANK,
  B.PLANK_SLAB, B.BOOKSHELF, B.CHEST, B.BED, B.PUMPKIN, B.JACK_O_LANTERN,
@@ -943,8 +978,10 @@ function isSolid(id) { return BLOCKS[id].solid; }
 // 高速参照用 LUT (ライト計算のホットループで使う)
 const OPAQUE_LUT = new Uint8Array(256);
 const LIGHT_LUT = new Uint8Array(256);   // 発光ブロックの光量 (0..15)
+const WATER_LUT = new Uint8Array(256);   // 水 (源+流れ)。水中の光の減衰に使う
 for (const b of BLOCKS) {
   if (!b) continue;
   OPAQUE_LUT[b.id] = b.opaque ? 1 : 0;
   if (b.emissive) LIGHT_LUT[b.id] = b.id === B.TORCH ? 14 : 15;
+  if (b.fluid === "water") WATER_LUT[b.id] = 1;
 }

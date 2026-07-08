@@ -545,8 +545,8 @@ class Mob {
 
     // --- エンダーマンの瞬間移動 (徘徊中もまれに, 水中では必ず) ---
     if (this.def.teleporter) {
-      const inWater = world.getBlock(Math.floor(this.pos[0]),
-        Math.floor(this.pos[1] + 0.3), Math.floor(this.pos[2])) === B.WATER;
+      const inWater = BLOCKS[world.getBlock(Math.floor(this.pos[0]),
+        Math.floor(this.pos[1] + 0.3), Math.floor(this.pos[2]))].fluid === "water";
       this.teleportTimer -= dt;
       if (inWater || this.teleportTimer <= 0) {
         this.teleportBlink(world, this.angered ? 10 : 6);
@@ -680,7 +680,7 @@ class Mob {
       // 水中では浮く
       const bx = Math.floor(this.pos[0]);
       const bz = Math.floor(this.pos[2]);
-      if (world.getBlock(bx, Math.floor(this.pos[1] + 0.3), bz) === B.WATER) {
+      if (BLOCKS[world.getBlock(bx, Math.floor(this.pos[1] + 0.3), bz)].fluid === "water") {
         this.vel[1] = Math.max(this.vel[1], 1.5);
       }
     }
@@ -989,7 +989,7 @@ class MobManager {
       if (h - 12 > 4) {
         const cy = 4 + Math.floor(Math.random() * (h - 12 - 4));
         if (this.world.getBlock(x, cy, z) === B.AIR && this.world.getBlock(x, cy + 1, z) === B.AIR &&
-            this.world.getBlock(x, cy - 1, z) !== B.AIR && this.world.getBlock(x, cy - 1, z) !== B.LAVA_BLOCK) {
+            this.world.getBlock(x, cy - 1, z) !== B.AIR && BLOCKS[this.world.getBlock(x, cy - 1, z)].fluid !== "lava") {
           const r = Math.random();
           const type = r < 0.4 ? "zombie" : r < 0.7 ? "skeleton" : r < 0.85 ? "spider" : "creeper";
           this.mobs.push(new Mob(type, x + 0.5, cy + 1.01, z + 0.5));
@@ -1026,7 +1026,7 @@ class MobManager {
       const village = this.world.villageInCell(vgx, vgz);
       if (village) {
         const vdx = x - village.cx, vdz = z - village.cz;
-        if (vdx * vdx + vdz * vdz < 30 * 30 &&
+        if (vdx * vdx + vdz * vdz < 45 * 45 &&
             this.countType("villager") < 6 && Math.random() < 0.25) {
           this.mobs.push(new Mob("villager", x + 0.5, y + 1.01, z + 0.5));
           return;
@@ -1195,7 +1195,7 @@ class ItemManager {
       it.vel[1] -= 16 * dt;
       it.vel[1] = Math.max(it.vel[1], -20);
       // 水に浮く
-      if (world.getBlock(Math.floor(it.pos[0]), Math.floor(it.pos[1]), Math.floor(it.pos[2])) === B.WATER) {
+      if (BLOCKS[world.getBlock(Math.floor(it.pos[0]), Math.floor(it.pos[1]), Math.floor(it.pos[2]))].fluid === "water") {
         it.vel[1] = Math.min(it.vel[1] + 40 * dt, 1.2);
         it.vel[0] *= 0.95; it.vel[2] *= 0.95;
       }
