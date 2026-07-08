@@ -100,8 +100,8 @@ class Player {
     // 体の中心と目が水中か
     const bx = Math.floor(this.pos[0]);
     const bz = Math.floor(this.pos[2]);
-    this.inWater = world.getBlock(bx, Math.floor(this.pos[1] + 0.4), bz) === B.WATER;
-    this.eyeInWater = world.getBlock(bx, Math.floor(this.pos[1] + EYE_HEIGHT), bz) === B.WATER;
+    this.inWater = BLOCKS[world.getBlock(bx, Math.floor(this.pos[1] + 0.4), bz)].fluid === "water";
+    this.eyeInWater = BLOCKS[world.getBlock(bx, Math.floor(this.pos[1] + EYE_HEIGHT), bz)].fluid === "water";
 
     // --- 水平方向の希望速度 (ヨー基準) ---
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
@@ -335,7 +335,7 @@ class Player {
 
     while (t <= REACH) {
       const id = world.getBlock(x, y, z);
-      if (id !== B.AIR && id !== B.WATER) {
+      if (id !== B.AIR && BLOCKS[id].fluid !== "water") {
         return { pos: [x, y, z], prev: [px, py, pz], id, t };
       }
       px = x; py = y; pz = z;
