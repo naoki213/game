@@ -1026,7 +1026,7 @@ class MobManager {
       const village = this.world.villageInCell(vgx, vgz);
       if (village) {
         const vdx = x - village.cx, vdz = z - village.cz;
-        if (vdx * vdx + vdz * vdz < 30 * 30 &&
+        if (vdx * vdx + vdz * vdz < 45 * 45 &&
             this.countType("villager") < 6 && Math.random() < 0.25) {
           this.mobs.push(new Mob("villager", x + 0.5, y + 1.01, z + 0.5));
           return;

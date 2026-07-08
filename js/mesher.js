@@ -86,6 +86,10 @@ const FENCE_POST = { x0: 0.375, x1: 0.625, y0: 0, y1: 1, z0: 0.375, z1: 0.625 };
 const FENCE_ARM_DIRS = [[1, 0, "x"], [-1, 0, "x"], [0, 1, "z"], [0, -1, "z"]];
 const FENCE_RAIL_Y = [[0.75, 0.9375], [0.375, 0.5]];
 
+// 窓ガラスの形状データ: フェンスと同じ考え方だが薄い板が全高 (1段) でつながる
+const PANE_POST = { x0: 0.4375, x1: 0.5625, y0: 0, y1: 1, z0: 0.4375, z1: 0.5625 };
+const PANE_ARM_DIRS = FENCE_ARM_DIRS;
+
 // ベッドの形状: 高さの低い箱 (本家同様, 頭側/足側の2マス1組)。
 // dir (0=north 1=east 2=south 3=west) は頭から足に向かう方向
 const BED_HEIGHT = 0.5625;
@@ -431,6 +435,28 @@ function buildChunkMesh(world, chunk) {
                   : { x0: 0.4375, x1: 0.5625, y0: ry0, y1: ry1, z0: 0, z1: 0.375 });
               pushLitBox(opaque, wx, y, wz, box, tile, sky, blk);
             }
+          }
+          continue;
+        }
+
+        // --- 窓ガラス: 中央の支柱 + 隣接する窓ガラスへつながる全高の板 ---
+        if (block.pane) {
+          const wx = ox + lx, wz = oz + lz;
+          const sky = skyAt(lx, y, lz) / 15;
+          const blk = blkAt(lx, y, lz) / 15;
+          const tile = block.tiles[1];
+          pushLitBox(opaque, wx, y, wz, PANE_POST, tile, sky, blk);
+          for (const [dx, dz, axis] of PANE_ARM_DIRS) {
+            const nb = BLOCKS[getNb(lx + dx, y, lz + dz)];
+            if (!nb || !nb.pane) continue;
+            const box = axis === "x"
+              ? (dx > 0
+                ? { x0: 0.5625, x1: 1, y0: 0, y1: 1, z0: 0.4375, z1: 0.5625 }
+                : { x0: 0, x1: 0.4375, y0: 0, y1: 1, z0: 0.4375, z1: 0.5625 })
+              : (dz > 0
+                ? { x0: 0.4375, x1: 0.5625, y0: 0, y1: 1, z0: 0.5625, z1: 1 }
+                : { x0: 0.4375, x1: 0.5625, y0: 0, y1: 1, z0: 0, z1: 0.4375 });
+            pushLitBox(opaque, wx, y, wz, box, tile, sky, blk);
           }
           continue;
         }

@@ -471,6 +471,7 @@
     { out: B.CRAFTING_TABLE, outN: 1, in: [[B.PLANK, 4]] },
     { out: DOOR_ID_BASE, outN: 1, in: [[B.PLANK, 3]] },
     { out: B.FENCE_PLANK, outN: 2, in: [[B.PLANK, 2]] },
+    { out: B.GLASS_PANE, outN: 4, in: [[B.GLASS, 2]] },
   ];
 
   // 色付き羊毛: 羊毛 1 → 各色 1

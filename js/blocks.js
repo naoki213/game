@@ -103,9 +103,11 @@ const B = {
   // ドロップで T 字に組むと召喚される) 関連
   WITHER_SKULL: 186,
   NETHER_STAR: 187,
-  // 216-224 はドア (8方向x開閉, DOOR_ID_BASE) で使用済みのため 225 以降を使う
+  // 216-224 はドア (8方向x開閉, DOOR_ID_BASE), 235-242 はベッド (BED_ID_BASE)
+  // で使用済みのため, それ以外の空きを使う
   FENCE_PLANK: 225,
   CRAFTING_TABLE: 226,
+  GLASS_PANE: 243,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -909,6 +911,12 @@ BLOCKS[B.FENCE_PLANK].fence = true;
 // クラフトできない (main.js の nearCraftingTable / RECIPES の needsTable 参照) ---
 defBlock(B.CRAFTING_TABLE, "crafting_table", "作業台",
   [TILE.CRAFTING_TABLE_TOP, TILE.CRAFTING_TABLE_SIDE, TILE.PLANK], { hardness: 1.2 });
+
+// --- 窓ガラス (ガラス板): フェンスと同様に中央の薄い支柱 + 隣接する窓ガラスへ
+// 自動でつながる全高のガラス板 (mesher.js) ---
+defBlock(B.GLASS_PANE, "glass_pane", "窓ガラス", [TILE.GLASS, TILE.GLASS, TILE.GLASS],
+  { opaque: false, hardness: 0.35, drops: null });
+BLOCKS[B.GLASS_PANE].pane = true;
 
 // 道具の効くブロック分類
 [B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.PLANK, B.BIRCH_PLANK, B.DARK_PLANK,
