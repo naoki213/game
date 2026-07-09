@@ -542,6 +542,7 @@ class World {
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
     const seed = this.seed;
+    const caveCol = new Uint8Array(CHUNK_H);
 
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
@@ -549,15 +550,59 @@ class World {
         chunk.set(lx, 0, lz, B.BEDROCK);
         chunk.set(lx, CHUNK_H - 1, lz, B.BEDROCK);
         for (let y = 1; y <= CHUNK_H - 2; y++) {
-          if (this.isNetherCave(wx, y, wz)) {
+          caveCol[y] = this.isNetherCave(wx, y, wz) ? 1 : 0;
+        }
+        // ソウルサンドの谷 (大きなノイズで低地にまとまって分布)
+        const soul = this.noiseBiome.fbm2(wx * 0.02 + 900, wz * 0.02 - 900, 2);
+
+        for (let y = 1; y <= CHUNK_H - 2; y++) {
+          if (caveCol[y]) {
             chunk.set(lx, y, lz, y < NETHER.lavaY ? B.LAVA_BLOCK : B.AIR);
             continue;
           }
+          const floor = y < CHUNK_H - 2 && caveCol[y + 1];       // 上が空洞 = 床の表層
+          const nearFloor = floor ||
+            (y < CHUNK_H - 3 && caveCol[y + 2] && !caveCol[y + 1]); // 表層の1つ下まで
+          const ceiling = y > 1 && caveCol[y - 1];               // 下が空洞 = 天井
           const r = hash3(wx, y, wz, seed ^ 0x4e37e2);
+
           let id = B.NETHERRACK;
-          if (r < 0.012) id = B.NETHER_QUARTZ_ORE;
-          else if (r < 0.03) id = B.SOUL_SAND;
+          if (nearFloor && soul > 0.22 && y <= NETHER.lavaY + 14) {
+            id = B.SOUL_SAND;      // ソウルサンドの谷 (深さ2の表層)
+          } else if (floor && y <= NETHER.lavaY + 3 && hash2(wx, wz, seed ^ 0x77aa) < 0.35) {
+            id = B.MAGMA;          // 溶岩の海の岸辺・海底にマグマブロック
+          } else if (floor && r < 0.05) {
+            id = B.MAGMA;          // 床のあちこちに散らばるマグマブロック
+          } else if (r < 0.012) {
+            id = B.NETHER_QUARTZ_ORE;
+          } else if (!floor && !ceiling && r < 0.014) {
+            id = B.LAVA_BLOCK;     // 壁の中の隠れ溶岩だまり (掘り当てると噴き出す)
+          }
           chunk.set(lx, y, lz, id);
+
+          // 天井から垂れ下がるグロウストーンの塊 (本家風のシャンデリア)
+          if (ceiling && y > NETHER.lavaY + 10) {
+            const cl = hash2(wx >> 3, wz >> 3, seed ^ 0x91ee);   // 8x8 のクラスタ単位
+            if (cl < 0.22 && hash2(wx, wz, seed ^ 0x3d71) < 0.4) {
+              chunk.set(lx, y - 1, lz, B.GLOWSTONE);
+              if (caveCol[y - 2] && hash2(wx, wz, seed ^ 0x5e2f) < 0.35) {
+                chunk.set(lx, y - 2, lz, B.GLOWSTONE);
+              }
+            }
+          }
+        }
+
+        // 溶岩滝: まれに高い天井の溶岩源から溶岩が流れ落ちる
+        if (hash2(wx, wz, seed ^ 0x66b1) < 0.0025) {
+          for (let y = CHUNK_H - 16; y > NETHER.lavaY + 12; y--) {
+            if (!caveCol[y] && caveCol[y - 1]) {   // 天井を発見
+              chunk.set(lx, y, lz, B.LAVA_BLOCK);  // 天井に埋まった溶岩源
+              for (let fy = y - 1; fy >= NETHER.lavaY && caveCol[fy]; fy--) {
+                chunk.set(lx, fy, lz, LAVA_FLOW_BASE + 2);  // 満水位の落下柱
+              }
+              break;
+            }
+          }
         }
       }
     }
@@ -629,7 +674,8 @@ class World {
   // 見つからなければ nx,nz に人工的な足場を彫って安全を確保する
   findSafeNetherY(nx, nz) {
     for (let y = 100; y >= 2; y--) {
-      if (this.getBlock(nx, y, nz) !== B.AIR && this.getBlock(nx, y, nz) !== B.LAVA_BLOCK) {
+      const foot = this.getBlock(nx, y, nz);
+      if (foot !== B.AIR && !BLOCKS[foot].fluid && foot !== B.MAGMA) {
         if (this.getBlock(nx, y + 1, nz) === B.AIR && this.getBlock(nx, y + 2, nz) === B.AIR) {
           return y + 1;
         }

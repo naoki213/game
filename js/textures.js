@@ -763,8 +763,23 @@ function buildTextureAtlas(seed) {
     return [150, 90, 220, 140];
   });
 
-  // 溶岩ブロック (本家風: 黒い焼け岩に網目状の発光する亀裂 + 明るいコア)
+  // 溶岩 (本家風: 明るいオレンジの溶けた岩。白熱した渦と少し暗い帯が流れる模様)
   paintTile(TILE.LAVA_BLOCK, (x, y) => {
+    const n1 = Math.sin(x * 0.8 + y * 0.5) + Math.sin(x * 0.35 - y * 1.1 + 1.3) * 0.9;
+    const n2 = Math.sin(x * 0.5 + y * 1.3 + 3.1) + Math.sin(x * 1.5 - y * 0.4 + 0.7) * 0.7;
+    const swirl = n1 * 0.6 + n2 * 0.4;
+    // 白熱した渦 (最も熱い部分)
+    if (swirl > 1.05) return px(255, 235, 150, jitter(1, 0.04));
+    if (swirl > 0.55) return px(255, 190, 60, jitter(1, 0.05));
+    // 少し冷えた暗いオレンジの帯
+    if (swirl < -1.0) return px(180, 62, 8, jitter(1, 0.08));
+    if (swirl < -0.5) return px(215, 88, 12, jitter(1, 0.07));
+    // 基調の明るいオレンジ
+    return px(245, 130, 25, jitter(1, 0.06));
+  });
+
+  // マグマブロック (本家風: 暗い焼け岩に網目状の発光する亀裂 + 明るいコア)
+  paintTile(TILE.MAGMA, (x, y) => {
     const n1 = Math.sin(x * 1.3 + y * 0.9) + Math.sin(x * 0.55 - y * 1.6) * 0.8;
     const n2 = Math.sin(x * 0.45 + y * 2.1 + 2.0) + Math.sin(x * 2.0 - y * 0.5 + 1.0) * 0.6;
     const crackA = Math.abs(n1) < 0.3;
