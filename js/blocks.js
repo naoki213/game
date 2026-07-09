@@ -110,6 +110,11 @@ const B = {
   GLASS_PANE: 243,
   // 244-253 は流れる水/マグマ (WATER_FLOW_BASE / LAVA_FLOW_BASE) で使用済み
   MAGMA: 254,
+  // ジ・エンド関連 (171/172/224/255 は残っていた空き ID)
+  CHORUS_PLANT: 171,
+  CHORUS_FLOWER: 172,
+  PURPUR: 224,
+  DRAGON_EGG: 255,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -433,6 +438,10 @@ const TILE = {
   BED_FOOT_TOP: 217,
   BED_SIDE: 218,
   MAGMA: 219,
+  CHORUS_PLANT: 220,
+  CHORUS_FLOWER: 221,
+  PURPUR: 222,
+  DRAGON_EGG: 223,
 };
 
 // 各ブロックの属性
@@ -791,6 +800,19 @@ defBlock(B.END_PORTAL, "end_portal", "エンドポータル",
 defBlock(B.END_CRYSTAL, "end_crystal", "エンダークリスタル",
   [TILE.END_CRYSTAL, TILE.END_CRYSTAL, TILE.END_CRYSTAL],
   { hardness: 1.0, drops: null, emissive: true });
+// コーラスツリー (外周の島に生える紫の樹木状植物)
+defBlock(B.CHORUS_PLANT, "chorus_plant", "コーラスプラント",
+  [TILE.CHORUS_PLANT, TILE.CHORUS_PLANT, TILE.CHORUS_PLANT], { hardness: 0.4 });
+defBlock(B.CHORUS_FLOWER, "chorus_flower", "コーラスフラワー",
+  [TILE.CHORUS_FLOWER, TILE.CHORUS_FLOWER, TILE.CHORUS_FLOWER], { hardness: 0.4 });
+// プルパーブロック (エンドシティの建材)
+defBlock(B.PURPUR, "purpur", "プルパーブロック",
+  [TILE.PURPUR, TILE.PURPUR, TILE.PURPUR],
+  { hardness: 1.6, pickable: true, minTier: 1 });
+// ドラゴンの卵 (討伐の記念トロフィー。ほのかに光る)
+defBlock(B.DRAGON_EGG, "dragon_egg", "ドラゴンの卵",
+  [TILE.DRAGON_EGG, TILE.DRAGON_EGG, TILE.DRAGON_EGG], { hardness: 0.6 });
+BLOCKS[B.DRAGON_EGG].lightLevel = 4;
 
 // --- ネザー関連ブロック ---
 defBlock(B.NETHERRACK, "netherrack", "ネザーラック",

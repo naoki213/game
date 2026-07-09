@@ -907,6 +907,38 @@ function buildTextureAtlas(seed) {
     return px(200 + core * 55, 130 + core * 100, 230 + core * 25, jitter(1, 0.05));
   });
 
+  // コーラスプラント (紫がかった茎。まだらな深い紫)
+  paintTile(TILE.CHORUS_PLANT, (x, y) => {
+    const n = hash2(x, y, 0xc0a1);
+    const v = 0.85 + n * 0.3;
+    if (n > 0.88) return px(140 * v, 100 * v, 150 * v, 1); // 明るい斑点
+    return px(96 * v, 60 * v, 106 * v, jitter(1, 0.05));
+  });
+
+  // コーラスフラワー (先端の花。白っぽい紫の縁取り + 明るい中心)
+  paintTile(TILE.CHORUS_FLOWER, (x, y) => {
+    const border = x < 2 || x > 13 || y < 2 || y > 13;
+    if (border) return px(150, 110, 160, jitter(1, 0.06));
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    const core = Math.max(0, 1 - d / 8);
+    return px(190 + core * 40, 150 + core * 60, 200 + core * 30, jitter(1, 0.05));
+  });
+
+  // プルパーブロック (淡い紫紅色, レンガ風の目地)
+  paintTile(TILE.PURPUR, (x, y) => {
+    const gapY = y % 8 === 0;
+    const gapX = (x + (y < 8 ? 0 : 8)) % 16 === 0;
+    if (gapY || gapX) return px(130, 92, 130, jitter(1, 0.04));
+    return px(168, 124, 168, jitter(1, 0.06));
+  });
+
+  // ドラゴンの卵 (黒紫に明るい紫の斑点。暗いエンドでも見えるよう少し明るめ)
+  paintTile(TILE.DRAGON_EGG, (x, y) => {
+    const n = hash2(x, y, 0xd9a9);
+    if (n > 0.8) return px(160, 80, 210, jitter(1, 0.1)); // 明るい紫の斑点
+    return px(48 + n * 20, 28 + n * 12, 66 + n * 26, 1);
+  });
+
   // --- ネザー関連 ---
 
   // ネザーラック (赤茶色, まだらな凹凸)

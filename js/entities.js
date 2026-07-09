@@ -432,9 +432,44 @@ class Dragon {
       // 進行方向を向く (円周上の接線方向)
       this.yaw = Math.atan2(-Math.sin(this.angle), Math.cos(this.angle));
       if (this.stateTimer <= 0 && !player.dead) {
-        this.state = "dive";
-        this.diveTarget = [player.pos[0], player.pos[1] + 1, player.pos[2]];
-        this.stateTimer = 3.2;
+        if (Math.random() < 0.3) {
+          // 中央の泉の上にとまりに行く (本家のパーチ行動)
+          this.state = "perch";
+          this.perchTarget = [this.center[0], this.center[1] + 11, this.center[2]];
+          this.perching = false;
+          this.stateTimer = 14;   // 飛行 + 滞在の上限
+        } else {
+          this.state = "dive";
+          this.diveTarget = [player.pos[0], player.pos[1] + 1, player.pos[2]];
+          this.stateTimer = 3.2;
+        }
+      }
+    } else if (this.state === "perch") {
+      const t = this.perchTarget;
+      if (!this.perching) {
+        const dx = t[0] - this.pos[0];
+        const dy = t[1] - this.pos[1];
+        const dz = t[2] - this.pos[2];
+        const dist = Math.hypot(dx, dy, dz) || 1;
+        const speed = 13;
+        this.pos[0] += (dx / dist) * speed * dt;
+        this.pos[1] += (dy / dist) * speed * dt;
+        this.pos[2] += (dz / dist) * speed * dt;
+        this.yaw = Math.atan2(dx, dz);
+        if (dist < 1.5) {
+          this.perching = true;
+          this.pos = [...t];
+          this.stateTimer = 6;   // とまっている間は無防備 (攻撃のチャンス)
+        }
+      } else {
+        // プレイヤーの方を向いてじっとしている
+        this.yaw = Math.atan2(player.pos[0] - this.pos[0], player.pos[2] - this.pos[2]);
+      }
+      if (this.stateTimer <= 0) {
+        this.angle = Math.atan2(this.pos[2] - this.center[2], this.pos[0] - this.center[0]);
+        this.state = "circle";
+        this.perching = false;
+        this.stateTimer = 7 + Math.random() * 5;
       }
     } else if (this.state === "dive") {
       const dx = this.diveTarget[0] - this.pos[0];
@@ -953,8 +988,26 @@ class MobManager {
   }
 
   trySpawn(playerPos, daylight) {
-    // ジ・エンドでは通常のモブは湧かない (エンダードラゴンのみ)
-    if (this.world.isInEnd(playerPos[0], playerPos[2])) return;
+    // ジ・エンド: エンドストーンの上にエンダーマンが徘徊する (本家準拠)
+    if (this.world.isInEnd(playerPos[0], playerPos[2])) {
+      if (this.countType("enderman") >= 6 || Math.random() > 0.3) return;
+      const eang = Math.random() * Math.PI * 2;
+      const edist = 16 + Math.random() * 26;
+      const sx = Math.floor(playerPos[0] + Math.cos(eang) * edist);
+      const sz = Math.floor(playerPos[2] + Math.sin(eang) * edist);
+      const ec = this.world.getChunk(sx >> 4, sz >> 4);
+      if (!ec || !ec.generated) return;
+      for (let y = Math.floor(playerPos[1]) + 20; y > Math.floor(playerPos[1]) - 24; y--) {
+        if (y < 2 || y > CHUNK_H - 3) continue;
+        if (this.world.getBlock(sx, y, sz) === B.END_STONE &&
+            this.world.getBlock(sx, y + 1, sz) === B.AIR &&
+            this.world.getBlock(sx, y + 2, sz) === B.AIR) {
+          this.mobs.push(new Mob("enderman", sx + 0.5, y + 1.01, sz + 0.5));
+          return;
+        }
+      }
+      return;
+    }
     // プレイヤーの周囲 20–50 ブロックのランダム地点
     const ang = Math.random() * Math.PI * 2;
     const dist = 20 + Math.random() * 30;

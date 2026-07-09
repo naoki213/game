@@ -473,6 +473,7 @@
     { out: DOOR_ID_BASE, outN: 1, in: [[B.PLANK, 3]] },
     { out: B.FENCE_PLANK, outN: 2, in: [[B.PLANK, 2]] },
     { out: B.GLASS_PANE, outN: 4, in: [[B.GLASS, 2]] },
+    { out: B.PURPUR, outN: 4, in: [[B.CHORUS_FLOWER, 1]] },
   ];
 
   // 色付き羊毛: 羊毛 1 → 各色 1
@@ -1349,6 +1350,31 @@
     }
   }
 
+  // エンドシティ: 最上階の宝箱に初回接近時に一度だけ宝を詰める
+  let endCityLooted = new Set();
+  try {
+    endCityLooted = new Set(JSON.parse(localStorage.getItem("mcjs_endcity_" + seed) || "[]"));
+  } catch (e) { /* ignore */ }
+  function updateEndCityLoot() {
+    if (!world.isInEnd(player.pos[0], player.pos[2])) return;
+    const c = world.endCityNear(player.pos[0], player.pos[2]);
+    if (!c) return;
+    const key = c.cx + "," + c.cz;
+    if (endCityLooted.has(key)) return;
+    const [chx, chy, chz] = c.chest;
+    const dx = player.pos[0] - chx, dy = player.pos[1] - chy, dz = player.pos[2] - chz;
+    if (dx * dx + dy * dy + dz * dz > 8 * 8) return;
+    if (world.getBlock(chx, chy, chz) !== B.CHEST) return;
+    endCityLooted.add(key);
+    localStorage.setItem("mcjs_endcity_" + seed, JSON.stringify([...endCityLooted]));
+    const chest = chestAt([chx, chy, chz].join(","));
+    chest.set(I.DIAMOND, 2 + ((Math.random() * 3) | 0));
+    chest.set(I.ENDER_PEARL, 3 + ((Math.random() * 3) | 0));
+    chest.set(I.GOLD_INGOT, 4 + ((Math.random() * 4) | 0));
+    chest.set(B.PURPUR, 16);
+    showToast("🏯 エンドシティの宝箱を見つけた!");
+  }
+
   function makeItemCell(id, n, onClick) {
     const el = document.createElement("div");
     el.className = "inv-item";
@@ -1765,16 +1791,25 @@
 
   function enterEnd() {
     endReturnPos = [...player.pos];
-    const { x: ex, y: ey, z: ez } = END;
+    const { x: ex, y: ey, z: ez, plateau } = END;
     // 浮島とその周辺チャンクを先に同期生成してから送る (奈落に落とさないため)
-    for (let cz = (ez - 32) >> 4; cz <= (ez + 32) >> 4; cz++) {
-      for (let cx = (ex - 32) >> 4; cx <= (ex + 32) >> 4; cx++) {
+    for (let cz = (ez - 64) >> 4; cz <= (ez + 64) >> 4; cz++) {
+      for (let cx = (ex - 64) >> 4; cx <= (ex + 64) >> 4; cx++) {
         world.generateChunk(cx, cz);
       }
     }
-    player.pos = [ex + 0.5, ey + 3, ez - 8 + 0.5];
+    player.pos = [ex + 0.5, ey + plateau + 3, ez - 12 + 0.5];
     player.vel = [0, 0, 0];
     player.flying = false;
+    if (dragonDefeated) {
+      // 討伐済みなら泉のポータルが開いていることを保証する (旧セーブの移行も兼ねる)
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dz === 0) continue;
+          world.setBlock(ex + dx, ey + plateau + 2, ez + dz, B.END_PORTAL);
+        }
+      }
+    }
     if (!dragonDefeated && !mobs.dragon) {
       mobs.dragon = new Dragon(ex, ey, ez);
       showToast("🌌 ジ・エンドへ渡った… 🐉 エンダードラゴンが待ち構えている!");
@@ -1786,11 +1821,21 @@
     sound.blip(200, 0.6, "sine", 0.3);
   }
 
-  // 目玉のクリスタルを破壊したときの演出 (地形は壊さない, 見た目と音のみ)
+  // 目玉のクリスタルを破壊したときの爆発 (地形は壊さない。近くにいると爆風ダメージ)
   function explodeEndCrystal(x, y, z) {
     spawnPuff(x + 0.5, y + 0.5, z + 0.5, [1, 0.7, 1]);
     spawnPuff(x + 0.5, y + 0.5, z + 0.5, [0.8, 0.3, 0.9]);
     sound.blip(150, 0.35, "sawtooth", 0.3);
+    const dx = player.pos[0] - (x + 0.5);
+    const dy = player.pos[1] - (y + 0.5);
+    const dz = player.pos[2] - (z + 0.5);
+    if (dx * dx + dy * dy + dz * dz < 5 * 5) {
+      player.takeDamage(5);
+      const pd = Math.hypot(dx, dz) || 1;
+      player.vel[0] += (dx / pd) * 7;
+      player.vel[2] += (dz / pd) * 7;
+      player.vel[1] = Math.max(player.vel[1], 5);
+    }
   }
 
   // ドラゴンを倒したときの勝利演出 (脱出ポータルを設置)
@@ -1801,17 +1846,19 @@
     mobs.dragon = null;
     dragonDefeated = true;
     localStorage.setItem("mcjs_dragon_" + seed, "1");
-    const { x: ex, y: ey, z: ez } = END;
-    // 中央に脱出ポータルを設置 (3x3 のエンドポータル + 黒曜石の縁)
-    for (let dz = -2; dz <= 2; dz++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        const id = Math.max(Math.abs(dx), Math.abs(dz)) <= 1 ? B.END_PORTAL : B.OBSIDIAN;
-        world.setBlock(ex + dx, ey + 1, ez + dz, id);
+    const { x: ex, y: ey, z: ez, plateau } = END;
+    // 中央の岩盤の泉に帰還ポータルを点火し, 頂上にドラゴンの卵を置く (本家準拠)
+    const py = ey + plateau;
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dz === 0) continue; // 中央は岩盤の柱
+        world.setBlock(ex + dx, py + 2, ez + dz, B.END_PORTAL);
       }
     }
+    world.setBlock(ex, py + 5, ez, B.DRAGON_EGG);
     spawnPuff(pos[0], pos[1], pos[2], [0.9, 0.5, 1]);
     sound.blip(120, 1.2, "sine", 0.4);
-    showToast("🐉✨ エンダードラゴンを討伐した! おめでとうございます! ✨🐉");
+    showToast("🐉✨ エンダードラゴンを討伐した! 泉のポータルが開いた ✨🐉");
   }
 
   function exitEnd() {
@@ -1887,7 +1934,7 @@
     const inEndNow = world.isInEnd(player.pos[0], player.pos[2]);
 
     // 奈落に落ちたら送還 (ジ・エンドの浮島の外に落下)
-    if (inEndNow && player.pos[1] < END.y - 30) {
+    if (inEndNow && player.pos[1] < END.y - 45) {
       player.takeDamage(4);
       exitEnd();
       return;
@@ -2614,7 +2661,8 @@
     if (world.isInEnd(player.pos[0], player.pos[2])) {
       return {
         sunDir: [0, 1, 0],
-        daylight: 0.42,
+        daylight: 0.55,
+        minLight: 0.42,
         zenith: [0.03, 0.012, 0.05],
         horizon: [0.09, 0.03, 0.11],
         fog: [0.05, 0.02, 0.08],
@@ -2781,6 +2829,7 @@
       updateMagmaDamage(dt);
       updateFortressLoot();
       updateDesertTempleLoot();
+      updateEndCityLoot();
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
