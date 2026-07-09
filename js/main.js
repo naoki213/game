@@ -1963,6 +1963,20 @@
     }
   }
 
+  // マグマブロックの上に立つとダメージ (本家準拠: スニーク中はノーダメージ)
+  let magmaBurnAccum = 0;
+  function updateMagmaDamage(dt) {
+    const onMagma = player.onGround && !player.sneaking &&
+      world.getBlock(Math.floor(player.pos[0]), Math.floor(player.pos[1] - 0.05),
+        Math.floor(player.pos[2])) === B.MAGMA;
+    if (!onMagma) { magmaBurnAccum = 0; return; }
+    magmaBurnAccum += dt;
+    if (magmaBurnAccum >= 0.5) {
+      magmaBurnAccum -= 0.5;
+      player.takeDamage(1);
+    }
+  }
+
   // プレイヤーの水平方向の向きを 90 度刻みの north/east/south/west (0-3) に丸める
   function yawToDir4(yaw) {
     const a = ((yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
@@ -2611,19 +2625,19 @@
         noClouds: true,
       };
     }
-    // ネザー: 太陽も昼夜もない, 赤黒く霞んだ空間 (ただし真っ暗にはならないよう底上げ)
+    // ネザー: 太陽も昼夜もない, 赤く霞んだ空間 (本家のように全体を明るく底上げ)
     if (world.isInNether(player.pos[0], player.pos[2])) {
       return {
         sunDir: [0, 1, 0],
-        daylight: 0.75,
-        minLight: 0.4,
-        zenith: [0.22, 0.06, 0.04],
-        horizon: [0.42, 0.14, 0.07],
-        fog: [0.36, 0.12, 0.06],
-        fogStart: 14,
-        fogEnd: 58,
+        daylight: 1.0,
+        minLight: 0.62,
+        zenith: [0.3, 0.09, 0.06],
+        horizon: [0.52, 0.19, 0.1],
+        fog: [0.45, 0.17, 0.09],
+        fogStart: 16,
+        fogEnd: 72,
         fov,
-        sunColor: [1.15, 0.7, 0.5],
+        sunColor: [1.15, 0.75, 0.55],
         noClouds: true,
       };
     }
@@ -2764,6 +2778,7 @@
       updateEndPortalTravel(dt);
       updateNetherPortalTravel(dt);
       updateLavaDamage(dt);
+      updateMagmaDamage(dt);
       updateFortressLoot();
       updateDesertTempleLoot();
 

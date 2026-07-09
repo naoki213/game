@@ -108,6 +108,8 @@ const B = {
   FENCE_PLANK: 225,
   CRAFTING_TABLE: 226,
   GLASS_PANE: 243,
+  // 244-253 は流れる水/マグマ (WATER_FLOW_BASE / LAVA_FLOW_BASE) で使用済み
+  MAGMA: 254,
 };
 
 // コンクリート (なめらかな単色 8 色, ID 163-170 / タイル 150-157)
@@ -430,6 +432,7 @@ const TILE = {
   BED_HEAD_TOP: 216,
   BED_FOOT_TOP: 217,
   BED_SIDE: 218,
+  MAGMA: 219,
 };
 
 // 各ブロックの属性
@@ -804,6 +807,12 @@ defBlock(B.NETHER_PORTAL, "nether_portal", "ネザーポータル",
 defBlock(B.NETHER_BRICK, "nether_brick", "ネザーレンガ",
   [TILE.NETHER_BRICK, TILE.NETHER_BRICK, TILE.NETHER_BRICK],
   { hardness: 2.0, pickable: true, minTier: 1 });
+// マグマブロック: 本家準拠の暗い焼け岩 + 発光する亀裂。上に立つとダメージ
+// (main.js)。弱い光を放つ (lightLevel, フルブライトにはならない)
+defBlock(B.MAGMA, "magma", "マグマブロック",
+  [TILE.MAGMA, TILE.MAGMA, TILE.MAGMA],
+  { hardness: 1.4, pickable: true, minTier: 1 });
+BLOCKS[B.MAGMA].lightLevel = 8;
 
 // --- ウィザー召喚関連 ---
 defBlock(B.WITHER_SKULL, "wither_skull", "ウィザースケルトンの頭蓋骨",
@@ -983,5 +992,6 @@ for (const b of BLOCKS) {
   if (!b) continue;
   OPAQUE_LUT[b.id] = b.opaque ? 1 : 0;
   if (b.emissive) LIGHT_LUT[b.id] = b.id === B.TORCH ? 14 : 15;
+  else if (b.lightLevel) LIGHT_LUT[b.id] = b.lightLevel;  // 弱い光源 (マグマブロック等)
   if (b.fluid === "water") WATER_LUT[b.id] = 1;
 }
