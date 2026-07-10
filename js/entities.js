@@ -1008,6 +1008,38 @@ class MobManager {
       }
       return;
     }
+    // --- 村: 近くの村に村人が最低数 (4人) いるように優先的に湧かせる ---
+    const pvgx = Math.floor(playerPos[0] / VILLAGE_GRID);
+    const pvgz = Math.floor(playerPos[2] / VILLAGE_GRID);
+    for (let dgz = -1; dgz <= 1; dgz++) {
+      for (let dgx = -1; dgx <= 1; dgx++) {
+        const v = this.world.villageInCell(pvgx + dgx, pvgz + dgz);
+        if (!v) continue;
+        const pdx = playerPos[0] - v.cx, pdz = playerPos[2] - v.cz;
+        if (pdx * pdx + pdz * pdz > 70 * 70) continue;   // 村の近くにいるときだけ
+        let near = 0;
+        for (const m of this.mobs) {
+          if (m.type !== "villager") continue;
+          const mdx = m.pos[0] - v.cx, mdz = m.pos[2] - v.cz;
+          if (mdx * mdx + mdz * mdz < 60 * 60) near++;
+        }
+        if (near >= 4) continue;
+        // 井戸の周りのランダムな地点の地表にスポーン
+        const vang = Math.random() * Math.PI * 2;
+        const vdist = 4 + Math.random() * 14;
+        const sx = Math.floor(v.cx + Math.cos(vang) * vdist);
+        const sz = Math.floor(v.cz + Math.sin(vang) * vdist);
+        const vc = this.world.getChunk(sx >> 4, sz >> 4);
+        if (!vc || !vc.generated) continue;
+        const h = this.world.surfaceY(sx, sz);
+        if (h > 0 && this.world.getBlock(sx, h + 1, sz) === B.AIR &&
+            this.world.getBlock(sx, h + 2, sz) === B.AIR) {
+          this.mobs.push(new Mob("villager", sx + 0.5, h + 1.01, sz + 0.5));
+          return;
+        }
+      }
+    }
+
     // プレイヤーの周囲 20–50 ブロックのランダム地点
     const ang = Math.random() * Math.PI * 2;
     const dist = 20 + Math.random() * 30;
