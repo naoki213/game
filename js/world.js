@@ -16,7 +16,14 @@ const STRONGHOLD = { x: 260, y: 20, z: 340 };
 
 // ジ・エンド (最終決戦場)。通常の地形生成とは全く別の, 遠く離れた固定座標に
 // 浮島 + 黒曜石の柱を生成する。シードによらず常に同じ内容
-const END = { x: 100000, z: 0, y: 64, islandR: 26, pillarR: 19, boundsR: 110 };
+// ジ・エンド: 中央の本島 (islandR) + 空白の奈落 + 外周の浮島群 (outerR0..outerR1)。
+// plateau は本島中央の平らな高台の高さ (岩盤の帰還ポータルの泉が乗る)
+const END = {
+  x: 100000, z: 0, y: 64,
+  islandR: 48, pillarR: 32, plateau: 6,
+  outerR0: 170, outerR1: 440, boundsR: 480,
+};
+const END_CITY_GRID = 96;   // 外周の島のエンドシティ配置グリッド (ブロック)
 
 // ネザー。オーバーワールドとは別の, さらに遠く離れた固定領域に生成する
 // 洞窟だらけの世界。オーバーワールド座標を 1/8 に縮めてこの領域内に写像する
@@ -107,6 +114,7 @@ class World {
     this.heightCache = new Map();     // 列の高さキャッシュ
     this.villageCache = new Map();    // 村グリッドのキャッシュ
     this.templeCache = new Map();     // 砂漠の神殿グリッドのキャッシュ
+    this.endCityCache = new Map();    // エンドシティグリッドのキャッシュ
     this.lavaPoolCache = new Map();   // 地上のマグマだまりグリッドのキャッシュ
     this.entranceCandCache = new Map();  // 洞窟の入り口候補 (グリッドセル) のキャッシュ
     this.entranceColCache = new Map();   // 列ごとの近傍入り口候補リストのキャッシュ
@@ -317,16 +325,16 @@ class World {
     return Math.hypot(x - NETHER.x, z - NETHER.z) <= NETHER.boundsR;
   }
 
-  // 8 本の柱の上にあるエンダークリスタルの座標 (generateEndChunk と同じ式)
+  // 10 本の柱の上にあるエンダークリスタルの座標 (generateEndChunk と同じ式)
   endCrystalCoords() {
     const { x: ex, z: ez, y: ey, pillarR } = END;
-    const N = 8;
+    const N = 10;
     const coords = [];
     for (let i = 0; i < N; i++) {
       const ang = (i / N) * Math.PI * 2;
       const px = Math.round(ex + Math.cos(ang) * pillarR);
       const pz = Math.round(ez + Math.sin(ang) * pillarR);
-      const pillarTop = ey + 7 + (i % 3) * 5;
+      const pillarTop = ey + 10 + (i * 5) % 21;
       coords.push([px, pillarTop + 1, pz]);
     }
     return coords;
@@ -483,38 +491,104 @@ class World {
 
   // ---------------- ジ・エンド (最終決戦場) ----------------
 
+  // 外周の浮島のノイズ値 (リングの内外の縁でフェードアウトして途切れる)
+  endOuterNoise(wx, wz, d) {
+    const { x: ex, z: ez, outerR0, outerR1 } = END;
+    if (d === undefined) d = Math.hypot(wx - ex, wz - ez);
+    const n = this.noiseBiome.fbm2(wx * 0.02 + 7000, wz * 0.02 - 7000, 3);
+    const edgeFade = Math.max(0, Math.min((d - outerR0) / 40, (outerR1 - d) / 40, 1));
+    return n - (1 - edgeFade) * 0.3;
+  }
+
+  // 外周の浮島の表面高さ (島ごとに緩やかに上下する)
+  endOuterSurfY(wx, wz) {
+    return END.y - 4 + Math.round(this.noise.noise2(wx * 0.03 + 5000, wz * 0.03 - 5000) * 5);
+  }
+
   generateEndChunk(chunk) {
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
-    const { x: ex, z: ez, y: ey, islandR, pillarR } = END;
+    const { x: ex, z: ez, y: ey, islandR, pillarR, plateau, outerR0, outerR1 } = END;
+    const seed = this.seed;
 
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         const wx = ox + lx, wz = oz + lz;
         const dx = wx - ex, dz = wz - ez;
         const d = Math.hypot(dx, dz);
-        if (d > islandR) continue;
-        // 中心が緩やかに盛り上がったエンドストーンの浮島 + 縁の欠け
-        const edgeNoise = hash2(wx, wz, this.seed ^ 0xe4d1) * 3;
-        if (d > islandR - 2 && edgeNoise < 1.1) continue; // 縁を不揃いに欠けさせる
-        const dome = Math.round(Math.max(0, (islandR - d) * 0.14));
-        const topY = ey + dome;
-        for (let y = ey - 5; y <= topY; y++) chunk.set(lx, y, lz, B.END_STONE);
+
+        if (d <= islandR) {
+          // 本島: 中央が平らな高台の盛り上がり + 下側のふくらみ + 縁の欠け
+          const edgeNoise = hash2(wx, wz, seed ^ 0xe4d1) * 3;
+          if (d > islandR - 2 && edgeNoise < 1.1) continue; // 縁を不揃いに欠けさせる
+          const dome = Math.round(Math.max(0, (islandR - Math.max(d, 10)) * 0.16));
+          const bottom = ey - 4 - dome * 2 - Math.round(hash2(wx, wz, seed ^ 0xe4d2) * 2);
+          for (let y = bottom; y <= ey + dome; y++) chunk.set(lx, y, lz, B.END_STONE);
+        } else if (d >= outerR0 && d <= outerR1) {
+          // 外周の浮島群 (本島から奈落を挟んだ先に広がる)
+          const v = this.endOuterNoise(wx, wz, d);
+          if (v <= 0.16) continue;
+          const surf = this.endOuterSurfY(wx, wz);
+          const thick = 2 + Math.round((v - 0.16) * 45);
+          for (let y = surf - thick; y <= surf; y++) chunk.set(lx, y, lz, B.END_STONE);
+          // コーラスツリー (紫の樹木状の植物)
+          if (v > 0.22 && hash2(wx, wz, seed ^ 0xc071) < 0.02) {
+            const h = 2 + Math.floor(hash2(wx, wz, seed ^ 0xc082) * 4);
+            for (let i = 1; i <= h; i++) chunk.set(lx, surf + i, lz, B.CHORUS_PLANT);
+            chunk.set(lx, surf + h + 1, lz, B.CHORUS_FLOWER);
+          }
+        }
       }
     }
 
-    // 黒曜石の柱 + てっぺんのエンダークリスタル (中心を囲む円状に配置)
-    const N = 8;
+    const set = (wx, y, wz, id) => {
+      if (wx < ox || wx > ox + 15 || wz < oz || wz > oz + 15 || y < 1 || y >= CHUNK_H) return;
+      chunk.set(wx - ox, y, wz - oz, id);
+    };
+
+    // --- 黒曜石の柱 (太い円柱, 高さにばらつき) + てっぺんのエンダークリスタル。
+    // 特に高い柱のクリスタルは鉄格子風の檻の中 (本家準拠) ---
+    const N = 10;
     for (let i = 0; i < N; i++) {
       const ang = (i / N) * Math.PI * 2;
       const px = Math.round(ex + Math.cos(ang) * pillarR);
       const pz = Math.round(ez + Math.sin(ang) * pillarR);
-      if (px < ox || px > ox + 15 || pz < oz || pz > oz + 15) continue;
-      const lx = px - ox, lz = pz - oz;
-      const pillarTop = ey + 7 + (i % 3) * 5; // 高さにばらつきをつける
-      for (let y = ey - 3; y <= pillarTop; y++) chunk.set(lx, y, lz, B.OBSIDIAN);
-      chunk.set(lx, pillarTop + 1, lz, B.END_CRYSTAL);
+      if (px + 3 < ox || px - 3 > ox + 15 || pz + 3 < oz || pz - 3 > oz + 15) continue;
+      const h = 10 + (i * 5) % 21;
+      const top = ey + h;
+      for (let ddx = -2; ddx <= 2; ddx++) {
+        for (let ddz = -2; ddz <= 2; ddz++) {
+          if (ddx * ddx + ddz * ddz > 5.5) continue;
+          for (let y = ey - 4; y <= top; y++) set(px + ddx, y, pz + ddz, B.OBSIDIAN);
+        }
+      }
+      set(px, top + 1, pz, B.END_CRYSTAL);
+      if (h >= 28) {
+        for (let ddx = -1; ddx <= 1; ddx++) {
+          for (let ddz = -1; ddz <= 1; ddz++) {
+            if (Math.max(Math.abs(ddx), Math.abs(ddz)) === 1) {
+              set(px + ddx, top + 1, pz + ddz, B.GLASS_PANE);
+              set(px + ddx, top + 2, pz + ddz, B.GLASS_PANE);
+            }
+            set(px + ddx, top + 3, pz + ddz, B.STONE_SLAB);
+          }
+        }
+      }
     }
+
+    // --- 中央の高台に岩盤の泉 (帰還ポータルの台座)。ポータル本体と
+    // ドラゴンの卵はドラゴン討伐時に main.js が設置する ---
+    const py = ey + plateau;
+    for (let ddx = -2; ddx <= 2; ddx++) {
+      for (let ddz = -2; ddz <= 2; ddz++) {
+        if (Math.abs(ddx) === 2 && Math.abs(ddz) === 2) continue; // 角を落とす
+        set(ex + ddx, py + 1, ez + ddz, B.BEDROCK);
+      }
+    }
+    for (let y = py + 2; y <= py + 4; y++) set(ex, y, ez, B.BEDROCK);
+
+    // --- エンドシティ (外周の島に立つプルパーの塔) ---
+    this.stampEndCity(chunk);
 
     // --- 保存済みの編集を適用 (クリスタル破壊やポータル設置などを復元) ---
     const key = World.key(chunk.cx, chunk.cz);
@@ -526,6 +600,86 @@ class World {
     chunk.generated = true;
     chunk.dirty = true;
     return chunk;
+  }
+
+  // ---------------- エンドシティ ----------------
+  // 外周の島のグリッドセルごとに決定論的に配置される, プルパーの塔。
+  // 最上階に宝箱 (中身は main.js が初回接近時に詰める)
+
+  endCityInCell(gx, gz) {
+    const key = gx + "," + gz;
+    if (this.endCityCache.has(key)) return this.endCityCache.get(key);
+    let city = null;
+    if (hash2(gx, gz, this.seed ^ 0xec17) < 0.65) {
+      const G = END_CITY_GRID;
+      const cx = gx * G + 20 + Math.floor(hash2(gx, gz, this.seed ^ 0xec18) * (G - 40));
+      const cz = gz * G + 20 + Math.floor(hash2(gx, gz, this.seed ^ 0xec19) * (G - 40));
+      const d = Math.hypot(cx - END.x, cz - END.z);
+      // 外周リングの内側で, 島が十分に大きい場所にだけ建てる
+      if (d >= END.outerR0 + 25 && d <= END.outerR1 - 25 &&
+          this.endOuterNoise(cx, cz, d) > 0.26) {
+        const y = this.endOuterSurfY(cx, cz);
+        city = { cx, cz, y, chest: [cx, y + 12, cz] };
+      }
+    }
+    this.endCityCache.set(key, city);
+    return city;
+  }
+
+  // (wx, wz) の近くのエンドシティ (宝箱の初回ルート判定に使う)
+  endCityNear(wx, wz) {
+    const gx = Math.floor(wx / END_CITY_GRID);
+    const gz = Math.floor(wz / END_CITY_GRID);
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const c = this.endCityInCell(gx + dx, gz + dz);
+        if (c && Math.abs(wx - c.cx) < 12 && Math.abs(wz - c.cz) < 12) return c;
+      }
+    }
+    return null;
+  }
+
+  stampEndCity(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    const g0x = Math.floor((ox - 16) / END_CITY_GRID);
+    const g1x = Math.floor((ox + 31) / END_CITY_GRID);
+    const g0z = Math.floor((oz - 16) / END_CITY_GRID);
+    const g1z = Math.floor((oz + 31) / END_CITY_GRID);
+    const set = (wx, y, wz, id) => {
+      if (wx < ox || wx > ox + 15 || wz < oz || wz > oz + 15 || y < 1 || y >= CHUNK_H) return;
+      chunk.set(wx - ox, y, wz - oz, id);
+    };
+    for (let gz = g0z; gz <= g1z; gz++) {
+      for (let gx = g0x; gx <= g1x; gx++) {
+        const c = this.endCityInCell(gx, gz);
+        if (!c) continue;
+        if (c.cx + 4 < ox || c.cx - 4 > ox + 15 || c.cz + 4 < oz || c.cz - 4 > oz + 15) continue;
+        // 塔: 半径3のプルパーの円筒 (中は吹き抜け) + 基礎 + 最上階の床
+        for (let ddx = -3; ddx <= 3; ddx++) {
+          for (let ddz = -3; ddz <= 3; ddz++) {
+            const r2 = ddx * ddx + ddz * ddz;
+            if (r2 > 12.5) continue;
+            const wall = r2 > 5.5;
+            for (let y = c.y - 2; y <= c.y; y++) set(c.cx + ddx, y, c.cz + ddz, B.PURPUR); // 基礎
+            for (let y = c.y + 1; y <= c.y + 10; y++) {
+              set(c.cx + ddx, y, c.cz + ddz, wall ? B.PURPUR : B.AIR);
+            }
+            set(c.cx + ddx, c.y + 11, c.cz + ddz, B.PURPUR); // 最上階の床
+            if (wall && (ddx + ddz) % 2 === 0) set(c.cx + ddx, c.y + 12, c.cz + ddz, B.PURPUR); // 胸壁
+          }
+        }
+        // 南側の入口 (2マス)
+        set(c.cx, c.y + 1, c.cz + 3, B.AIR);
+        set(c.cx, c.y + 2, c.cz + 3, B.AIR);
+        // 壁の窓ガラス (四面の中段)
+        for (const [wdx, wdz] of [[3, 0], [-3, 0], [0, -3]]) {
+          set(c.cx + wdx, c.y + 6, c.cz + wdz, B.GLASS_PANE);
+        }
+        // 最上階の宝箱
+        set(c.chest[0], c.chest[1], c.chest[2], B.CHEST);
+      }
+    }
   }
 
   // ---------------- ネザー ----------------
@@ -1208,8 +1362,24 @@ class World {
       set(tx, sy + 3, tz, B.TORCH);
     }
 
-    // --- エンドポータルの枠 (5x5, 角抜き = 12 ブロック) ---
-    const py = sy + 1;
+    // --- 本家風のポータルの間: 溶岩の堀に囲まれた石レンガの高台の上に
+    // エンドポータルの枠が乗る。南側の橋から渡り, 高台の縁に上がって
+    // フレームを飛び越えて中に入る ---
+    for (let dz = -R + 1; dz <= R - 1; dz++) {
+      for (let dx = -R + 1; dx <= R - 1; dx++) {
+        const m = Math.max(Math.abs(dx), Math.abs(dz));
+        // 溶岩の堀 (高台の周りの1マス。南の橋の部分は床を残す)
+        if (m === 4 && !(Math.abs(dx) <= 1 && dz === 4)) {
+          set(sx + dx, sy, sz + dz, B.LAVA_BLOCK);
+        }
+        // 高台 (7x7, 角を落とした円盤)
+        if (m <= 3 && !(Math.abs(dx) === 3 && Math.abs(dz) === 3)) {
+          set(sx + dx, sy + 1, sz + dz, B.STONE_BRICK);
+        }
+      }
+    }
+    // エンドポータルの枠 (5x5, 角抜き = 12 ブロック) を高台の上に
+    const py = sy + 2;
     for (let dz = -2; dz <= 2; dz++) {
       for (let dx = -2; dx <= 2; dx++) {
         const m = Math.max(Math.abs(dx), Math.abs(dz));
@@ -1217,6 +1387,14 @@ class World {
           set(sx + dx, py, sz + dz, B.END_PORTAL_FRAME);
         }
       }
+    }
+    // 南側の階段 (橋から高台へジャンプなしで上れる)
+    for (let dx = -1; dx <= 1; dx++) {
+      set(sx + dx, sy + 1, sz + 4, STAIR_ID_BASE + 3 * 4 + 2); // 石レンガの階段 (南向き)
+    }
+    // 高台の四隅の飾り (模様入り石レンガ)
+    for (const [cdx, cdz] of [[-3, -2], [3, -2], [-3, 2], [3, 2], [-2, -3], [2, -3], [-2, 3], [2, 3]]) {
+      set(sx + cdx, sy + 1, sz + cdz, B.CHISELED_STONE_BRICK);
     }
   }
 

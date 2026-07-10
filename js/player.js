@@ -44,6 +44,8 @@ class Player {
     this.drownTimer = 0;
     this.landImpact = 0;       // 着地時の速度
     this.sneaking = false;
+    this.armorPoints = 0;      // 装備中の防具の合計防御ポイント (main.js が更新)
+    this.onArmorDamage = null; // 防具で軽減して被弾したときのコールバック (耐久消費)
   }
 
   // 足元 (AABB 直下) に支えがあるか
@@ -63,6 +65,11 @@ class Player {
 
   takeDamage(n) {
     if (this.creative || this.dead || n <= 0) return;
+    // 防具による軽減 (1ポイント = 4% 軽減, 最大 80%)。被弾で防具の耐久が減る
+    if (this.armorPoints > 0) {
+      n = Math.max(1, Math.round(n * (1 - Math.min(this.armorPoints, 20) * 0.04)));
+      if (this.onArmorDamage) this.onArmorDamage();
+    }
     this.health = Math.max(0, this.health - n);
     this.hurtFlash = 0.45;
     this.lastDamageTime = this.time;

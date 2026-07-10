@@ -341,6 +341,53 @@ function buildTextureAtlas(seed) {
     });
   }
 
+  // --- 防具 (ヘルメット / チェストプレート / レギンス / ブーツ x 鉄/金/ダイヤ) ---
+  const armorMats = [
+    [[225, 225, 230], TILE.HELMET_IRON, TILE.CHESTPLATE_IRON, TILE.LEGGINGS_IRON, TILE.BOOTS_IRON],
+    [[250, 205, 60], TILE.HELMET_GOLD, TILE.CHESTPLATE_GOLD, TILE.LEGGINGS_GOLD, TILE.BOOTS_GOLD],
+    [[95, 230, 225], TILE.HELMET_DIAMOND, TILE.CHESTPLATE_DIAMOND, TILE.LEGGINGS_DIAMOND, TILE.BOOTS_DIAMOND],
+  ];
+  for (const [mat, helmT, chestT, legT, bootT] of armorMats) {
+    const m = (v = 1) => px(mat[0] * v, mat[1] * v, mat[2] * v, jitter(1, 0.05));
+    // ヘルメット: 丸いドーム + 顔の開口
+    paintTile(helmT, (x, y) => {
+      const inDome = y >= 3 && y <= 11 && x >= 3 && x <= 12 &&
+        !(y <= 4 && (x <= 4 || x >= 11));
+      if (!inDome) return [0, 0, 0, 0];
+      if (y >= 7 && y <= 11 && x >= 5 && x <= 10) return px(30, 30, 36, 1); // 顔の開口
+      const rim = y === 11 || x === 3 || x === 12 || y === 3;
+      return m(rim ? 0.8 : 1);
+    });
+    // チェストプレート: 肩 + 胴体, 首の開口
+    paintTile(chestT, (x, y) => {
+      if (y < 2 || y > 13) return [0, 0, 0, 0];
+      if (y <= 3 && x >= 6 && x <= 9) return [0, 0, 0, 0]; // 首の開口
+      const shoulder = y <= 5 && ((x >= 1 && x <= 4) || (x >= 11 && x <= 14));
+      const torso = y >= 4 && y <= 13 && x >= 4 && x <= 11;
+      const collar = y <= 3 && (x === 5 || x === 10);
+      if (!shoulder && !torso && !collar) return [0, 0, 0, 0];
+      const center = x === 7 || x === 8; // 中央の継ぎ目を少し暗く
+      return m(center ? 0.85 : (y === 13 || shoulder ? 0.92 : 1));
+    });
+    // レギンス: ベルト + 2本の脚
+    paintTile(legT, (x, y) => {
+      const waist = y >= 2 && y <= 4 && x >= 3 && x <= 12;
+      const legL = y >= 5 && y <= 13 && x >= 3 && x <= 6;
+      const legR = y >= 5 && y <= 13 && x >= 9 && x <= 12;
+      if (!waist && !legL && !legR) return [0, 0, 0, 0];
+      return m(y === 2 ? 0.75 : y >= 12 ? 0.88 : 1);
+    });
+    // ブーツ: 2 足のすね + つま先
+    paintTile(bootT, (x, y) => {
+      const shinL = y >= 5 && y <= 12 && x >= 2 && x <= 5;
+      const shinR = y >= 5 && y <= 12 && x >= 10 && x <= 13;
+      const toeL = y >= 10 && y <= 12 && x === 6;
+      const toeR = y >= 10 && y <= 12 && x === 9;
+      if (!shinL && !shinR && !toeL && !toeR) return [0, 0, 0, 0];
+      return m(y >= 12 ? 0.75 : y === 5 ? 0.85 : 1);
+    });
+  }
+
   // --- ハサミ ---
   paintTile(TILE.SHEARS, (x, y) => {
     const blade1 = Math.abs(x - y) <= 1 && x >= 3 && x <= 12;
@@ -905,6 +952,38 @@ function buildTextureAtlas(seed) {
     const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
     const core = Math.max(0, 1 - d / 7);
     return px(200 + core * 55, 130 + core * 100, 230 + core * 25, jitter(1, 0.05));
+  });
+
+  // コーラスプラント (紫がかった茎。まだらな深い紫)
+  paintTile(TILE.CHORUS_PLANT, (x, y) => {
+    const n = hash2(x, y, 0xc0a1);
+    const v = 0.85 + n * 0.3;
+    if (n > 0.88) return px(140 * v, 100 * v, 150 * v, 1); // 明るい斑点
+    return px(96 * v, 60 * v, 106 * v, jitter(1, 0.05));
+  });
+
+  // コーラスフラワー (先端の花。白っぽい紫の縁取り + 明るい中心)
+  paintTile(TILE.CHORUS_FLOWER, (x, y) => {
+    const border = x < 2 || x > 13 || y < 2 || y > 13;
+    if (border) return px(150, 110, 160, jitter(1, 0.06));
+    const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+    const core = Math.max(0, 1 - d / 8);
+    return px(190 + core * 40, 150 + core * 60, 200 + core * 30, jitter(1, 0.05));
+  });
+
+  // プルパーブロック (淡い紫紅色, レンガ風の目地)
+  paintTile(TILE.PURPUR, (x, y) => {
+    const gapY = y % 8 === 0;
+    const gapX = (x + (y < 8 ? 0 : 8)) % 16 === 0;
+    if (gapY || gapX) return px(130, 92, 130, jitter(1, 0.04));
+    return px(168, 124, 168, jitter(1, 0.06));
+  });
+
+  // ドラゴンの卵 (黒紫に明るい紫の斑点。暗いエンドでも見えるよう少し明るめ)
+  paintTile(TILE.DRAGON_EGG, (x, y) => {
+    const n = hash2(x, y, 0xd9a9);
+    if (n > 0.8) return px(160, 80, 210, jitter(1, 0.1)); // 明るい紫の斑点
+    return px(48 + n * 20, 28 + n * 12, 66 + n * 26, 1);
   });
 
   // --- ネザー関連 ---

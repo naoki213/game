@@ -37,7 +37,7 @@
     const saved = JSON.parse(localStorage.getItem("mcjs_inv_" + seed));
     if (Array.isArray(saved)) {
       for (const [id, n] of saved) {
-        if (BLOCKS[id] && n > 0) invCounts.set(id, n);
+        if (getDef(id) && n > 0) invCounts.set(id, n); // 道具・防具などのアイテムも復元する
       }
     }
   } catch (e) { /* 壊れたデータは無視 */ }
@@ -74,6 +74,71 @@
     }
     invDirty = true;
     updateHotbarCounts();
+  }
+
+  // ---------------- 防具 (装備・防御ポイント・耐久) ----------------
+  // スロット (head/chest/legs/feet) ごとに { id, dur } を装備する。
+  // 合計防御ポイントは player.takeDamage のダメージ軽減に使われ,
+  // 被弾のたびに装備中の全部位の耐久が 1 ずつ減り, 0 になると壊れる
+  const ARMOR_SLOTS = ["head", "chest", "legs", "feet"];
+  const equippedArmor = { head: null, chest: null, legs: null, feet: null };
+  try {
+    const saved = JSON.parse(localStorage.getItem("mcjs_armor_" + seed));
+    if (saved) {
+      for (const slot of ARMOR_SLOTS) {
+        const e = saved[slot];
+        if (e && getDef(e.id) && getDef(e.id).armor && e.dur > 0) equippedArmor[slot] = e;
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  function syncArmor() {
+    let pts = 0;
+    for (const slot of ARMOR_SLOTS) {
+      if (equippedArmor[slot]) pts += getDef(equippedArmor[slot].id).armor.points;
+    }
+    player.armorPoints = pts;
+    localStorage.setItem("mcjs_armor_" + seed, JSON.stringify(equippedArmor));
+    updateArmorHud();
+    invDirty = true;
+  }
+
+  // 被弾時: 装備中の全部位の耐久を 1 消費 (0 で壊れる)
+  player.onArmorDamage = () => {
+    for (const slot of ARMOR_SLOTS) {
+      const e = equippedArmor[slot];
+      if (!e) continue;
+      e.dur--;
+      if (e.dur <= 0) {
+        showToast(getDef(e.id).jp + " が壊れた!");
+        sound.blip(180, 0.18, "sawtooth", 0.25);
+        equippedArmor[slot] = null;
+      }
+    }
+    syncArmor();
+  };
+
+  // 持ち物画面で防具をクリックすると装備 / 装備中のものをもう一度クリックで外す
+  function equipArmor(id) {
+    const def = getDef(id);
+    if (!def || !def.armor) return;
+    const slot = def.armor.slot;
+    const prev = equippedArmor[slot];
+    if (prev && prev.id === id) {
+      equippedArmor[slot] = null;
+      if (gameMode === "survival") addItem(id);
+      showToast(def.jp + " を外した");
+    } else {
+      if (gameMode === "survival") {
+        if ((invCounts.get(id) || 0) <= 0) { showToast(def.jp + " を持っていない"); return; }
+        consumeItem(id);
+        if (prev) addItem(prev.id);
+      }
+      equippedArmor[slot] = { id, dur: def.armor.durability };
+      showToast(def.jp + " を装備した");
+      sound.place();
+    }
+    syncArmor();
   }
 
   function addItem(id, n = 1) {
@@ -225,6 +290,58 @@
   }
   let lastFood = -1;
 
+  // 防御ポイントゲージ (盾アイコン 10 個 = 20 ポイント。ステータスバーの上の段に表示)
+  const armorBarEl = document.createElement("div");
+  armorBarEl.id = "armorbar";
+  const statusBarsForArmor = heartsEl.parentNode;
+  statusBarsForArmor.parentNode.insertBefore(armorBarEl, statusBarsForArmor);
+  const armorIcons = [];
+  for (let i = 0; i < 10; i++) {
+    const s = document.createElement("span");
+    s.className = "shield";
+    s.textContent = "🛡";
+    armorBarEl.appendChild(s);
+    armorIcons.push(s);
+  }
+  function updateArmorHud() {
+    const pts = player.armorPoints;
+    armorBarEl.style.display = (gameMode === "survival" && pts > 0) ? "flex" : "none";
+    for (let i = 0; i < 10; i++) {
+      armorIcons[i].classList.toggle("on", pts >= (i + 1) * 2 - 1);
+    }
+  }
+  syncArmor(); // 保存済みの装備を反映
+
+  // ボス HP バー (エンダードラゴン / ウィザー戦で画面上部に表示)
+  const bossBarEl = document.createElement("div");
+  bossBarEl.id = "bossbar";
+  bossBarEl.innerHTML = '<div class="boss-label"></div><div class="boss-track"><div class="boss-fill"></div></div>';
+  document.body.appendChild(bossBarEl);
+  const bossLabelEl = bossBarEl.querySelector(".boss-label");
+  const bossFillEl = bossBarEl.querySelector(".boss-fill");
+  function updateBossBar() {
+    let name = null, hp = 0, max = 1;
+    const d = mobs.dragon;
+    if (d && !d.dead && world.isInEnd(player.pos[0], player.pos[2])) {
+      name = "エンダードラゴン";
+      hp = d.health; max = d.maxHealth;
+    } else {
+      // ウィザー戦もボスバー対象 (近くにいるときだけ)
+      for (const m of mobs.mobs) {
+        if (m.type === "wither_boss" && !m.dead) {
+          const dx = m.pos[0] - player.pos[0], dz = m.pos[2] - player.pos[2];
+          if (dx * dx + dz * dz < 80 * 80) { name = "ウィザー"; hp = m.health; max = m.def.health; }
+          break;
+        }
+      }
+    }
+    bossBarEl.style.display = name ? "block" : "none";
+    if (name) {
+      bossLabelEl.textContent = name;
+      bossFillEl.style.width = Math.max(0, hp / max * 100).toFixed(1) + "%";
+    }
+  }
+
   let lastHealth = -1, lastAir = -1;
   let deathTimer = 0;
 
@@ -253,6 +370,7 @@
     player.creative = m === "creative";
     if (m === "survival") player.flying = false;
     applyModeUI();
+    updateArmorHud();
     showToast(m === "survival" ? "サバイバルモード" : "クリエイティブモード");
   }
 
@@ -399,6 +517,12 @@
     badge.className = "count";
     item.append(icon, label, badge);
     item.addEventListener("click", () => {
+      // 防具はクリックで装備 / 解除 (ホットバーには入れない)
+      if (getDef(block.id).armor) {
+        equipArmor(block.id);
+        refreshInventoryCounts();
+        return;
+      }
       HOTBAR_BLOCKS[selectedSlot] = block.id;
       drawBlockIcon(slotEls[selectedSlot].querySelector("canvas"), block.id, atlas);
       slotEls[selectedSlot].querySelector(".name").textContent = block.jp;
@@ -473,6 +597,20 @@
     { out: DOOR_ID_BASE, outN: 1, in: [[B.PLANK, 3]] },
     { out: B.FENCE_PLANK, outN: 2, in: [[B.PLANK, 2]] },
     { out: B.GLASS_PANE, outN: 4, in: [[B.GLASS, 2]] },
+    { out: B.PURPUR, outN: 4, in: [[B.CHORUS_FLOWER, 1]] },
+    // 防具 (本家準拠の素材数。作業台が必要)
+    { out: I.IRON_HELMET, outN: 1, in: [[I.IRON_INGOT, 5]] },
+    { out: I.IRON_CHESTPLATE, outN: 1, in: [[I.IRON_INGOT, 8]] },
+    { out: I.IRON_LEGGINGS, outN: 1, in: [[I.IRON_INGOT, 7]] },
+    { out: I.IRON_BOOTS, outN: 1, in: [[I.IRON_INGOT, 4]] },
+    { out: I.GOLD_HELMET, outN: 1, in: [[I.GOLD_INGOT, 5]] },
+    { out: I.GOLD_CHESTPLATE, outN: 1, in: [[I.GOLD_INGOT, 8]] },
+    { out: I.GOLD_LEGGINGS, outN: 1, in: [[I.GOLD_INGOT, 7]] },
+    { out: I.GOLD_BOOTS, outN: 1, in: [[I.GOLD_INGOT, 4]] },
+    { out: I.DIAMOND_HELMET, outN: 1, in: [[I.DIAMOND, 5]] },
+    { out: I.DIAMOND_CHESTPLATE, outN: 1, in: [[I.DIAMOND, 8]] },
+    { out: I.DIAMOND_LEGGINGS, outN: 1, in: [[I.DIAMOND, 7]] },
+    { out: I.DIAMOND_BOOTS, outN: 1, in: [[I.DIAMOND, 4]] },
   ];
 
   // 色付き羊毛: 羊毛 1 → 各色 1
@@ -612,7 +750,8 @@
   // 道具レシピは作業台の近く (半径4ブロック以内) でしかクラフトできない
   // (クリエイティブでは制限なし)
   function recipeNeedsTable(recipe) {
-    return !!getDef(recipe.out).tool;
+    const def = getDef(recipe.out);
+    return !!(def.tool || def.armor);
   }
   function nearCraftingTable() {
     const px = Math.floor(player.pos[0]), py = Math.floor(player.pos[1]), pz = Math.floor(player.pos[2]);
@@ -656,17 +795,22 @@
         el.style.display = "none";
         return;
       }
+      // 装備中の防具は所持数 0 でも表示し, クリックで外せるようにする
+      const def = getDef(id);
+      const equipped = !!(def && def.armor && equippedArmor[def.armor.slot] &&
+        equippedArmor[def.armor.slot].id === id);
+      el.classList.toggle("equipped", equipped);
       if (gameMode === "creative") {
-        badge.textContent = "";
+        badge.textContent = equipped ? "装備中" : "";
         el.style.opacity = "1";
         el.style.display = "";
         visible++;
       } else {
         const c = invCounts.get(id) || 0;
-        badge.textContent = c > 0 ? String(c) : "";
-        el.style.display = c > 0 ? "" : "none";
+        badge.textContent = equipped ? "装備中" : (c > 0 ? String(c) : "");
+        el.style.display = (c > 0 || equipped) ? "" : "none";
         el.style.opacity = "1";
-        if (c > 0) visible++;
+        if (c > 0 || equipped) visible++;
       }
     });
     // 何も持っていないときの案内
@@ -1349,6 +1493,31 @@
     }
   }
 
+  // エンドシティ: 最上階の宝箱に初回接近時に一度だけ宝を詰める
+  let endCityLooted = new Set();
+  try {
+    endCityLooted = new Set(JSON.parse(localStorage.getItem("mcjs_endcity_" + seed) || "[]"));
+  } catch (e) { /* ignore */ }
+  function updateEndCityLoot() {
+    if (!world.isInEnd(player.pos[0], player.pos[2])) return;
+    const c = world.endCityNear(player.pos[0], player.pos[2]);
+    if (!c) return;
+    const key = c.cx + "," + c.cz;
+    if (endCityLooted.has(key)) return;
+    const [chx, chy, chz] = c.chest;
+    const dx = player.pos[0] - chx, dy = player.pos[1] - chy, dz = player.pos[2] - chz;
+    if (dx * dx + dy * dy + dz * dz > 8 * 8) return;
+    if (world.getBlock(chx, chy, chz) !== B.CHEST) return;
+    endCityLooted.add(key);
+    localStorage.setItem("mcjs_endcity_" + seed, JSON.stringify([...endCityLooted]));
+    const chest = chestAt([chx, chy, chz].join(","));
+    chest.set(I.DIAMOND, 2 + ((Math.random() * 3) | 0));
+    chest.set(I.ENDER_PEARL, 3 + ((Math.random() * 3) | 0));
+    chest.set(I.GOLD_INGOT, 4 + ((Math.random() * 4) | 0));
+    chest.set(B.PURPUR, 16);
+    showToast("🏯 エンドシティの宝箱を見つけた!");
+  }
+
   function makeItemCell(id, n, onClick) {
     const el = document.createElement("div");
     el.className = "inv-item";
@@ -1720,7 +1889,7 @@
 
   function endPortalFrameCoords() {
     const { x: sx, z: sz, y: sy } = STRONGHOLD;
-    const py = sy + 1;
+    const py = sy + 2;   // 高台の上 (world.js の stampStronghold と合わせる)
     const coords = [];
     for (let dz = -2; dz <= 2; dz++) {
       for (let dx = -2; dx <= 2; dx++) {
@@ -1746,7 +1915,7 @@
       ([x, y, z]) => world.getBlock(x, y, z) === B.END_PORTAL_FRAME_EYE);
     if (!filled) return;
     const { x: sx, z: sz, y: sy } = STRONGHOLD;
-    const py = sy + 1;
+    const py = sy + 2;   // 高台の上 (world.js の stampStronghold と合わせる)
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         world.setBlock(sx + dx, py, sz + dz, B.END_PORTAL);
@@ -1765,16 +1934,25 @@
 
   function enterEnd() {
     endReturnPos = [...player.pos];
-    const { x: ex, y: ey, z: ez } = END;
+    const { x: ex, y: ey, z: ez, plateau } = END;
     // 浮島とその周辺チャンクを先に同期生成してから送る (奈落に落とさないため)
-    for (let cz = (ez - 32) >> 4; cz <= (ez + 32) >> 4; cz++) {
-      for (let cx = (ex - 32) >> 4; cx <= (ex + 32) >> 4; cx++) {
+    for (let cz = (ez - 64) >> 4; cz <= (ez + 64) >> 4; cz++) {
+      for (let cx = (ex - 64) >> 4; cx <= (ex + 64) >> 4; cx++) {
         world.generateChunk(cx, cz);
       }
     }
-    player.pos = [ex + 0.5, ey + 3, ez - 8 + 0.5];
+    player.pos = [ex + 0.5, ey + plateau + 3, ez - 12 + 0.5];
     player.vel = [0, 0, 0];
     player.flying = false;
+    if (dragonDefeated) {
+      // 討伐済みなら泉のポータルが開いていることを保証する (旧セーブの移行も兼ねる)
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dz === 0) continue;
+          world.setBlock(ex + dx, ey + plateau + 2, ez + dz, B.END_PORTAL);
+        }
+      }
+    }
     if (!dragonDefeated && !mobs.dragon) {
       mobs.dragon = new Dragon(ex, ey, ez);
       showToast("🌌 ジ・エンドへ渡った… 🐉 エンダードラゴンが待ち構えている!");
@@ -1786,11 +1964,21 @@
     sound.blip(200, 0.6, "sine", 0.3);
   }
 
-  // 目玉のクリスタルを破壊したときの演出 (地形は壊さない, 見た目と音のみ)
+  // 目玉のクリスタルを破壊したときの爆発 (地形は壊さない。近くにいると爆風ダメージ)
   function explodeEndCrystal(x, y, z) {
     spawnPuff(x + 0.5, y + 0.5, z + 0.5, [1, 0.7, 1]);
     spawnPuff(x + 0.5, y + 0.5, z + 0.5, [0.8, 0.3, 0.9]);
     sound.blip(150, 0.35, "sawtooth", 0.3);
+    const dx = player.pos[0] - (x + 0.5);
+    const dy = player.pos[1] - (y + 0.5);
+    const dz = player.pos[2] - (z + 0.5);
+    if (dx * dx + dy * dy + dz * dz < 5 * 5) {
+      player.takeDamage(5);
+      const pd = Math.hypot(dx, dz) || 1;
+      player.vel[0] += (dx / pd) * 7;
+      player.vel[2] += (dz / pd) * 7;
+      player.vel[1] = Math.max(player.vel[1], 5);
+    }
   }
 
   // ドラゴンを倒したときの勝利演出 (脱出ポータルを設置)
@@ -1801,17 +1989,19 @@
     mobs.dragon = null;
     dragonDefeated = true;
     localStorage.setItem("mcjs_dragon_" + seed, "1");
-    const { x: ex, y: ey, z: ez } = END;
-    // 中央に脱出ポータルを設置 (3x3 のエンドポータル + 黒曜石の縁)
-    for (let dz = -2; dz <= 2; dz++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        const id = Math.max(Math.abs(dx), Math.abs(dz)) <= 1 ? B.END_PORTAL : B.OBSIDIAN;
-        world.setBlock(ex + dx, ey + 1, ez + dz, id);
+    const { x: ex, y: ey, z: ez, plateau } = END;
+    // 中央の岩盤の泉に帰還ポータルを点火し, 頂上にドラゴンの卵を置く (本家準拠)
+    const py = ey + plateau;
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dz === 0) continue; // 中央は岩盤の柱
+        world.setBlock(ex + dx, py + 2, ez + dz, B.END_PORTAL);
       }
     }
+    world.setBlock(ex, py + 5, ez, B.DRAGON_EGG);
     spawnPuff(pos[0], pos[1], pos[2], [0.9, 0.5, 1]);
     sound.blip(120, 1.2, "sine", 0.4);
-    showToast("🐉✨ エンダードラゴンを討伐した! おめでとうございます! ✨🐉");
+    showToast("🐉✨ エンダードラゴンを討伐した! 泉のポータルが開いた ✨🐉");
   }
 
   function exitEnd() {
@@ -1887,7 +2077,7 @@
     const inEndNow = world.isInEnd(player.pos[0], player.pos[2]);
 
     // 奈落に落ちたら送還 (ジ・エンドの浮島の外に落下)
-    if (inEndNow && player.pos[1] < END.y - 30) {
+    if (inEndNow && player.pos[1] < END.y - 45) {
       player.takeDamage(4);
       exitEnd();
       return;
@@ -2614,7 +2804,8 @@
     if (world.isInEnd(player.pos[0], player.pos[2])) {
       return {
         sunDir: [0, 1, 0],
-        daylight: 0.42,
+        daylight: 0.55,
+        minLight: 0.42,
         zenith: [0.03, 0.012, 0.05],
         horizon: [0.09, 0.03, 0.11],
         fog: [0.05, 0.02, 0.08],
@@ -2781,6 +2972,8 @@
       updateMagmaDamage(dt);
       updateFortressLoot();
       updateDesertTempleLoot();
+      updateEndCityLoot();
+      updateBossBar();
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)
       const daylightNow = smoothstep(-0.1, 0.22, Math.sin(timeOfDay * Math.PI * 2));
@@ -2982,6 +3175,9 @@
     renderer,
     queueFluidCheck,
     queueFluidNeighbors,
+    equipArmor,
+    equippedArmor,
+    addItem,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());
