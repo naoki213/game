@@ -228,13 +228,19 @@
       }
       durEl.style.display = showDur ? "block" : "none";
 
+      const nameEl = slotEls[i].querySelector(".name");
       if (gameMode === "creative") {
         countEl.textContent = "";
+        iconEl.style.visibility = "visible";
+        nameEl.style.visibility = "visible";
         iconEl.style.opacity = "1";
       } else {
+        // サバイバル: 持っていないアイテムはスロットに表示しない (空に見える)
         const c = invCounts.get(id) || 0;
         countEl.textContent = c > 0 ? String(c) : "";
-        iconEl.style.opacity = c > 0 ? "1" : "0.35";
+        iconEl.style.visibility = c > 0 ? "visible" : "hidden";
+        nameEl.style.visibility = c > 0 ? "visible" : "hidden";
+        iconEl.style.opacity = "1";
       }
     }
   }
@@ -385,13 +391,30 @@
   }
   applyModeUI();
 
-  // 新しいワールドの生成 (N キー / ポーズ画面のボタン, スマホでも使えるように)
+  // 新しいワールドの生成 (N キー / ポーズ画面のボタン)。
+  // prompt() はスマホのフルスクリーン中にブラウザが無視するため,
+  // ページ内のモーダルダイアログで入力を受け付ける
+  const newWorldModal = document.createElement("div");
+  newWorldModal.id = "newworld-modal";
+  newWorldModal.className = "hidden";
+  newWorldModal.innerHTML =
+    '<div class="nw-inner">' +
+    '<h2>🌍 新しいワールドを作る</h2>' +
+    '<p>シード値を入力してください (空欄でランダム)。<br>現在のワールドは保存されたままです。</p>' +
+    '<input type="text" id="nw-seed" placeholder="シード値 (任意)" autocomplete="off">' +
+    '<div class="nw-buttons">' +
+    '<button id="nw-create">作成</button>' +
+    '<button id="nw-cancel">キャンセル</button>' +
+    "</div></div>";
+  document.body.appendChild(newWorldModal);
+
   function startNewWorldFlow() {
     document.exitPointerLock();
-    const input = prompt(
-      "新しいワールドのシード値を入力してください (空欄でランダム)\n" +
-      "※ 現在のワールドは保存されたままです");
-    if (input === null) return;
+    newWorldModal.classList.remove("hidden");
+    document.getElementById("nw-seed").value = "";
+  }
+  function createNewWorld() {
+    const input = document.getElementById("nw-seed").value;
     let newSeed;
     if (input.trim() === "") {
       newSeed = (Math.random() * 0x7fffffff) | 0;
@@ -406,6 +429,13 @@
     localStorage.setItem("mcjs_seed", String(newSeed));
     location.reload();
   }
+  document.getElementById("nw-create").addEventListener("click", createNewWorld);
+  document.getElementById("nw-cancel").addEventListener("click", () => {
+    newWorldModal.classList.add("hidden");
+  });
+  newWorldModal.addEventListener("click", (e) => {
+    if (e.target === newWorldModal) newWorldModal.classList.add("hidden");
+  });
   document.getElementById("newworld-btn").addEventListener("click", startNewWorldFlow);
 
   function updateSurvivalUI(dt) {
@@ -1489,6 +1519,40 @@
     for (const [ddx, ddz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
       if (world.getBlock(t.cx + ddx, gy - 2, t.cz + ddz) === B.TNT) {
         igniteTNT(t.cx + ddx, gy - 2, t.cz + ddz, 1.0 + Math.random() * 0.6);
+      }
+    }
+  }
+
+  // 村の民家のチェスト: 初回接近時に一度だけ生活用品を詰める
+  let villageChestLooted = new Set();
+  try {
+    villageChestLooted = new Set(JSON.parse(localStorage.getItem("mcjs_villagechest_" + seed) || "[]"));
+  } catch (e) { /* ignore */ }
+  function updateVillageChestLoot() {
+    const gx = Math.floor(player.pos[0] / VILLAGE_GRID);
+    const gz = Math.floor(player.pos[2] / VILLAGE_GRID);
+    for (let dgz = -1; dgz <= 1; dgz++) {
+      for (let dgx = -1; dgx <= 1; dgx++) {
+        const v = world.villageInCell(gx + dgx, gz + dgz);
+        if (!v) continue;
+        for (const b of v.buildings) {
+          if (!b.chest) continue;
+          const [cx, cy, cz] = b.chest;
+          const key = cx + "," + cy + "," + cz;
+          if (villageChestLooted.has(key)) continue;
+          const dx = player.pos[0] - cx, dy = player.pos[1] - cy, dz = player.pos[2] - cz;
+          if (dx * dx + dy * dy + dz * dz > 6 * 6) continue;
+          if (world.getBlock(cx, cy, cz) !== B.CHEST) continue;
+          villageChestLooted.add(key);
+          localStorage.setItem("mcjs_villagechest_" + seed, JSON.stringify([...villageChestLooted]));
+          const c = chestAt([cx, cy, cz].join(","));
+          c.set(I.BREAD, 2 + ((Math.random() * 3) | 0));
+          c.set(I.SEEDS, 2 + ((Math.random() * 3) | 0));
+          c.set(B.PLANK, 4 + ((Math.random() * 5) | 0));
+          c.set(B.TORCH, 3);
+          if (Math.random() < 0.35) c.set(I.IRON_INGOT, 1 + ((Math.random() * 2) | 0));
+          showToast("🏠 民家のチェストに生活用品が入っていた");
+        }
       }
     }
   }
@@ -2973,6 +3037,7 @@
       updateFortressLoot();
       updateDesertTempleLoot();
       updateEndCityLoot();
+      updateVillageChestLoot();
       updateBossBar();
 
       // モブ更新 (夜はゾンビ, 昼は動物が湧く。雨の日は敵モブが燃えない)

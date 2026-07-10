@@ -873,7 +873,12 @@ class World {
           const bz = Math.round(cz + Math.sin(ang) * dist) - (d >> 1);
           const bh = this.columnInfo(bx + (w >> 1), bz + (d >> 1)).h;
           if (bh <= WATER_LEVEL || bh > WATER_LEVEL + 20) continue;
-          buildings.push({ type: "house", x: bx, z: bz, w, d, door: i % 4 });
+          const b = { type: "house", x: bx, z: bz, w, d, door: i % 4 };
+          // 半分ほどの家には生活用品の入ったチェストを置く (中身は main.js が初回接近時に詰める)
+          if (hash2(gx * 31 + i, gz * 17 + i, this.seed ^ 0xc4e5) < 0.5) {
+            b.chest = [bx + w - 2, bh + 1, bz + d - 2];
+          }
+          buildings.push(b);
         }
 
         // 教会: 村の北側, 尖塔 (鐘楼) つき。ドアは南向き固定 (村の中心を向く)
@@ -1020,6 +1025,9 @@ class World {
 
       // 室内の松明
       set(midX, floorY + 1, midZ, B.TORCH);
+
+      // 生活用品のチェスト (villageInCell で決めた家のみ)
+      if (b.chest) set(b.chest[0], b.chest[1], b.chest[2], B.CHEST);
       return;
     }
 
