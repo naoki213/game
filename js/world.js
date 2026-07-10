@@ -1362,8 +1362,24 @@ class World {
       set(tx, sy + 3, tz, B.TORCH);
     }
 
-    // --- エンドポータルの枠 (5x5, 角抜き = 12 ブロック) ---
-    const py = sy + 1;
+    // --- 本家風のポータルの間: 溶岩の堀に囲まれた石レンガの高台の上に
+    // エンドポータルの枠が乗る。南側の橋から渡り, 高台の縁に上がって
+    // フレームを飛び越えて中に入る ---
+    for (let dz = -R + 1; dz <= R - 1; dz++) {
+      for (let dx = -R + 1; dx <= R - 1; dx++) {
+        const m = Math.max(Math.abs(dx), Math.abs(dz));
+        // 溶岩の堀 (高台の周りの1マス。南の橋の部分は床を残す)
+        if (m === 4 && !(Math.abs(dx) <= 1 && dz === 4)) {
+          set(sx + dx, sy, sz + dz, B.LAVA_BLOCK);
+        }
+        // 高台 (7x7, 角を落とした円盤)
+        if (m <= 3 && !(Math.abs(dx) === 3 && Math.abs(dz) === 3)) {
+          set(sx + dx, sy + 1, sz + dz, B.STONE_BRICK);
+        }
+      }
+    }
+    // エンドポータルの枠 (5x5, 角抜き = 12 ブロック) を高台の上に
+    const py = sy + 2;
     for (let dz = -2; dz <= 2; dz++) {
       for (let dx = -2; dx <= 2; dx++) {
         const m = Math.max(Math.abs(dx), Math.abs(dz));
@@ -1371,6 +1387,14 @@ class World {
           set(sx + dx, py, sz + dz, B.END_PORTAL_FRAME);
         }
       }
+    }
+    // 南側の階段 (橋から高台へジャンプなしで上れる)
+    for (let dx = -1; dx <= 1; dx++) {
+      set(sx + dx, sy + 1, sz + 4, STAIR_ID_BASE + 3 * 4 + 2); // 石レンガの階段 (南向き)
+    }
+    // 高台の四隅の飾り (模様入り石レンガ)
+    for (const [cdx, cdz] of [[-3, -2], [3, -2], [-3, 2], [3, 2], [-2, -3], [2, -3], [-2, 3], [2, 3]]) {
+      set(sx + cdx, sy + 1, sz + cdz, B.CHISELED_STONE_BRICK);
     }
   }
 

@@ -240,6 +240,19 @@ const I = {
   BLAZE_ROD: 184,
   COMPASS: 185,
   BONE: 188,   // 186-187 は B.WITHER_SKULL / B.NETHER_STAR で使用済み
+  // 防具 (アイテムはチャンクに保存されないため 256 以上の ID を使える)
+  IRON_HELMET: 260,
+  IRON_CHESTPLATE: 261,
+  IRON_LEGGINGS: 262,
+  IRON_BOOTS: 263,
+  GOLD_HELMET: 264,
+  GOLD_CHESTPLATE: 265,
+  GOLD_LEGGINGS: 266,
+  GOLD_BOOTS: 267,
+  DIAMOND_HELMET: 268,
+  DIAMOND_CHESTPLATE: 269,
+  DIAMOND_LEGGINGS: 270,
+  DIAMOND_BOOTS: 271,
   // 189-212 は階段ブロック (B側) で使用済みのため 213 以降を使う
   BUCKET: 213,
   WATER_BUCKET: 214,
@@ -442,6 +455,10 @@ const TILE = {
   CHORUS_FLOWER: 221,
   PURPUR: 222,
   DRAGON_EGG: 223,
+  // 防具アイコン (素材 x 部位)
+  HELMET_IRON: 224, CHESTPLATE_IRON: 225, LEGGINGS_IRON: 226, BOOTS_IRON: 227,
+  HELMET_GOLD: 228, CHESTPLATE_GOLD: 229, LEGGINGS_GOLD: 230, BOOTS_GOLD: 231,
+  HELMET_DIAMOND: 232, CHESTPLATE_DIAMOND: 233, LEGGINGS_DIAMOND: 234, BOOTS_DIAMOND: 235,
 };
 
 // 各ブロックの属性
@@ -738,6 +755,29 @@ defItem(I.WATER_BUCKET, "water_bucket", "水入りバケツ", TILE.WATER_BUCKET,
   { kind: "fluid_bucket", fluid: B.WATER });
 defItem(I.LAVA_BUCKET, "lava_bucket", "マグマ入りバケツ", TILE.LAVA_BUCKET,
   { kind: "fluid_bucket", fluid: B.LAVA_BLOCK });
+
+// --- 防具: 頭/胴/脚/足の4部位 x 鉄/金/ダイヤの3素材。装備すると防御ポイントに
+// 応じてダメージが軽減され (1pt = 4%軽減, 最大80%), 被弾のたびに耐久が減って
+// 0 になると壊れる (main.js の equipArmor / player.takeDamage 参照) ---
+const ARMOR_DEFS = [
+  // [id, name, jp, tile, slot, points, durability]
+  [I.IRON_HELMET, "iron_helmet", "鉄のヘルメット", TILE.HELMET_IRON, "head", 2, 165],
+  [I.IRON_CHESTPLATE, "iron_chestplate", "鉄のチェストプレート", TILE.CHESTPLATE_IRON, "chest", 6, 240],
+  [I.IRON_LEGGINGS, "iron_leggings", "鉄のレギンス", TILE.LEGGINGS_IRON, "legs", 5, 225],
+  [I.IRON_BOOTS, "iron_boots", "鉄のブーツ", TILE.BOOTS_IRON, "feet", 2, 195],
+  [I.GOLD_HELMET, "gold_helmet", "金のヘルメット", TILE.HELMET_GOLD, "head", 2, 77],
+  [I.GOLD_CHESTPLATE, "gold_chestplate", "金のチェストプレート", TILE.CHESTPLATE_GOLD, "chest", 5, 112],
+  [I.GOLD_LEGGINGS, "gold_leggings", "金のレギンス", TILE.LEGGINGS_GOLD, "legs", 3, 105],
+  [I.GOLD_BOOTS, "gold_boots", "金のブーツ", TILE.BOOTS_GOLD, "feet", 1, 91],
+  [I.DIAMOND_HELMET, "diamond_helmet", "ダイヤのヘルメット", TILE.HELMET_DIAMOND, "head", 3, 363],
+  [I.DIAMOND_CHESTPLATE, "diamond_chestplate", "ダイヤのチェストプレート", TILE.CHESTPLATE_DIAMOND, "chest", 8, 528],
+  [I.DIAMOND_LEGGINGS, "diamond_leggings", "ダイヤのレギンス", TILE.LEGGINGS_DIAMOND, "legs", 6, 495],
+  [I.DIAMOND_BOOTS, "diamond_boots", "ダイヤのブーツ", TILE.BOOTS_DIAMOND, "feet", 3, 429],
+];
+for (const [id, name, jp, tile, slot, points, durability] of ARMOR_DEFS) {
+  defItem(id, name, jp, tile);
+  ITEMS[id].armor = { slot, points, durability };
+}
 
 // --- オリジナル建築ブロック ---
 

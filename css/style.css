@@ -184,6 +184,54 @@ html, body {
 .bubble { color: #9fd6ff; }
 .bubble.empty { opacity: 0.15; }
 
+/* ---- 防御ポイント (盾アイコン) ---- */
+#armorbar {
+  display: flex;
+  gap: 1px;
+  font-size: 14px;
+  padding: 0 4px;
+  margin-bottom: 2px;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.7);
+}
+#armorbar .shield { opacity: 0.18; filter: grayscale(1); }
+#armorbar .shield.on { opacity: 1; filter: none; }
+
+/* 装備中の防具 (持ち物画面で青い枠) */
+.inv-item.equipped { outline: 2px solid #6fc3ff; border-radius: 6px; }
+
+/* ---- ボス HP バー (エンダードラゴン / ウィザー) ---- */
+#bossbar {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, 70vw);
+  z-index: 30;
+  display: none;
+  text-align: center;
+  pointer-events: none;
+}
+.boss-label {
+  color: #e9c8ff;
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+  margin-bottom: 3px;
+}
+.boss-track {
+  height: 10px;
+  background: rgba(20, 8, 30, 0.75);
+  border: 2px solid #2a1440;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.boss-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #b13cf0, #e05ce8);
+  transition: width 0.15s;
+}
+
 /* ---- toast ---- */
 #toast {
   position: absolute;

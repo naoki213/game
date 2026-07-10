@@ -413,9 +413,9 @@ class Dragon {
     this.dead = false;
   }
 
-  // クリスタルが生きているだけ緩やかに回復する
+  // クリスタルが生きているだけ緩やかに回復する (とどめの一撃は回復で覆らない)
   healFromCrystals(dt, crystalCount) {
-    if (crystalCount <= 0) return;
+    if (crystalCount <= 0 || this.health <= 0) return;
     this.health = Math.min(this.maxHealth, this.health + crystalCount * 0.4 * dt);
   }
 

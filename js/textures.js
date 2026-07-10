@@ -341,6 +341,53 @@ function buildTextureAtlas(seed) {
     });
   }
 
+  // --- 防具 (ヘルメット / チェストプレート / レギンス / ブーツ x 鉄/金/ダイヤ) ---
+  const armorMats = [
+    [[225, 225, 230], TILE.HELMET_IRON, TILE.CHESTPLATE_IRON, TILE.LEGGINGS_IRON, TILE.BOOTS_IRON],
+    [[250, 205, 60], TILE.HELMET_GOLD, TILE.CHESTPLATE_GOLD, TILE.LEGGINGS_GOLD, TILE.BOOTS_GOLD],
+    [[95, 230, 225], TILE.HELMET_DIAMOND, TILE.CHESTPLATE_DIAMOND, TILE.LEGGINGS_DIAMOND, TILE.BOOTS_DIAMOND],
+  ];
+  for (const [mat, helmT, chestT, legT, bootT] of armorMats) {
+    const m = (v = 1) => px(mat[0] * v, mat[1] * v, mat[2] * v, jitter(1, 0.05));
+    // ヘルメット: 丸いドーム + 顔の開口
+    paintTile(helmT, (x, y) => {
+      const inDome = y >= 3 && y <= 11 && x >= 3 && x <= 12 &&
+        !(y <= 4 && (x <= 4 || x >= 11));
+      if (!inDome) return [0, 0, 0, 0];
+      if (y >= 7 && y <= 11 && x >= 5 && x <= 10) return px(30, 30, 36, 1); // 顔の開口
+      const rim = y === 11 || x === 3 || x === 12 || y === 3;
+      return m(rim ? 0.8 : 1);
+    });
+    // チェストプレート: 肩 + 胴体, 首の開口
+    paintTile(chestT, (x, y) => {
+      if (y < 2 || y > 13) return [0, 0, 0, 0];
+      if (y <= 3 && x >= 6 && x <= 9) return [0, 0, 0, 0]; // 首の開口
+      const shoulder = y <= 5 && ((x >= 1 && x <= 4) || (x >= 11 && x <= 14));
+      const torso = y >= 4 && y <= 13 && x >= 4 && x <= 11;
+      const collar = y <= 3 && (x === 5 || x === 10);
+      if (!shoulder && !torso && !collar) return [0, 0, 0, 0];
+      const center = x === 7 || x === 8; // 中央の継ぎ目を少し暗く
+      return m(center ? 0.85 : (y === 13 || shoulder ? 0.92 : 1));
+    });
+    // レギンス: ベルト + 2本の脚
+    paintTile(legT, (x, y) => {
+      const waist = y >= 2 && y <= 4 && x >= 3 && x <= 12;
+      const legL = y >= 5 && y <= 13 && x >= 3 && x <= 6;
+      const legR = y >= 5 && y <= 13 && x >= 9 && x <= 12;
+      if (!waist && !legL && !legR) return [0, 0, 0, 0];
+      return m(y === 2 ? 0.75 : y >= 12 ? 0.88 : 1);
+    });
+    // ブーツ: 2 足のすね + つま先
+    paintTile(bootT, (x, y) => {
+      const shinL = y >= 5 && y <= 12 && x >= 2 && x <= 5;
+      const shinR = y >= 5 && y <= 12 && x >= 10 && x <= 13;
+      const toeL = y >= 10 && y <= 12 && x === 6;
+      const toeR = y >= 10 && y <= 12 && x === 9;
+      if (!shinL && !shinR && !toeL && !toeR) return [0, 0, 0, 0];
+      return m(y >= 12 ? 0.75 : y === 5 ? 0.85 : 1);
+    });
+  }
+
   // --- ハサミ ---
   paintTile(TILE.SHEARS, (x, y) => {
     const blade1 = Math.abs(x - y) <= 1 && x >= 3 && x <= 12;
