@@ -567,18 +567,19 @@
 
   const RECIPES = [
     { out: B.PLANK, outN: 4, in: [[B.LOG, 1]] },
-    { out: B.TORCH, outN: 4, in: [[B.PLANK, 2]] },
-    { out: B.TORCH, outN: 8, in: [[B.COAL_ORE, 1], [B.PLANK, 1]] },
-    // 道具
-    { out: I.WOOD_PICK, outN: 1, in: [[B.PLANK, 3]] },
-    { out: I.STONE_PICK, outN: 1, in: [[B.COBBLE, 3], [B.PLANK, 2]] },
-    { out: I.IRON_PICK, outN: 1, in: [[I.IRON_INGOT, 3], [B.PLANK, 2]] },
-    { out: I.DIAMOND_PICK, outN: 1, in: [[I.DIAMOND, 3], [B.PLANK, 2]] },
-    { out: I.WOOD_SWORD, outN: 1, in: [[B.PLANK, 2]] },
-    { out: I.BOW, outN: 1, in: [[B.PLANK, 3]] },
-    { out: I.STONE_SWORD, outN: 1, in: [[B.COBBLE, 2], [B.PLANK, 1]] },
-    { out: I.IRON_SWORD, outN: 1, in: [[I.IRON_INGOT, 2], [B.PLANK, 1]] },
-    { out: I.DIAMOND_SWORD, outN: 1, in: [[I.DIAMOND, 2], [B.PLANK, 1]] },
+    { out: I.STICK, outN: 4, in: [[B.PLANK, 2]] },
+    { out: B.CRAFTING_TABLE, outN: 1, in: [[B.PLANK, 4]] },
+    { out: B.TORCH, outN: 4, in: [[B.COAL_ORE, 1], [I.STICK, 1]] },
+    // 道具 (本家同様: ピッケル/斧は材料3+棒2, 剣は材料2+棒1。作業台が必要)
+    { out: I.WOOD_PICK, outN: 1, in: [[B.PLANK, 3], [I.STICK, 2]] },
+    { out: I.STONE_PICK, outN: 1, in: [[B.COBBLE, 3], [I.STICK, 2]] },
+    { out: I.IRON_PICK, outN: 1, in: [[I.IRON_INGOT, 3], [I.STICK, 2]] },
+    { out: I.DIAMOND_PICK, outN: 1, in: [[I.DIAMOND, 3], [I.STICK, 2]] },
+    { out: I.WOOD_SWORD, outN: 1, in: [[B.PLANK, 2], [I.STICK, 1]] },
+    { out: I.BOW, outN: 1, in: [[I.STICK, 3], [B.WOOL, 3]] },
+    { out: I.STONE_SWORD, outN: 1, in: [[B.COBBLE, 2], [I.STICK, 1]] },
+    { out: I.IRON_SWORD, outN: 1, in: [[I.IRON_INGOT, 2], [I.STICK, 1]] },
+    { out: I.DIAMOND_SWORD, outN: 1, in: [[I.DIAMOND, 2], [I.STICK, 1]] },
     // 精錬 (木材を燃料に)
     { out: I.IRON_INGOT, outN: 1, in: [[B.IRON_ORE, 1], [B.PLANK, 1]] },
     { out: I.GOLD_INGOT, outN: 1, in: [[B.GOLD_ORE, 1], [B.PLANK, 1]] },
@@ -622,8 +623,7 @@
     { out: STAIR_ID_BASE + 4 * 4, outN: 2, in: [[B.BRICK, 3]] },
     { out: STAIR_ID_BASE + 5 * 4, outN: 2, in: [[B.SANDSTONE, 3]] },
     { out: I.BUCKET, outN: 1, in: [[I.IRON_INGOT, 3]] },
-    // 建具・作業台 (north 向きが基本の見た目で、設置時にプレイヤーの向きへ自動回転する)
-    { out: B.CRAFTING_TABLE, outN: 1, in: [[B.PLANK, 4]] },
+    // 建具 (north 向きが基本の見た目で、設置時にプレイヤーの向きへ自動回転する)
     { out: DOOR_ID_BASE, outN: 1, in: [[B.PLANK, 3]] },
     { out: B.FENCE_PLANK, outN: 2, in: [[B.PLANK, 2]] },
     { out: B.GLASS_PANE, outN: 4, in: [[B.GLASS, 2]] },
@@ -706,28 +706,28 @@
     RECIPES.push({ out: CONCRETE_ID_BASE + i, outN: 4, in: [[B.STONE, 2], [wool, 1]] });
   });
 
-  // 追加の道具
+  // 追加の道具 (本家同様: 斧は材料3+棒2, シャベルは材料1+棒2, クワは材料2+棒2)
   RECIPES.push(
     // 斧
-    { out: I.WOOD_AXE, outN: 1, in: [[B.PLANK, 3]] },
-    { out: I.STONE_AXE, outN: 1, in: [[B.COBBLE, 3], [B.PLANK, 2]] },
-    { out: I.IRON_AXE, outN: 1, in: [[I.IRON_INGOT, 3], [B.PLANK, 2]] },
-    { out: I.DIAMOND_AXE, outN: 1, in: [[I.DIAMOND, 3], [B.PLANK, 2]] },
+    { out: I.WOOD_AXE, outN: 1, in: [[B.PLANK, 3], [I.STICK, 2]] },
+    { out: I.STONE_AXE, outN: 1, in: [[B.COBBLE, 3], [I.STICK, 2]] },
+    { out: I.IRON_AXE, outN: 1, in: [[I.IRON_INGOT, 3], [I.STICK, 2]] },
+    { out: I.DIAMOND_AXE, outN: 1, in: [[I.DIAMOND, 3], [I.STICK, 2]] },
     // シャベル
-    { out: I.WOOD_SHOVEL, outN: 1, in: [[B.PLANK, 2]] },
-    { out: I.STONE_SHOVEL, outN: 1, in: [[B.COBBLE, 1], [B.PLANK, 2]] },
-    { out: I.IRON_SHOVEL, outN: 1, in: [[I.IRON_INGOT, 1], [B.PLANK, 2]] },
-    { out: I.DIAMOND_SHOVEL, outN: 1, in: [[I.DIAMOND, 1], [B.PLANK, 2]] },
+    { out: I.WOOD_SHOVEL, outN: 1, in: [[B.PLANK, 1], [I.STICK, 2]] },
+    { out: I.STONE_SHOVEL, outN: 1, in: [[B.COBBLE, 1], [I.STICK, 2]] },
+    { out: I.IRON_SHOVEL, outN: 1, in: [[I.IRON_INGOT, 1], [I.STICK, 2]] },
+    { out: I.DIAMOND_SHOVEL, outN: 1, in: [[I.DIAMOND, 1], [I.STICK, 2]] },
     // クワ
-    { out: I.WOOD_HOE, outN: 1, in: [[B.PLANK, 3]] },
-    { out: I.STONE_HOE, outN: 1, in: [[B.COBBLE, 2], [B.PLANK, 2]] },
-    { out: I.IRON_HOE, outN: 1, in: [[I.IRON_INGOT, 2], [B.PLANK, 2]] },
-    { out: I.DIAMOND_HOE, outN: 1, in: [[I.DIAMOND, 2], [B.PLANK, 2]] },
+    { out: I.WOOD_HOE, outN: 1, in: [[B.PLANK, 2], [I.STICK, 2]] },
+    { out: I.STONE_HOE, outN: 1, in: [[B.COBBLE, 2], [I.STICK, 2]] },
+    { out: I.IRON_HOE, outN: 1, in: [[I.IRON_INGOT, 2], [I.STICK, 2]] },
+    { out: I.DIAMOND_HOE, outN: 1, in: [[I.DIAMOND, 2], [I.STICK, 2]] },
     // 金の道具 / その他
-    { out: I.GOLD_PICK, outN: 1, in: [[I.GOLD_INGOT, 3], [B.PLANK, 2]] },
-    { out: I.GOLD_SWORD, outN: 1, in: [[I.GOLD_INGOT, 2], [B.PLANK, 1]] },
+    { out: I.GOLD_PICK, outN: 1, in: [[I.GOLD_INGOT, 3], [I.STICK, 2]] },
+    { out: I.GOLD_SWORD, outN: 1, in: [[I.GOLD_INGOT, 2], [I.STICK, 1]] },
     { out: I.SHEARS, outN: 1, in: [[I.IRON_INGOT, 2]] },
-    { out: I.FISHING_ROD, outN: 1, in: [[B.PLANK, 3], [B.WOOL, 1]] },
+    { out: I.FISHING_ROD, outN: 1, in: [[I.STICK, 3], [B.WOOL, 2]] },
     // エンダードラゴン討伐に向けて: エンダーパール + 火薬 → エンダーアイ
     { out: I.EYE_OF_ENDER, outN: 1, in: [[I.ENDER_PEARL, 1], [I.GUNPOWDER, 1]] },
     // ネザーへ渡るための道具と素材
@@ -774,7 +774,20 @@
     });
     row.append(icon, desc, btn);
     craftListEl.appendChild(row);
-    craftRows.push({ recipe, desc, btn });
+    craftRows.push({ recipe, desc, btn, row });
+  }
+
+  // クラフト検索: 出来上がるアイテム名 / 材料名のどちらかにマッチする行だけ表示
+  const craftSearchEl = document.getElementById("craft-search");
+  let craftFilter = "";
+  craftSearchEl.addEventListener("input", () => {
+    craftFilter = craftSearchEl.value.trim();
+    refreshCraftUI();
+  });
+  function craftRowMatches(recipe) {
+    if (!craftFilter) return true;
+    if (getDef(recipe.out).jp.includes(craftFilter)) return true;
+    return recipe.in.some(([id]) => getDef(id).jp.includes(craftFilter));
   }
 
   // 道具レシピは作業台の近く (半径4ブロック以内) でしかクラフトできない
@@ -799,7 +812,14 @@
 
   function refreshCraftUI() {
     const tableNearby = gameMode === "creative" || nearCraftingTable();
-    for (const { recipe, desc, btn } of craftRows) {
+    let visible = 0;
+    for (const { recipe, desc, btn, row } of craftRows) {
+      if (!craftRowMatches(recipe)) {
+        row.style.display = "none";
+        continue;
+      }
+      row.style.display = "";
+      visible++;
       const parts = recipe.in.map(([id, n]) => {
         const have = invCounts.get(id) || 0;
         const cls = have >= n ? "" : ' class="lack"';
@@ -810,7 +830,15 @@
       desc.innerHTML = `${getDef(recipe.out).jp} ×${recipe.outN} ← ` + parts.join(" + ") + tableNote;
       btn.disabled = !canCraft(recipe);
     }
+    if (!craftEmptyNote) {
+      craftEmptyNote = document.createElement("div");
+      craftEmptyNote.className = "empty-note";
+      craftEmptyNote.textContent = "(該当するレシピがない)";
+      craftListEl.appendChild(craftEmptyNote);
+    }
+    craftEmptyNote.style.display = visible === 0 ? "" : "none";
   }
+  let craftEmptyNote = null;
 
   // インベントリのブロック一覧: サバイバルでは持っている物だけを表示
   let invEmptyNote = null;
