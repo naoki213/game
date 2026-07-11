@@ -1194,6 +1194,39 @@ function buildTextureAtlas(seed) {
     return px(150, 111, 66, jitter(1, 0.07));
   });
 
+  // かまど (石積みの箱。天板は丸石風, 側面は正面に焚き口がある石造り)
+  paintTile(TILE.FURNACE_TOP, (x, y) => {
+    const n = hash2(x, y, 0x7f31);
+    const v = 0.85 + n * 0.3;
+    return px(120 * v, 120 * v, 124 * v, jitter(1, 0.04));
+  });
+  const furnaceStone = (x, y) => {
+    const n = hash2(x, y, 0x7f32);
+    const v = 0.8 + n * 0.35;
+    return [110 * v, 110 * v, 114 * v];
+  };
+  paintTile(TILE.FURNACE_SIDE, (x, y) => {
+    // 消えている焚き口 (暗い穴)
+    if (y >= 5 && y <= 11 && x >= 4 && x <= 11) {
+      const rim = y === 5 || y === 11 || x === 4 || x === 11;
+      return rim ? px(70, 68, 66, 1) : px(20, 18, 18, 1);
+    }
+    const [r, g, b] = furnaceStone(x, y);
+    return px(r, g, b, jitter(1, 0.05));
+  });
+  paintTile(TILE.FURNACE_SIDE_LIT, (x, y) => {
+    // 点火中: 焚き口がオレンジに発光する
+    if (y >= 5 && y <= 11 && x >= 4 && x <= 11) {
+      const rim = y === 5 || y === 11 || x === 4 || x === 11;
+      if (rim) return px(90, 55, 30, 1);
+      const dx = x - 7.5, dy = y - 8, d = Math.hypot(dx, dy);
+      const core = Math.max(0, 1 - d / 4.5);
+      return px(255, 120 + core * 100, 40 + core * 80, jitter(1, 0.05));
+    }
+    const [r, g, b] = furnaceStone(x, y);
+    return px(r, g, b, jitter(1, 0.05));
+  });
+
   // --- モブの模様入りスキン ---
 
   // ゾンビの肌 (緑, まだらな腐敗の斑点)

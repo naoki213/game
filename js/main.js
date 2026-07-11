@@ -580,12 +580,10 @@
     { out: I.STONE_SWORD, outN: 1, in: [[B.COBBLE, 2], [I.STICK, 1]] },
     { out: I.IRON_SWORD, outN: 1, in: [[I.IRON_INGOT, 2], [I.STICK, 1]] },
     { out: I.DIAMOND_SWORD, outN: 1, in: [[I.DIAMOND, 2], [I.STICK, 1]] },
-    // 精錬 (木材を燃料に)
-    { out: I.IRON_INGOT, outN: 1, in: [[B.IRON_ORE, 1], [B.PLANK, 1]] },
-    { out: I.GOLD_INGOT, outN: 1, in: [[B.GOLD_ORE, 1], [B.PLANK, 1]] },
-    { out: B.GLASS, outN: 2, in: [[B.SAND, 2]] },
-    { out: B.STONE, outN: 2, in: [[B.COBBLE, 2]] },
+    // 精錬 (鉄/金インゴット・ガラス・石・滑石・ネザーレンガは
+    // かまど (SMELT_RECIPES) が必要。ここには残さない)
     { out: B.BRICK, outN: 2, in: [[B.STONE, 2]] },
+    { out: B.FURNACE, outN: 1, in: [[B.COBBLE, 8]] },
     { out: B.TNT, outN: 2, in: [[B.SAND, 4], [B.COAL_ORE, 1]] },
     { out: B.CHEST, outN: 1, in: [[B.PLANK, 8]] },
     { out: B.BED, outN: 1, in: [[B.WOOL, 3], [B.PLANK, 3]] },
@@ -599,8 +597,7 @@
     { out: B.GOLD_BLOCK, outN: 1, in: [[I.GOLD_INGOT, 4]] },
     { out: B.DIAMOND_BLOCK, outN: 1, in: [[I.DIAMOND, 4]] },
     { out: B.GLOWSTONE, outN: 1, in: [[B.TORCH, 4], [B.GLASS, 1]] },
-    // 石材バリエーション
-    { out: B.SMOOTH_STONE, outN: 1, in: [[B.STONE, 1]] },
+    // 石材バリエーション (滑らかな石はかまどで石を精錬して作る, SMELT_RECIPES 参照)
     { out: B.CRACKED_STONE_BRICK, outN: 1, in: [[B.STONE_BRICK, 1]] },
     { out: B.CHISELED_STONE_BRICK, outN: 2, in: [[B.STONE_BRICK, 2]] },
     { out: B.GRANITE, outN: 2, in: [[B.STONE, 1], [B.SAND, 1]] },
@@ -733,7 +730,7 @@
     // ネザーへ渡るための道具と素材
     { out: I.FLINT_AND_STEEL, outN: 1, in: [[I.IRON_INGOT, 1], [I.FLINT, 1]] },
     { out: B.QUARTZ, outN: 1, in: [[I.NETHER_QUARTZ, 1]] },
-    { out: B.NETHER_BRICK, outN: 2, in: [[B.NETHERRACK, 2], [B.COAL_ORE, 1]] },
+    // ネザーレンガはかまどでネザーラックを精錬して作る (SMELT_RECIPES 参照)
     // ナビゲーション
     { out: I.COMPASS, outN: 1, in: [[I.IRON_INGOT, 4]] },
   );
@@ -966,8 +963,8 @@
 
   document.addEventListener("pointerlockchange", () => {
     paused = document.pointerLockElement !== canvas;
-    // インベントリ / チェストを開いている間はポーズ画面を出さない
-    overlay.classList.toggle("hidden", !paused || inventoryOpen || chestOpen);
+    // インベントリ / チェスト / かまどを開いている間はポーズ画面を出さない
+    overlay.classList.toggle("hidden", !paused || inventoryOpen || chestOpen || furnaceOpen);
     if (paused) {
       keys.clear();
       heldButtons.clear();
@@ -979,6 +976,10 @@
       if (chestOpen) {
         chestOpen = false;
         chestModalEl.classList.add("hidden");
+      }
+      if (furnaceOpen) {
+        furnaceOpen = false;
+        furnaceModalEl.classList.add("hidden");
       }
     }
   });
@@ -992,13 +993,17 @@
   });
 
   document.addEventListener("keydown", (e) => {
-    // インベントリ / チェストが開いている間は E / Esc で閉じるだけ
+    // インベントリ / チェスト / かまどが開いている間は E / Esc で閉じるだけ
     if (inventoryOpen) {
       if (e.code === "KeyE" || e.code === "Escape") closeInventory();
       return;
     }
     if (chestOpen) {
       if (e.code === "KeyE" || e.code === "Escape") closeChest();
+      return;
+    }
+    if (furnaceOpen) {
+      if (e.code === "KeyE" || e.code === "Escape") closeFurnace();
       return;
     }
     if (paused) return;
@@ -1692,6 +1697,220 @@
     if (e.target === chestModalEl) closeChest();
   });
 
+  // ---------------- かまど (本家準拠の製錬: 燃料を消費しながら時間をかけて精錬) ----------------
+
+  // 精錬レシピ: [入力, 出力] (すべて 1 個 → 1 個, 1 回あたり 10 秒で本家と同じ)
+  const SMELT_TIME = 10;
+  const SMELT_RECIPES = new Map([
+    [B.IRON_ORE, I.IRON_INGOT],
+    [B.GOLD_ORE, I.GOLD_INGOT],
+    [B.SAND, B.GLASS],
+    [B.COBBLE, B.STONE],
+    [B.STONE, B.SMOOTH_STONE],
+    [B.NETHERRACK, B.NETHER_BRICK],
+  ]);
+  // 燃料の燃焼時間 (秒)。本家のティック数 (1 ティック=1/20秒) をそのまま秒に換算
+  const FUEL_VALUES = new Map([
+    [I.STICK, 5],
+    [B.PLANK, 15],
+    [B.LOG, 15],
+    [B.BIRCH_PLANK, 15], [B.DARK_PLANK, 15], [B.BIRCH_LOG, 15], [B.DARK_LOG, 15],
+    [B.COAL_ORE, 80],       // この世界では石炭鉱石そのものを燃料として使う (本家の石炭相当)
+    [B.COAL_BLOCK, 800],
+    [I.BLAZE_ROD, 120],
+    [I.LAVA_BUCKET, 1000],  // 消費すると空バケツが手元に戻る (本家準拠, 下記で特別処理)
+  ]);
+
+  const furnaces = new Map();   // "x,y,z" -> { input:{id,n}|null, fuel:{id,n}|null, output:{id,n}|null, cookT, burnT, burnTotal }
+  let furnacesDirty = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem("mcjs_furnaces_" + seed));
+    if (saved && typeof saved === "object") {
+      for (const key of Object.keys(saved)) {
+        const f = saved[key];
+        if (f && typeof f === "object") furnaces.set(key, f);
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  function furnaceAt(key) {
+    let f = furnaces.get(key);
+    if (!f) {
+      f = { input: null, fuel: null, output: null, cookT: 0, burnT: 0, burnTotal: 0 };
+      furnaces.set(key, f);
+    }
+    return f;
+  }
+
+  // かまど全体を毎フレーム更新: 燃料を燃やしながら精錬を進め,
+  // 点火状態 (見た目 / 発光) をブロックに反映する
+  function updateFurnaces(dt) {
+    for (const [key, f] of furnaces) {
+      const wasLit = f.burnT > 0;
+      const recipeOut = f.input && SMELT_RECIPES.get(f.input.id);
+      const canOutput = recipeOut !== undefined && f.input && f.input.n > 0 &&
+        (!f.output || (f.output.id === recipeOut && f.output.n < 64));
+
+      // 燃料切れなら, 精錬できる材料があり燃料があれば新しい燃料を着火する
+      if (f.burnT <= 0 && canOutput && f.fuel && f.fuel.n > 0) {
+        const burnSec = FUEL_VALUES.get(f.fuel.id);
+        if (burnSec) {
+          if (f.fuel.id === I.LAVA_BUCKET) addItem(I.BUCKET); // 空バケツが戻る (本家準拠)
+          f.fuel.n--;
+          if (f.fuel.n <= 0) f.fuel = null;
+          f.burnT = burnSec;
+          f.burnTotal = burnSec;
+          furnacesDirty = true;
+        }
+      }
+
+      if (f.burnT > 0) {
+        f.burnT = Math.max(0, f.burnT - dt);
+        if (canOutput) {
+          f.cookT += dt;
+          if (f.cookT >= SMELT_TIME) {
+            f.cookT -= SMELT_TIME;
+            f.input.n--;
+            if (f.input.n <= 0) f.input = null;
+            if (f.output) f.output.n++;
+            else f.output = { id: recipeOut, n: 1 };
+            sound.pickup();
+          }
+        } else {
+          f.cookT = 0; // 精錬対象が無くなったら進捗はリセット (本家準拠)
+        }
+        furnacesDirty = true;
+      }
+
+      // 点火中かどうかをブロックの見た目に反映
+      const isLit = f.burnT > 0;
+      if (isLit !== wasLit) {
+        const [x, y, z] = key.split(",").map(Number);
+        const cur = world.getBlock(x, y, z);
+        if (cur === B.FURNACE || cur === B.FURNACE_LIT) {
+          world.setBlock(x, y, z, isLit ? B.FURNACE_LIT : B.FURNACE);
+        }
+      }
+    }
+  }
+
+  const furnaceModalEl = document.getElementById("furnace-modal");
+  const furnaceInputSlotEl = document.getElementById("furnace-input-slot");
+  const furnaceFuelSlotEl = document.getElementById("furnace-fuel-slot");
+  const furnaceOutputSlotEl = document.getElementById("furnace-output-slot");
+  const furnaceFireFillEl = document.getElementById("furnace-fire-fill");
+  const furnaceArrowFillEl = document.getElementById("furnace-arrow-fill");
+  const furnaceInvGridEl = document.getElementById("furnace-inv-grid");
+  let furnaceOpen = false;
+  let furnaceKey = null;
+
+  function makeSlotCell(slot, onClick) {
+    const el = document.createElement("div");
+    el.className = "inv-item";
+    if (slot) {
+      const icon = document.createElement("canvas");
+      icon.width = icon.height = 48;
+      drawBlockIcon(icon, slot.id, atlas);
+      const badge = document.createElement("span");
+      badge.className = "count";
+      badge.textContent = String(slot.n);
+      el.append(icon, badge);
+      el.addEventListener("click", onClick);
+    } else {
+      el.classList.add("empty-slot");
+    }
+    return el;
+  }
+
+  function renderFurnaceUI() {
+    const f = furnaceAt(furnaceKey);
+    furnaceInputSlotEl.innerHTML = "";
+    furnaceFuelSlotEl.innerHTML = "";
+    furnaceOutputSlotEl.innerHTML = "";
+    furnaceInvGridEl.innerHTML = "";
+
+    // 入力 / 燃料スロット: クリックで持ち物へ戻す
+    furnaceInputSlotEl.appendChild(makeSlotCell(f.input, () => {
+      addItem(f.input.id, f.input.n);
+      f.input = null;
+      furnacesDirty = true;
+      renderFurnaceUI();
+    }));
+    furnaceFuelSlotEl.appendChild(makeSlotCell(f.fuel, () => {
+      addItem(f.fuel.id, f.fuel.n);
+      f.fuel = null;
+      furnacesDirty = true;
+      renderFurnaceUI();
+    }));
+    // 出力スロット: クリックで持ち物へ回収
+    furnaceOutputSlotEl.appendChild(makeSlotCell(f.output, () => {
+      addItem(f.output.id, f.output.n);
+      f.output = null;
+      furnacesDirty = true;
+      sound.pickup();
+      renderFurnaceUI();
+    }));
+
+    // 火の残り (今の燃料 1 個分に対する割合) / 精錬の進み具合
+    furnaceFireFillEl.style.height = f.burnTotal > 0 ? (f.burnT / f.burnTotal * 100).toFixed(0) + "%" : "0%";
+    furnaceArrowFillEl.style.width = (f.cookT / SMELT_TIME * 100).toFixed(0) + "%";
+
+    // 持ち物: 精錬できる物は入力へ, 燃料になる物は燃料へクリックで投入
+    let any = false;
+    for (const [id, n] of invCounts) {
+      if (n <= 0) continue;
+      const isSmeltable = SMELT_RECIPES.has(id);
+      const isFuel = FUEL_VALUES.has(id);
+      if (!isSmeltable && !isFuel) continue;
+      any = true;
+      const label = isSmeltable ? "→ 精錬素材へ" : "→ 燃料へ";
+      const cell = makeItemCell(id, n, () => {
+        if (isSmeltable) {
+          if (f.input && f.input.id !== id) return; // 既に別の素材が入っている
+          f.input = { id, n: (f.input ? f.input.n : 0) + n };
+        } else {
+          if (f.fuel && f.fuel.id !== id) return; // 既に別の燃料が入っている
+          f.fuel = { id, n: (f.fuel ? f.fuel.n : 0) + n };
+        }
+        invCounts.set(id, 0);
+        invDirty = true;
+        furnacesDirty = true;
+        updateHotbarCounts();
+        sound.place();
+        renderFurnaceUI();
+      });
+      const tag = document.createElement("span");
+      tag.className = "slot-tag";
+      tag.textContent = label;
+      cell.appendChild(tag);
+      furnaceInvGridEl.appendChild(cell);
+    }
+    if (!any) {
+      const note = document.createElement("div");
+      note.className = "empty-note";
+      note.textContent = "(精錬素材にも燃料にもなる物を持っていない)";
+      furnaceInvGridEl.appendChild(note);
+    }
+  }
+
+  function openFurnace(pos) {
+    furnaceKey = pos.join(",");
+    furnaceOpen = true;
+    furnaceModalEl.classList.remove("hidden");
+    renderFurnaceUI();
+    document.exitPointerLock();
+  }
+
+  function closeFurnace() {
+    furnaceOpen = false;
+    furnaceModalEl.classList.add("hidden");
+    if (!isTouch) canvas.requestPointerLock();
+  }
+
+  furnaceModalEl.addEventListener("click", (e) => {
+    if (e.target === furnaceModalEl) closeFurnace();
+  });
+
   // ---------------- ベッド (睡眠 / リスポーン地点) ----------------
 
   const sleepOverlayEl = document.getElementById("sleep-overlay");
@@ -1920,6 +2139,18 @@
         }
         chests.delete(key);
         chestsDirty = true;
+      }
+    }
+    // かまどを壊したら中身 (素材/燃料/精錬済み) をばらまく
+    if (hit.id === B.FURNACE || hit.id === B.FURNACE_LIT) {
+      const key = hit.pos.join(",");
+      const f = furnaces.get(key);
+      if (f) {
+        for (const slot of [f.input, f.fuel, f.output]) {
+          if (slot && slot.n > 0) items.spawn(slot.id, hit.pos[0], hit.pos[1], hit.pos[2], slot.n);
+        }
+        furnaces.delete(key);
+        furnacesDirty = true;
       }
     }
     // 上に乗っていた植生 / 松明も壊す
@@ -2407,10 +2638,11 @@
         }
       }
     }
-    // チェスト / ベッド / ドアは右クリックで開く・眠る・開閉 (スニーク中は通常設置)
+    // チェスト / かまど / ベッド / ドアは右クリックで開く・眠る・開閉 (スニーク中は通常設置)
     const hitFirst = player.raycast();
     if (hitFirst && !player.sneaking) {
       if (hitFirst.id === B.CHEST) { openChest(hitFirst.pos); return; }
+      if (hitFirst.id === B.FURNACE || hitFirst.id === B.FURNACE_LIT) { openFurnace(hitFirst.pos); return; }
       if (hitFirst.id === B.BED || BLOCKS[hitFirst.id].bed) { trySleep(hitFirst.pos); return; }
       if (BLOCKS[hitFirst.id].door) { toggleDoor(hitFirst.pos, hitFirst.id); return; }
     }
@@ -2692,6 +2924,7 @@
     document.getElementById("btn-inventory").addEventListener("click", () => {
       if (paused) return;
       if (chestOpen) { closeChest(); return; }
+      if (furnaceOpen) { closeFurnace(); return; }
       if (inventoryOpen) closeInventory();
       else openInventory();
     });
@@ -3051,6 +3284,7 @@
       updateLeafDecay(dt);
       updateRandomTicks(dt);
       updateFluidSpread(dt);
+      updateFurnaces(dt);
       updateFishing(dt);
       bowCooldown = Math.max(0, bowCooldown - dt);
 
@@ -3228,6 +3462,16 @@
           localStorage.setItem("mcjs_chests_" + seed, JSON.stringify(obj));
         } catch (e) { /* ignore */ }
       }
+      if (furnacesDirty) {
+        furnacesDirty = false;
+        try {
+          const obj = {};
+          for (const [key, f] of furnaces) {
+            if (f.input || f.fuel || f.output) obj[key] = f;
+          }
+          localStorage.setItem("mcjs_furnaces_" + seed, JSON.stringify(obj));
+        } catch (e) { /* ignore */ }
+      }
     }
   }
 
@@ -3271,6 +3515,10 @@
     equipArmor,
     equippedArmor,
     addItem,
+    furnaces,
+    furnaceAt,
+    openFurnace,
+    renderFurnaceUI,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());
