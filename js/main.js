@@ -563,7 +563,7 @@
     B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.GRAVEL,
     B.TALL_GRASS, B.FLOWER_YELLOW, B.FLOWER_RED, B.WHEAT_0, B.WHEAT_1,
     B.WHEAT_2, B.ICE, B.PUMPKIN, B.OBSIDIAN, B.BIRCH_LOG, B.DARK_LOG,
-    B.FARMLAND, B.SAPLING,
+    B.FARMLAND, B.SAPLING, B.BIRCH_LEAVES, B.DARK_LEAVES,
   ]);
   function invCategory(id) {
     if (ITEMS[id]) return "tool";
@@ -594,7 +594,8 @@
   const gridDefs = [
     ...BLOCKS.filter((b) => b && b.id !== B.AIR && b.id !== B.WATER && b.id !== B.BEDROCK &&
       !(b.fluid && !b.fluidSource) &&     // 流れる水/マグマは持ち物に出さない
-      !(b.stairs && b.stairDir !== 0)),   // 階段は方向違いの重複表示を避け, 基準の1つだけ出す
+      !(b.stairs && b.stairDir !== 0) &&  // 階段は方向違いの重複表示を避け, 基準の1つだけ出す
+      !b.torchDir),                       // 壁掛け松明は通常の松明の設置バリアントなので出さない
     ...Object.values(ITEMS),
   ];
   for (const block of gridDefs) {
@@ -730,6 +731,9 @@
   RECIPES.push(
     { out: B.BIRCH_LOG, outN: 1, in: [[B.LOG, 1]] },
     { out: B.DARK_LOG, outN: 1, in: [[B.LOG, 1]] },
+    // 樹種ごとの木材 (本家同様, 原木1 → 木材4)
+    { out: B.BIRCH_PLANK, outN: 4, in: [[B.BIRCH_LOG, 1]] },
+    { out: B.DARK_PLANK, outN: 4, in: [[B.DARK_LOG, 1]] },
     { out: B.JACK_O_LANTERN, outN: 1, in: [[B.PUMPKIN, 1], [B.TORCH, 1]] },
     { out: B.IRON_BLOCK, outN: 1, in: [[I.IRON_INGOT, 4]] },
     { out: B.COAL_BLOCK, outN: 1, in: [[B.COAL_ORE, 2]] },
@@ -1293,12 +1297,19 @@
 
   // ---------------- 苗木の成長 (ワールド生成時の木と同じ形に育つ) ----------------
 
-  function growTreeAt(x, y, z) {
+  function growTreeAt(x, y, z, forceType = null) {
     if (world.getBlock(x, y, z) !== B.SAPLING) return false;
     // 下が土/草/農地でないと育たない
     const below = world.getBlock(x, y - 1, z);
     if (below !== B.DIRT && below !== B.GRASS && below !== B.FARMLAND) return false;
-    const trunkH = 4 + ((Math.random() * 3) | 0);
+    // 樹種はランダム (ワールド生成と同じ3種)。オークが出やすい
+    const tr = Math.random();
+    const type = forceType || (tr < 0.6 ? "oak" : tr < 0.85 ? "birch" : "dark");
+    const logId = type === "birch" ? B.BIRCH_LOG : type === "dark" ? B.DARK_LOG : B.LOG;
+    const leafId = type === "birch" ? B.BIRCH_LEAVES : type === "dark" ? B.DARK_LEAVES : B.LEAVES;
+    const trunkH = type === "birch" ? 5 + ((Math.random() * 3) | 0)
+      : type === "dark" ? 3 + ((Math.random() * 2) | 0)
+      : 4 + ((Math.random() * 3) | 0);
     const topY = y + trunkH - 1;
     if (topY + 2 >= CHUNK_H) return false;
     // 幹の通り道が空いているか (苗木セル自身は除く)
@@ -1306,24 +1317,25 @@
       if (world.getBlock(x, ty, z) !== B.AIR) return false;
     }
     // 幹
-    for (let ty = y; ty <= topY; ty++) world.setBlock(x, ty, z, B.LOG);
+    for (let ty = y; ty <= topY; ty++) world.setBlock(x, ty, z, logId);
     world.setBlock(x, y - 1, z, B.DIRT); // 根元は土に
-    // 葉: ワールド生成時と同じ形 (上部2層は十字, 下2層は5x5の角抜き)
+    // 葉: ワールド生成時と同じ樹種ごとの形
     for (let dy = -2; dy <= 1; dy++) {
       const ly = topY + dy;
-      const r = dy >= 0 ? 1 : 2;
+      const r = type === "birch" ? (dy >= 1 ? 0 : 1) : (dy >= 0 ? 1 : 2);
+      const cornerDrop = type === "dark" ? 0.15 : 0.6;
       for (let dz = -r; dz <= r; dz++) {
         for (let dx = -r; dx <= r; dx++) {
           if (dx === 0 && dz === 0 && dy < 0) continue; // 幹の位置
-          if (Math.abs(dx) === r && Math.abs(dz) === r && Math.random() < 0.6) continue;
+          if (Math.abs(dx) === r && Math.abs(dz) === r && Math.random() < cornerDrop) continue;
           if (world.getBlock(x + dx, ly, z + dz) === B.AIR) {
-            world.setBlock(x + dx, ly, z + dz, B.LEAVES);
+            world.setBlock(x + dx, ly, z + dz, leafId);
           }
         }
       }
     }
-    if (world.getBlock(x, topY + 1, z) === B.AIR) world.setBlock(x, topY + 1, z, B.LEAVES);
-    spawnBreakParticles(x, y + 1, z, B.LEAVES);
+    if (world.getBlock(x, topY + 1, z) === B.AIR) world.setBlock(x, topY + 1, z, leafId);
+    spawnBreakParticles(x, y + 1, z, leafId);
     return true;
   }
 
@@ -1491,13 +1503,16 @@
   const LEAF_SCAN_R = 4;
   const LEAF_QUEUE_MAX = 400;
   const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  // 樹種が増えたため, 葉/原木の判定は Set で行う
+  const LEAF_IDS = new Set([B.LEAVES, B.BIRCH_LEAVES, B.DARK_LEAVES]);
+  const LOG_IDS = new Set([B.LOG, B.BIRCH_LOG, B.DARK_LOG]);
 
   function queueLeafDecayAround(x, y, z) {
     for (let dy = -LEAF_SCAN_R; dy <= LEAF_SCAN_R; dy++) {
       for (let dz = -LEAF_SCAN_R; dz <= LEAF_SCAN_R; dz++) {
         for (let dx = -LEAF_SCAN_R; dx <= LEAF_SCAN_R; dx++) {
           if (leafDecay.length >= LEAF_QUEUE_MAX) return;
-          if (world.getBlock(x + dx, y + dy, z + dz) === B.LEAVES) {
+          if (LEAF_IDS.has(world.getBlock(x + dx, y + dy, z + dz))) {
             leafDecay.push({ x: x + dx, y: y + dy, z: z + dz, t: 0.6 + Math.random() * 2.5 });
           }
         }
@@ -1518,8 +1533,8 @@
         if (visited.has(key)) continue;
         visited.add(key);
         const id = world.getBlock(nx, ny, nz);
-        if (id === B.LOG) return true;
-        if (id === B.LEAVES) queue.push([nx, ny, nz, d + 1]);
+        if (LOG_IDS.has(id)) return true;
+        if (LEAF_IDS.has(id)) queue.push([nx, ny, nz, d + 1]);
       }
     }
     return false;
@@ -1533,10 +1548,11 @@
       if (l.t > 0 || budget <= 0) continue;
       budget--;
       leafDecay.splice(i, 1);
-      if (world.getBlock(l.x, l.y, l.z) !== B.LEAVES) continue;
+      const leafId = world.getBlock(l.x, l.y, l.z);
+      if (!LEAF_IDS.has(leafId)) continue;
       if (hasLogNearby(l.x, l.y, l.z)) continue;
       world.setBlock(l.x, l.y, l.z, B.AIR);
-      spawnBreakParticles(l.x, l.y, l.z, B.LEAVES);
+      spawnBreakParticles(l.x, l.y, l.z, leafId);
       // 枯れた葉からもまれに苗木が落ちる (本家準拠)
       if (gameMode === "survival" && Math.random() < 0.05) {
         items.spawn(B.SAPLING, l.x, l.y, l.z);
@@ -1544,7 +1560,7 @@
       // 隣の葉も連鎖して枯れる
       for (const [ox, oy, oz] of DIRS6) {
         if (leafDecay.length >= LEAF_QUEUE_MAX) break;
-        if (world.getBlock(l.x + ox, l.y + oy, l.z + oz) === B.LEAVES) {
+        if (LEAF_IDS.has(world.getBlock(l.x + ox, l.y + oy, l.z + oz))) {
           leafDecay.push({ x: l.x + ox, y: l.y + oy, z: l.z + oz, t: 0.4 + Math.random() * 1.5 });
         }
       }
@@ -2259,7 +2275,7 @@
         items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
       } else if (hit.id === B.GRAVEL && Math.random() < 0.12) {
         items.spawn(I.FLINT, hit.pos[0], hit.pos[1], hit.pos[2]);
-      } else if (hit.id === B.LEAVES && Math.random() < 0.05) {
+      } else if (LEAF_IDS.has(hit.id) && Math.random() < 0.05) {
         // 葉からまれに苗木 (本家準拠: 約5%)
         items.spawn(B.SAPLING, hit.pos[0], hit.pos[1], hit.pos[2]);
       }
@@ -2290,18 +2306,25 @@
         furnacesDirty = true;
       }
     }
-    // 上に乗っていた植生 / 松明も壊す
+    // 上に乗っていた植生 / 床置き松明も壊す (壁掛け松明は床でなく壁が支え)
     const [bx, by, bz] = hit.pos;
     const above = world.getBlock(bx, by + 1, bz);
     const ab = BLOCKS[above];
-    if (above !== B.AIR && (ab.cross || ab.torch)) {
+    if (above !== B.AIR && (ab.cross || above === B.TORCH)) {
       world.setBlock(bx, by + 1, bz, B.AIR);
       if (gameMode === "survival" && ab.drops !== null) items.spawn(ab.drops, bx, by + 1, bz);
+    }
+    // 壁に掛かっていた松明も壊す (支えの壁が無くなったら外れて落ちる)
+    for (const [twId, tdx, tdz] of TORCH_WALL_DIRS) {
+      if (world.getBlock(bx + tdx, by, bz + tdz) === twId) {
+        world.setBlock(bx + tdx, by, bz + tdz, B.AIR);
+        if (gameMode === "survival") items.spawn(B.TORCH, bx + tdx, by, bz + tdz);
+      }
     }
     // 上の砂は支えを失って落下する
     checkFalling(bx, by + 1, bz);
     // 原木を切ったら周囲の葉が枯れ始める
-    if (hit.id === B.LOG) queueLeafDecayAround(bx, by, bz);
+    if (LOG_IDS.has(hit.id)) queueLeafDecayAround(bx, by, bz);
     // 隣に水/マグマがあれば, できた空気マスへ広がってくる
     queueFluidNeighbors(bx, by, bz);
     // ドア (上下段) / ベッド (頭足) はどちらか片方を壊すともう片方も消える
@@ -2892,6 +2915,20 @@
     const id = HOTBAR_BLOCKS[selectedSlot];
     if (!BLOCKS[id]) return; // 道具・素材は設置できない
     if (isSolid(id) && player.intersectsBlock(px, py, pz)) return;
+    // 松明: 壁の側面を狙った場合は壁掛け松明として設置 (本家準拠)
+    if (id === B.TORCH) {
+      const fdx = px - hit.pos[0], fdy = py - hit.pos[1], fdz = pz - hit.pos[2];
+      if (fdy === 0 && Math.abs(fdx) + Math.abs(fdz) === 1 &&
+          world.isSolidAt(hit.pos[0], hit.pos[1], hit.pos[2])) {
+        const wall = TORCH_WALL_DIRS.find(([, dx, dz]) => dx === fdx && dz === fdz);
+        if (wall) {
+          if (!consumeItem(id)) return;
+          world.setBlock(px, py, pz, wall[0]);
+          sound.place();
+          return;
+        }
+      }
+    }
     // 松明・植生・カーペットは下が固体ブロックのときだけ置ける
     if ((BLOCKS[id].torch || BLOCKS[id].cross || BLOCKS[id].height <= 0.1) &&
         !world.isSolidAt(px, py - 1, pz)) return;
