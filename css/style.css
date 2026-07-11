@@ -718,6 +718,19 @@ body.touch .controls { display: none; }
 
 #craft-section.hidden { display: none; }
 
+#craft-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid #3a4a60;
+  background: rgba(0, 0, 0, 0.3);
+  color: #dfe8f2;
+}
+#craft-search::placeholder { color: #6b7d92; }
+
 #craft-list {
   display: flex;
   flex-direction: column;

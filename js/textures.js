@@ -277,6 +277,15 @@ function buildTextureAtlas(seed) {
     return px(100, 225, 220, jitter(border ? 0.8 : 1, 0.07));
   });
 
+  // --- 棒 (道具の柄になる基本素材) ---
+  paintTile(TILE.STICK, (x, y) => {
+    if (Math.abs(x - (15 - y)) <= 1 && y >= 1 && y <= 14) {
+      const edge = x - (15 - y) === 1;
+      return px(150, 112, 66, jitter(edge ? 0.85 : 1, 0.07));
+    }
+    return [0, 0, 0, 0];
+  });
+
   // --- 道具 (ピッケル / 剣) ---
   const WOOD_COL = [140, 105, 60];
   const toolMats = [

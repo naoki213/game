@@ -257,6 +257,7 @@ const I = {
   BUCKET: 213,
   WATER_BUCKET: 214,
   LAVA_BUCKET: 215,
+  STICK: 272,
 };
 
 // テクスチャアトラス内のタイル番号 (textures.js の描画順と一致させる)
@@ -459,6 +460,7 @@ const TILE = {
   HELMET_IRON: 224, CHESTPLATE_IRON: 225, LEGGINGS_IRON: 226, BOOTS_IRON: 227,
   HELMET_GOLD: 228, CHESTPLATE_GOLD: 229, LEGGINGS_GOLD: 230, BOOTS_GOLD: 231,
   HELMET_DIAMOND: 232, CHESTPLATE_DIAMOND: 233, LEGGINGS_DIAMOND: 234, BOOTS_DIAMOND: 235,
+  STICK: 236,
 };
 
 // 各ブロックの属性
@@ -690,6 +692,8 @@ defItem(I.SEEDS, "seeds", "小麦の種", TILE.SEEDS);
 ITEMS[I.SEEDS].seeds = true;   // 土 / 草 / 農地の上に植えられる
 defItem(I.WHEAT, "wheat", "小麦", TILE.WHEAT_ITEM);
 defItem(I.BREAD, "bread", "パン", TILE.BREAD, null, 10);
+// 棒: 道具の柄になる基本素材 (本家同様, 木材から作る)
+defItem(I.STICK, "stick", "棒", TILE.STICK);
 
 // --- 斧 (木こりが速くなる) ---
 defItem(I.WOOD_AXE, "wood_axe", "木の斧", TILE.AXE_WOOD,
