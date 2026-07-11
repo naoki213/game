@@ -103,6 +103,8 @@ const B = {
   // ドロップで T 字に組むと召喚される) 関連
   WITHER_SKULL: 186,
   NETHER_STAR: 187,
+  FURNACE: 139,
+  FURNACE_LIT: 188,
   // 216-224 はドア (8方向x開閉, DOOR_ID_BASE), 235-242 はベッド (BED_ID_BASE)
   // で使用済みのため, それ以外の空きを使う
   FENCE_PLANK: 225,
@@ -233,13 +235,17 @@ const I = {
   GUNPOWDER: 137,
   // ネザー関連
   FLINT: 138,
-  FLINT_AND_STEEL: 139,
   // 100-139 のアイテム区画が埋まったため, ブロック側で未使用の 183 以降を使う
   // (140-145 はネオンブロックの ID と衝突するため使用しない)
   NETHER_QUARTZ: 183,
   BLAZE_ROD: 184,
   COMPASS: 185,
-  BONE: 188,   // 186-187 は B.WITHER_SKULL / B.NETHER_STAR で使用済み
+  // 186-187 は B.WITHER_SKULL / B.NETHER_STAR で使用済み。
+  // 0-255 のブロック用 ID 区画がちょうど埋まったため, かまど追加にあたり
+  // FLINT_AND_STEEL (旧139) / BONE (旧188) は 256 以上へ退避した
+  // (アイテムはチャンクに保存されないため 256 以上の ID を使える)
+  FLINT_AND_STEEL: 273,
+  BONE: 274,
   // 防具 (アイテムはチャンクに保存されないため 256 以上の ID を使える)
   IRON_HELMET: 260,
   IRON_CHESTPLATE: 261,
@@ -461,6 +467,9 @@ const TILE = {
   HELMET_GOLD: 228, CHESTPLATE_GOLD: 229, LEGGINGS_GOLD: 230, BOOTS_GOLD: 231,
   HELMET_DIAMOND: 232, CHESTPLATE_DIAMOND: 233, LEGGINGS_DIAMOND: 234, BOOTS_DIAMOND: 235,
   STICK: 236,
+  FURNACE_TOP: 237,
+  FURNACE_SIDE: 238,
+  FURNACE_SIDE_LIT: 239,
 };
 
 // 各ブロックの属性
@@ -986,6 +995,19 @@ BLOCKS[B.FENCE_PLANK].fence = true;
 // クラフトできない (main.js の nearCraftingTable / RECIPES の needsTable 参照) ---
 defBlock(B.CRAFTING_TABLE, "crafting_table", "作業台",
   [TILE.CRAFTING_TABLE_TOP, TILE.CRAFTING_TABLE_SIDE, TILE.PLANK], { hardness: 1.2 });
+
+// --- かまど: 本家同様に燃料を消費しながら鉱石などを製錬する (main.js の
+// updateFurnaces / SMELT_RECIPES / FUEL_VALUES 参照)。点火中は発光する
+// FURNACE_LIT に切り替わる (どちらも同じ「かまど」として振る舞い, 壊すと
+// 常に B.FURNACE をドロップする) ---
+defBlock(B.FURNACE, "furnace", "かまど",
+  [TILE.FURNACE_TOP, TILE.FURNACE_SIDE, TILE.FURNACE_TOP],
+  { hardness: 1.8, pickable: true, minTier: 1 });
+BLOCKS[B.FURNACE].furnace = true;
+defBlock(B.FURNACE_LIT, "furnace_lit", "かまど (点火中)",
+  [TILE.FURNACE_TOP, TILE.FURNACE_SIDE_LIT, TILE.FURNACE_TOP],
+  { hardness: 1.8, pickable: true, minTier: 1, drops: B.FURNACE, emissive: true });
+BLOCKS[B.FURNACE_LIT].furnace = true;
 
 // --- 窓ガラス (ガラス板): フェンスと同様に中央の薄い支柱 + 隣接する窓ガラスへ
 // 自動でつながる全高のガラス板 (mesher.js) ---
