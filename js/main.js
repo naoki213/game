@@ -157,6 +157,42 @@
     return true;
   }
 
+  // ---------------- 経験値 (XP): 敵討伐・鉱石採掘・かまど製錬で獲得 ----------------
+  // 本家同様のレベル計算式 (レベル L に到達するまでの累計必要 XP)。
+  // オーブの磁力吸着や3D表示は実装せず, 獲得した瞬間にプレイヤーへ加算する簡略版
+  const MOB_XP = { blaze: 10, wither_boss: 50 }; // 未掲載の敵性モブは一律5 (本家準拠)
+  function xpForLevel(level) {
+    if (level <= 16) return level * level + 6 * level;
+    if (level <= 31) return 2.5 * level * level - 40.5 * level + 360;
+    return 4.5 * level * level - 162.5 * level + 2220;
+  }
+  function levelFromXp(xp) {
+    let lo = 0, hi = 200;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (xpForLevel(mid) <= xp) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  }
+  let playerXp = 0;
+  try {
+    const saved = parseFloat(localStorage.getItem("mcjs_xp_" + seed));
+    if (isFinite(saved) && saved > 0) playerXp = saved;
+  } catch (e) { /* ignore */ }
+  let xpDirty = false;
+  let lastXpLevel = levelFromXp(playerXp);
+  function addXp(n) {
+    if (gameMode !== "survival" || n <= 0) return;
+    playerXp += n;
+    xpDirty = true;
+    const lvl = levelFromXp(playerXp);
+    if (lvl > lastXpLevel) {
+      lastXpLevel = lvl;
+      sound.blip(660, 0.18, "sine", 0.2);
+      showToast(`✦ レベルアップ! Lv.${lvl}`);
+    }
+  }
+
   // スポーン地点周辺を先に同期生成してからスポーン
   for (let cz = -1; cz <= 1; cz++) {
     for (let cx = -1; cx <= 1; cx++) {
@@ -318,6 +354,23 @@
   }
   syncArmor(); // 保存済みの装備を反映
 
+  // 経験値バー (本家同様にホットバーの真上, 緑のバー + 中央にレベル数値)
+  const xpBarEl = document.createElement("div");
+  xpBarEl.id = "xpbar";
+  xpBarEl.innerHTML = '<div class="xp-track"><div class="xp-fill"></div></div><span class="xp-level"></span>';
+  hotbarEl.parentNode.insertBefore(xpBarEl, hotbarEl);
+  const xpFillEl = xpBarEl.querySelector(".xp-fill");
+  const xpLevelEl = xpBarEl.querySelector(".xp-level");
+  function updateXpHud() {
+    xpBarEl.style.display = gameMode === "survival" ? "block" : "none";
+    const lvl = levelFromXp(playerXp);
+    const cur = xpForLevel(lvl), next = xpForLevel(lvl + 1);
+    const frac = next > cur ? (playerXp - cur) / (next - cur) : 0;
+    xpFillEl.style.width = Math.max(0, Math.min(1, frac)) * 100 + "%";
+    xpLevelEl.textContent = String(lvl);
+  }
+  updateXpHud();
+
   // ボス HP バー (エンダードラゴン / ウィザー戦で画面上部に表示)
   const bossBarEl = document.createElement("div");
   bossBarEl.id = "bossbar";
@@ -377,6 +430,7 @@
     if (m === "survival") player.flying = false;
     applyModeUI();
     updateArmorHud();
+    updateXpHud();
     showToast(m === "survival" ? "サバイバルモード" : "クリエイティブモード");
   }
 
@@ -466,12 +520,22 @@
     }
 
     hurtOverlayEl.style.opacity = Math.min(player.hurtFlash * 2.2, 1);
+    updateXpHud();
 
     // 死亡 → 少し置いてリスポーン
     if (player.dead) {
       if (deathTimer === 0) {
         deathOverlayEl.classList.remove("hidden");
         sound.thud();
+        // 本家同様に死亡でXPの大半を失う (オーブの実体は持たない簡略仕様のため,
+        // その場に残って回収することはできない)
+        if (lastXpLevel > 0) {
+          showToast(`経験値を ${Math.min(100, lastXpLevel * 7)} 失った…`);
+          spawnPuff(player.pos[0], player.pos[1] + 0.8, player.pos[2], [0.4, 0.9, 0.3]);
+        }
+        playerXp = 0;
+        lastXpLevel = 0;
+        xpDirty = true;
       }
       deathTimer += dt;
       if (deathTimer > 2.2) {
@@ -499,7 +563,7 @@
     B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.GRAVEL,
     B.TALL_GRASS, B.FLOWER_YELLOW, B.FLOWER_RED, B.WHEAT_0, B.WHEAT_1,
     B.WHEAT_2, B.ICE, B.PUMPKIN, B.OBSIDIAN, B.BIRCH_LOG, B.DARK_LOG,
-    B.FARMLAND,
+    B.FARMLAND, B.SAPLING,
   ]);
   function invCategory(id) {
     if (ITEMS[id]) return "tool";
@@ -590,6 +654,7 @@
     { out: B.STONE_SLAB, outN: 4, in: [[B.STONE, 2]] },
     { out: B.PLANK_SLAB, outN: 4, in: [[B.PLANK, 2]] },
     { out: I.BREAD, outN: 1, in: [[I.WHEAT, 3]] },
+    { out: I.BONE_MEAL, outN: 3, in: [[I.BONE, 1]] }, // 本家準拠: ホネ1 → 骨粉3
     { out: B.STONE_BRICK, outN: 4, in: [[B.STONE, 4]] },
     { out: B.SANDSTONE, outN: 1, in: [[B.SAND, 4]] },
     { out: B.BOOKSHELF, outN: 1, in: [[B.PLANK, 6]] },
@@ -1214,10 +1279,52 @@
             if (Math.random() < p) {
               world.setBlock(chunk.cx * 16 + lx, ly, chunk.cz * 16 + lz, id + 1);
             }
+          } else if (id === B.SAPLING) {
+            // 苗木: ランダムティックで確率的に木へ成長 (本家同様しばらく待つ)
+            const lx = i & 15, lz = (i >> 4) & 15, ly = i >> 8;
+            if (Math.random() < 0.3) {
+              growTreeAt(chunk.cx * 16 + lx, ly, chunk.cz * 16 + lz);
+            }
           }
         }
       }
     }
+  }
+
+  // ---------------- 苗木の成長 (ワールド生成時の木と同じ形に育つ) ----------------
+
+  function growTreeAt(x, y, z) {
+    if (world.getBlock(x, y, z) !== B.SAPLING) return false;
+    // 下が土/草/農地でないと育たない
+    const below = world.getBlock(x, y - 1, z);
+    if (below !== B.DIRT && below !== B.GRASS && below !== B.FARMLAND) return false;
+    const trunkH = 4 + ((Math.random() * 3) | 0);
+    const topY = y + trunkH - 1;
+    if (topY + 2 >= CHUNK_H) return false;
+    // 幹の通り道が空いているか (苗木セル自身は除く)
+    for (let ty = y + 1; ty <= topY; ty++) {
+      if (world.getBlock(x, ty, z) !== B.AIR) return false;
+    }
+    // 幹
+    for (let ty = y; ty <= topY; ty++) world.setBlock(x, ty, z, B.LOG);
+    world.setBlock(x, y - 1, z, B.DIRT); // 根元は土に
+    // 葉: ワールド生成時と同じ形 (上部2層は十字, 下2層は5x5の角抜き)
+    for (let dy = -2; dy <= 1; dy++) {
+      const ly = topY + dy;
+      const r = dy >= 0 ? 1 : 2;
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx === 0 && dz === 0 && dy < 0) continue; // 幹の位置
+          if (Math.abs(dx) === r && Math.abs(dz) === r && Math.random() < 0.6) continue;
+          if (world.getBlock(x + dx, ly, z + dz) === B.AIR) {
+            world.setBlock(x + dx, ly, z + dz, B.LEAVES);
+          }
+        }
+      }
+    }
+    if (world.getBlock(x, topY + 1, z) === B.AIR) world.setBlock(x, topY + 1, z, B.LEAVES);
+    spawnBreakParticles(x, y + 1, z, B.LEAVES);
+    return true;
   }
 
   // ---------------- 水/マグマの流動 (本家準拠のレベル制シミュレーション) ----------------
@@ -1430,6 +1537,10 @@
       if (hasLogNearby(l.x, l.y, l.z)) continue;
       world.setBlock(l.x, l.y, l.z, B.AIR);
       spawnBreakParticles(l.x, l.y, l.z, B.LEAVES);
+      // 枯れた葉からもまれに苗木が落ちる (本家準拠)
+      if (gameMode === "survival" && Math.random() < 0.05) {
+        items.spawn(B.SAPLING, l.x, l.y, l.z);
+      }
       // 隣の葉も連鎖して枯れる
       for (const [ox, oy, oz] of DIRS6) {
         if (leafDecay.length >= LEAF_QUEUE_MAX) break;
@@ -1708,6 +1819,10 @@
     [B.COBBLE, B.STONE],
     [B.STONE, B.SMOOTH_STONE],
     [B.NETHERRACK, B.NETHER_BRICK],
+    // 生肉 → 焼き肉 (本家準拠: 回復量が大きく上がる)
+    [I.RAW_PORK, I.PORK],
+    [I.RAW_BEEF, I.BEEF],
+    [I.RAW_CHICKEN, I.CHICKEN_MEAT],
   ]);
   // 燃料の燃焼時間 (秒)。本家のティック数 (1 ティック=1/20秒) をそのまま秒に換算
   const FUEL_VALUES = new Map([
@@ -1719,6 +1834,18 @@
     [B.COAL_BLOCK, 800],
     [I.BLAZE_ROD, 120],
     [I.LAVA_BUCKET, 1000],  // 消費すると空バケツが手元に戻る (本家準拠, 下記で特別処理)
+  ]);
+  // 精錬結果を回収したときに得られるXP (本家準拠, 1個あたり)
+  const SMELT_XP = new Map([
+    [I.IRON_INGOT, 0.7],
+    [I.GOLD_INGOT, 1.0],
+    [B.GLASS, 0.1],
+    [B.STONE, 0.1],
+    [B.SMOOTH_STONE, 0.1],
+    [B.NETHER_BRICK, 0.1],
+    [I.PORK, 0.35],
+    [I.BEEF, 0.35],
+    [I.CHICKEN_MEAT, 0.35],
   ]);
 
   const furnaces = new Map();   // "x,y,z" -> { input:{id,n}|null, fuel:{id,n}|null, output:{id,n}|null, cookT, burnT, burnTotal }
@@ -1842,9 +1969,10 @@
       furnacesDirty = true;
       renderFurnaceUI();
     }));
-    // 出力スロット: クリックで持ち物へ回収
+    // 出力スロット: クリックで持ち物へ回収 (本家同様に回収時にXPが入る)
     furnaceOutputSlotEl.appendChild(makeSlotCell(f.output, () => {
       addItem(f.output.id, f.output.n);
+      addXp((SMELT_XP.get(f.output.id) || 0) * f.output.n);
       f.output = null;
       furnacesDirty = true;
       sound.pickup();
@@ -2114,6 +2242,12 @@
       if (canDrop && block.drops !== null && block.drops !== B.AIR) {
         items.spawn(block.drops, hit.pos[0], hit.pos[1], hit.pos[2]);
       }
+      // 鉱石の採掘でXPを獲得 (本家準拠: 石炭鉱石0-2, ダイヤモンド鉱石3-7。
+      // 鉄/金鉱石は本家同様に採掘時ではなくかまどでの製錬時にXPが入る)
+      if (canDrop) {
+        if (hit.id === B.COAL_ORE) addXp((Math.random() * 3) | 0);
+        else if (hit.id === B.DIAMOND_ORE) addXp(3 + ((Math.random() * 5) | 0));
+      }
       // 特殊ドロップ: 草→種 (30%), 小麦→段階に応じて
       if (hit.id === B.TALL_GRASS && Math.random() < 0.3) {
         items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
@@ -2125,6 +2259,9 @@
         items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
       } else if (hit.id === B.GRAVEL && Math.random() < 0.12) {
         items.spawn(I.FLINT, hit.pos[0], hit.pos[1], hit.pos[2]);
+      } else if (hit.id === B.LEAVES && Math.random() < 0.05) {
+        // 葉からまれに苗木 (本家準拠: 約5%)
+        items.spawn(B.SAPLING, hit.pos[0], hit.pos[1], hit.pos[2]);
       }
       // 道具の消耗 (硬いブロックのみ)
       if (tool && block.hardness >= 0.3) damageTool(tool.id);
@@ -2324,6 +2461,7 @@
     world.setBlock(ex, py + 5, ez, B.DRAGON_EGG);
     spawnPuff(pos[0], pos[1], pos[2], [0.9, 0.5, 1]);
     sound.blip(120, 1.2, "sine", 0.4);
+    addXp(12000); // 本家準拠: エンダードラゴン討伐で大量のXPを獲得
     showToast("🐉✨ エンダードラゴンを討伐した! 泉のポータルが開いた ✨🐉");
   }
 
@@ -2700,6 +2838,24 @@
           showToast("オオカミにホネをあげた…");
           sound.blip(400, 0.1, "sine", 0.15);
         }
+      }
+      return;
+    }
+    // 骨粉: 作物・苗木に使うと成長を早める (本家準拠)
+    if (heldDef && heldDef.id === I.BONE_MEAL) {
+      if (!hitFirst) return;
+      const [tx, ty, tz] = hitFirst.pos;
+      if (hitFirst.id === B.WHEAT_0 || hitFirst.id === B.WHEAT_1) {
+        if (!consumeItem(I.BONE_MEAL)) return;
+        world.setBlock(tx, ty, tz, hitFirst.id + 1); // 1段階成長
+        spawnPuff(tx + 0.5, ty + 0.5, tz + 0.5, [0.75, 0.95, 0.6]);
+        sound.place();
+      } else if (hitFirst.id === B.SAPLING) {
+        if (!consumeItem(I.BONE_MEAL)) return;
+        spawnPuff(tx + 0.5, ty + 0.5, tz + 0.5, [0.75, 0.95, 0.6]);
+        sound.place();
+        // 本家同様に確率で成長 (約45%)。失敗しても骨粉は消費される
+        if (Math.random() < 0.45) growTreeAt(tx, ty, tz);
       }
       return;
     }
@@ -3323,6 +3479,8 @@
           items.spawn(B.WITHER_SKULL,
             Math.floor(death.pos[0]), Math.floor(death.pos[1]), Math.floor(death.pos[2]));
         }
+        // 敵性モブの討伐でXPを獲得 (本家準拠: 通常5, ブレイズ10, ウィザー50)
+        if (def.hostile) addXp(MOB_XP[death.type] || 5);
       }
       if (mobs.groanRequest) sound.groan();
       if (mobs.hissRequest) sound.hiss();
@@ -3472,6 +3630,12 @@
           localStorage.setItem("mcjs_furnaces_" + seed, JSON.stringify(obj));
         } catch (e) { /* ignore */ }
       }
+      if (xpDirty) {
+        xpDirty = false;
+        try {
+          localStorage.setItem("mcjs_xp_" + seed, String(playerXp));
+        } catch (e) { /* ignore */ }
+      }
     }
   }
 
@@ -3519,6 +3683,12 @@
     furnaceAt,
     openFurnace,
     renderFurnaceUI,
+    get xp() { return playerXp; },
+    get xpLevel() { return levelFromXp(playerXp); },
+    addXp,
+    levelFromXp,
+    xpForLevel,
+    growTreeAt,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());
