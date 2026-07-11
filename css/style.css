@@ -196,6 +196,35 @@ html, body {
 #armorbar .shield { opacity: 0.18; filter: grayscale(1); }
 #armorbar .shield.on { opacity: 1; filter: none; }
 
+/* ---- 経験値バー (本家同様にホットバーの真上, 緑のバー + 中央にレベル数値) ---- */
+#xpbar {
+  position: relative;
+  margin-bottom: 4px;
+}
+#xpbar .xp-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+  overflow: hidden;
+}
+#xpbar .xp-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(#7ee62c, #5cb61a);
+}
+#xpbar .xp-level {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  transform: translate(-50%, -100%);
+  font-size: 15px;
+  font-weight: bold;
+  color: #7ee62c;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
 /* 装備中の防具 (持ち物画面で青い枠) */
 .inv-item.equipped { outline: 2px solid #6fc3ff; border-radius: 6px; }
 
