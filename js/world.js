@@ -420,30 +420,42 @@ class World {
         if (density === 0) continue;
         if (hash2(wx, wz, seed ^ 0xa5a5) >= density) continue;
 
-        const trunkH = 4 + ((hash2(wx, wz, seed ^ 0x1234) * 3) | 0);
+        // 樹種: オーク (標準) / 白樺 (細く高い) / ダークオーク (低く密な樹冠)
+        const tr = hash2(wx, wz, seed ^ 0x7ee5);
+        const type = biome === "forest"
+          ? (tr < 0.6 ? "oak" : tr < 0.85 ? "birch" : "dark")
+          : (tr < 0.8 ? "oak" : "birch");
+        const logId = type === "birch" ? B.BIRCH_LOG : type === "dark" ? B.DARK_LOG : B.LOG;
+        const leafId = type === "birch" ? B.BIRCH_LEAVES : type === "dark" ? B.DARK_LEAVES : B.LEAVES;
+        const trunkH = type === "birch"
+          ? 5 + ((hash2(wx, wz, seed ^ 0x1234) * 3) | 0)     // 白樺: 5-7 と高め
+          : type === "dark"
+            ? 3 + ((hash2(wx, wz, seed ^ 0x1234) * 2) | 0)   // ダークオーク: 3-4 と低め
+            : 4 + ((hash2(wx, wz, seed ^ 0x1234) * 3) | 0);  // オーク: 4-6
         const topY = h + trunkH;
         if (topY + 2 >= CHUNK_H) continue;
 
         // 幹
-        for (let y = h + 1; y <= topY; y++) chunk.set(lx, y, lz, B.LOG);
+        for (let y = h + 1; y <= topY; y++) chunk.set(lx, y, lz, logId);
         chunk.set(lx, h, lz, B.DIRT); // 根元は土に
 
-        // 葉: 上部 2 層は十字型, その下 2 層は 5x5 (角抜き)
+        // 葉: 樹種ごとの形 (オーク: 丸い塊 / 白樺: 細い柱状 / ダークオーク: 角の残る密な樹冠)
         for (let dy = -2; dy <= 1; dy++) {
           const y = topY + dy;
-          const r = dy >= 0 ? 1 : 2;
+          const r = type === "birch" ? (dy >= 1 ? 0 : 1) : (dy >= 0 ? 1 : 2);
           for (let dz = -r; dz <= r; dz++) {
             for (let dx = -r; dx <= r; dx++) {
               if (dx === 0 && dz === 0 && dy < 0) continue; // 幹の位置
-              // 角を確率で抜いて丸みを出す
+              // 角を確率で抜いて丸みを出す (ダークオークはほぼ残して角ばった樹冠に)
+              const cornerDrop = type === "dark" ? 0.15 : 0.6;
               if (Math.abs(dx) === r && Math.abs(dz) === r &&
-                  hash3(wx + dx, y, wz + dz, seed) < 0.6) continue;
+                  hash3(wx + dx, y, wz + dz, seed) < cornerDrop) continue;
               const tx = lx + dx, tz = lz + dz;
-              if (chunk.get(tx, y, tz) === B.AIR) chunk.set(tx, y, tz, B.LEAVES);
+              if (chunk.get(tx, y, tz) === B.AIR) chunk.set(tx, y, tz, leafId);
             }
           }
         }
-        chunk.set(lx, topY + 1, lz, B.LEAVES); // てっぺん
+        chunk.set(lx, topY + 1, lz, leafId); // てっぺん
       }
     }
 

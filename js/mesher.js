@@ -327,21 +327,30 @@ function buildChunkMesh(world, chunk) {
 
         const block = BLOCKS[id];
 
-        // --- 松明: 中央の細い棒 (4 側面 + 上面) ---
+        // --- 松明: 中央の細い棒 (4 側面 + 上面)。壁掛けは壁際から斜めに突き出す ---
         if (block.torch) {
           const uv = tileUV(block.tiles[0]);
           const uA = lerp(uv.u0, uv.u1, 7 / 16), uB = lerp(uv.u0, uv.u1, 9 / 16);
           const vA = lerp(uv.v0, uv.v1, 4 / 16), vB = lerp(uv.v0, uv.v1, 14 / 16);
-          const x0 = ox + lx + 7 / 16, x1 = ox + lx + 9 / 16;
-          const z0 = oz + lz + 7 / 16, z1 = oz + lz + 9 / 16;
-          const y0 = y, y1 = y + 10 / 16;
-          // [TL, BL, BR, TR] × 4 側面 + 上面
+          // 壁掛け: torchDir (壁 → セル方向) に応じて根元を壁際に寄せ,
+          // 少し持ち上げて先端を部屋側へ傾ける (シアー変形)
+          const td = block.torchDir;
+          const cx = 0.5 - (td ? td[0] * 6.5 / 16 : 0);
+          const cz = 0.5 - (td ? td[1] * 6.5 / 16 : 0);
+          const sx = td ? td[0] * 4 / 16 : 0;   // 上端のずれ (傾き)
+          const sz = td ? td[1] * 4 / 16 : 0;
+          const yBase = td ? y + 3 / 16 : y;
+          const x0 = ox + lx + cx - 1 / 16, x1 = ox + lx + cx + 1 / 16;
+          const z0 = oz + lz + cz - 1 / 16, z1 = oz + lz + cz + 1 / 16;
+          const y0 = yBase, y1 = yBase + 10 / 16;
+          const xt0 = x0 + sx, xt1 = x1 + sx, zt0 = z0 + sz, zt1 = z1 + sz;
+          // [TL, BL, BR, TR] × 4 側面 + 上面 (上端の頂点はシアー分ずらす)
           const quads = [
-            { c: [[x1, y1, z1], [x1, y0, z1], [x1, y0, z0], [x1, y1, z0]], uv: [uA, vA, uB, vB] },
-            { c: [[x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1]], uv: [uA, vA, uB, vB] },
-            { c: [[x0, y1, z1], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1]], uv: [uA, vA, uB, vB] },
-            { c: [[x1, y1, z0], [x1, y0, z0], [x0, y0, z0], [x0, y1, z0]], uv: [uA, vA, uB, vB] },
-            { c: [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]],
+            { c: [[xt1, y1, zt1], [x1, y0, z1], [x1, y0, z0], [xt1, y1, zt0]], uv: [uA, vA, uB, vB] },
+            { c: [[xt0, y1, zt0], [x0, y0, z0], [x0, y0, z1], [xt0, y1, zt1]], uv: [uA, vA, uB, vB] },
+            { c: [[xt0, y1, zt1], [x0, y0, z1], [x1, y0, z1], [xt1, y1, zt1]], uv: [uA, vA, uB, vB] },
+            { c: [[xt1, y1, zt0], [x1, y0, z0], [x0, y0, z0], [xt0, y1, zt0]], uv: [uA, vA, uB, vB] },
+            { c: [[xt0, y1, zt0], [xt0, y1, zt1], [xt1, y1, zt1], [xt1, y1, zt0]],
               uv: [uA, lerp(uv.v0, uv.v1, 4 / 16), uB, lerp(uv.v0, uv.v1, 6 / 16)] },
           ];
           for (const q of quads) {

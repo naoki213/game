@@ -115,6 +115,17 @@ function buildTextureAtlas(seed) {
     const v = jitter(1, 0.2);
     return px(52, 128, 40, v);
   });
+  // 白樺の葉 (明るい黄緑) / ダークオークの葉 (深い緑)
+  paintTile(TILE.BIRCH_LEAVES, () => {
+    if (rand() < 0.18) return [0, 0, 0, 0];
+    const v = jitter(1, 0.2);
+    return px(110, 165, 65, v);
+  });
+  paintTile(TILE.DARK_LEAVES, () => {
+    if (rand() < 0.14) return [0, 0, 0, 0];
+    const v = jitter(1, 0.2);
+    return px(32, 88, 28, v);
+  });
 
   // --- 木材 (横板) ---
   paintTile(TILE.PLANK, (x, y) => {
