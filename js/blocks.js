@@ -105,6 +105,7 @@ const B = {
   NETHER_STAR: 187,
   FURNACE: 139,
   FURNACE_LIT: 188,
+  SAPLING: 134,   // 旧 I.FISH の ID を再利用 (FISH は 279 へ退避)
   // 216-224 はドア (8方向x開閉, DOOR_ID_BASE), 235-242 はベッド (BED_ID_BASE)
   // で使用済みのため, それ以外の空きを使う
   FENCE_PLANK: 225,
@@ -228,7 +229,7 @@ const I = {
   GOLD_SWORD: 131,
   SHEARS: 132,
   FISHING_ROD: 133,
-  FISH: 134,
+  // FISH (旧134) は苗木ブロック追加のため 256 以上へ退避 (下記参照)
   // エンダードラゴン討伐関連
   ENDER_PEARL: 135,
   EYE_OF_ENDER: 136,
@@ -246,6 +247,13 @@ const I = {
   // (アイテムはチャンクに保存されないため 256 以上の ID を使える)
   FLINT_AND_STEEL: 273,
   BONE: 274,
+  // 生肉 (かまどで焼くと既存の焼き肉になる) と骨粉。FISH は B.SAPLING (134) に
+  // ブロック ID を譲るため 256 以上へ退避した
+  RAW_PORK: 275,
+  RAW_BEEF: 276,
+  RAW_CHICKEN: 277,
+  BONE_MEAL: 278,
+  FISH: 279,
   // 防具 (アイテムはチャンクに保存されないため 256 以上の ID を使える)
   IRON_HELMET: 260,
   IRON_CHESTPLATE: 261,
@@ -470,6 +478,11 @@ const TILE = {
   FURNACE_TOP: 237,
   FURNACE_SIDE: 238,
   FURNACE_SIDE_LIT: 239,
+  SAPLING: 240,
+  RAW_PORK: 241,
+  RAW_BEEF: 242,
+  RAW_CHICKEN: 243,
+  BONE_MEAL: 244,
 };
 
 // 各ブロックの属性
@@ -515,6 +528,10 @@ defBlock(B.WATER, "water", "水", [TILE.WATER, TILE.WATER, TILE.WATER],
 defBlock(B.LOG, "log", "原木", [TILE.LOG_TOP, TILE.LOG_SIDE, TILE.LOG_TOP], { hardness: 1.3 });
 defBlock(B.LEAVES, "leaves", "葉", [TILE.LEAVES, TILE.LEAVES, TILE.LEAVES],
   { opaque: false, hardness: 0.25, drops: null });
+// 苗木: 葉からまれにドロップし, 土/草の上に植えると時間経過で木に成長する
+// (main.js の randomTick / growTreeAt 参照)。骨粉で成長を早められる
+defBlock(B.SAPLING, "sapling", "苗木", [TILE.SAPLING, TILE.SAPLING, TILE.SAPLING],
+  { opaque: false, solid: false, cross: true, hardness: 0.05 });
 defBlock(B.PLANK, "plank", "木材", [TILE.PLANK, TILE.PLANK, TILE.PLANK], { hardness: 1.2 });
 defBlock(B.GLASS, "glass", "ガラス", [TILE.GLASS, TILE.GLASS, TILE.GLASS],
   { opaque: false, hardness: 0.35, drops: null });
@@ -694,9 +711,17 @@ defItem(I.BOW, "bow", "弓", TILE.BOW,
 defItem(I.IRON_INGOT, "iron_ingot", "鉄インゴット", TILE.INGOT_IRON);
 defItem(I.GOLD_INGOT, "gold_ingot", "金インゴット", TILE.INGOT_GOLD);
 defItem(I.DIAMOND, "diamond", "ダイヤモンド", TILE.GEM_DIAMOND);
-defItem(I.PORK, "pork", "豚肉", TILE.PORK, null, 8);
-defItem(I.BEEF, "beef", "牛肉", TILE.BEEF, null, 8);
-defItem(I.CHICKEN_MEAT, "chicken_meat", "鶏肉", TILE.CHICKEN_MEAT, null, 6);
+// 焼き肉 (本家準拠の回復量: 焼き豚/ステーキ 8, 焼き鳥 6)。
+// 動物からは生肉がドロップし, かまどで焼くとこちらになる
+defItem(I.PORK, "pork", "焼き豚肉", TILE.PORK, null, 8);
+defItem(I.BEEF, "beef", "ステーキ", TILE.BEEF, null, 8);
+defItem(I.CHICKEN_MEAT, "chicken_meat", "焼き鳥", TILE.CHICKEN_MEAT, null, 6);
+// 生肉 (本家準拠の回復量: 生の豚/牛 3, 生の鶏 2。そのままでも食べられるが焼いた方が得)
+defItem(I.RAW_PORK, "raw_pork", "生の豚肉", TILE.RAW_PORK, null, 3);
+defItem(I.RAW_BEEF, "raw_beef", "生の牛肉", TILE.RAW_BEEF, null, 3);
+defItem(I.RAW_CHICKEN, "raw_chicken", "生の鶏肉", TILE.RAW_CHICKEN, null, 2);
+// 骨粉: ホネからクラフトし, 作物や苗木に使うと成長を早める (本家準拠)
+defItem(I.BONE_MEAL, "bone_meal", "骨粉", TILE.BONE_MEAL);
 defItem(I.SEEDS, "seeds", "小麦の種", TILE.SEEDS);
 ITEMS[I.SEEDS].seeds = true;   // 土 / 草 / 農地の上に植えられる
 defItem(I.WHEAT, "wheat", "小麦", TILE.WHEAT_ITEM);

@@ -11,7 +11,7 @@ const MOB_TYPES = {
     speed: 1.1,
     halfW: 0.45, height: 1.35,
     health: 8,
-    drops: 113, dropN: 2,   // 牛肉
+    drops: I.RAW_BEEF, dropN: 2,   // 生の牛肉 (かまどで焼くとステーキに)
     parts: [
       // 胴体 (茶白のまだら模様)
       [-0.45, 0.55, -0.6, 0.9, 0.55, 1.2, 1, 1, 1, TILE.MOB_COW_PATCH],
@@ -55,7 +55,7 @@ const MOB_TYPES = {
   pig: {
     speed: 1.4,
     halfW: 0.4, height: 0.9,
-    drops: 112, dropN: 2,   // 豚肉
+    drops: I.RAW_PORK, dropN: 2,   // 生の豚肉 (かまどで焼くと焼き豚に)
     parts: [
       // 胴体
       [-0.4, 0.35, -0.5, 0.8, 0.5, 1.0, 1, 1, 1, TILE.MOB_PIG_SKIN],
@@ -174,7 +174,7 @@ const MOB_TYPES = {
   chicken: {
     speed: 1.6,
     halfW: 0.25, height: 0.7,
-    drops: 114, dropN: 1,   // 鶏肉
+    drops: I.RAW_CHICKEN, dropN: 1,   // 生の鶏肉 (かまどで焼くと焼き鳥に)
     parts: [
       // 体 (羽毛)
       [-0.22, 0.25, -0.3, 0.44, 0.4, 0.55, 1, 1, 1, TILE.MOB_CHICKEN_FEATHER],

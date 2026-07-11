@@ -563,7 +563,7 @@
     B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.GRAVEL,
     B.TALL_GRASS, B.FLOWER_YELLOW, B.FLOWER_RED, B.WHEAT_0, B.WHEAT_1,
     B.WHEAT_2, B.ICE, B.PUMPKIN, B.OBSIDIAN, B.BIRCH_LOG, B.DARK_LOG,
-    B.FARMLAND,
+    B.FARMLAND, B.SAPLING,
   ]);
   function invCategory(id) {
     if (ITEMS[id]) return "tool";
@@ -654,6 +654,7 @@
     { out: B.STONE_SLAB, outN: 4, in: [[B.STONE, 2]] },
     { out: B.PLANK_SLAB, outN: 4, in: [[B.PLANK, 2]] },
     { out: I.BREAD, outN: 1, in: [[I.WHEAT, 3]] },
+    { out: I.BONE_MEAL, outN: 3, in: [[I.BONE, 1]] }, // 本家準拠: ホネ1 → 骨粉3
     { out: B.STONE_BRICK, outN: 4, in: [[B.STONE, 4]] },
     { out: B.SANDSTONE, outN: 1, in: [[B.SAND, 4]] },
     { out: B.BOOKSHELF, outN: 1, in: [[B.PLANK, 6]] },
@@ -1278,10 +1279,52 @@
             if (Math.random() < p) {
               world.setBlock(chunk.cx * 16 + lx, ly, chunk.cz * 16 + lz, id + 1);
             }
+          } else if (id === B.SAPLING) {
+            // 苗木: ランダムティックで確率的に木へ成長 (本家同様しばらく待つ)
+            const lx = i & 15, lz = (i >> 4) & 15, ly = i >> 8;
+            if (Math.random() < 0.3) {
+              growTreeAt(chunk.cx * 16 + lx, ly, chunk.cz * 16 + lz);
+            }
           }
         }
       }
     }
+  }
+
+  // ---------------- 苗木の成長 (ワールド生成時の木と同じ形に育つ) ----------------
+
+  function growTreeAt(x, y, z) {
+    if (world.getBlock(x, y, z) !== B.SAPLING) return false;
+    // 下が土/草/農地でないと育たない
+    const below = world.getBlock(x, y - 1, z);
+    if (below !== B.DIRT && below !== B.GRASS && below !== B.FARMLAND) return false;
+    const trunkH = 4 + ((Math.random() * 3) | 0);
+    const topY = y + trunkH - 1;
+    if (topY + 2 >= CHUNK_H) return false;
+    // 幹の通り道が空いているか (苗木セル自身は除く)
+    for (let ty = y + 1; ty <= topY; ty++) {
+      if (world.getBlock(x, ty, z) !== B.AIR) return false;
+    }
+    // 幹
+    for (let ty = y; ty <= topY; ty++) world.setBlock(x, ty, z, B.LOG);
+    world.setBlock(x, y - 1, z, B.DIRT); // 根元は土に
+    // 葉: ワールド生成時と同じ形 (上部2層は十字, 下2層は5x5の角抜き)
+    for (let dy = -2; dy <= 1; dy++) {
+      const ly = topY + dy;
+      const r = dy >= 0 ? 1 : 2;
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx === 0 && dz === 0 && dy < 0) continue; // 幹の位置
+          if (Math.abs(dx) === r && Math.abs(dz) === r && Math.random() < 0.6) continue;
+          if (world.getBlock(x + dx, ly, z + dz) === B.AIR) {
+            world.setBlock(x + dx, ly, z + dz, B.LEAVES);
+          }
+        }
+      }
+    }
+    if (world.getBlock(x, topY + 1, z) === B.AIR) world.setBlock(x, topY + 1, z, B.LEAVES);
+    spawnBreakParticles(x, y + 1, z, B.LEAVES);
+    return true;
   }
 
   // ---------------- 水/マグマの流動 (本家準拠のレベル制シミュレーション) ----------------
@@ -1494,6 +1537,10 @@
       if (hasLogNearby(l.x, l.y, l.z)) continue;
       world.setBlock(l.x, l.y, l.z, B.AIR);
       spawnBreakParticles(l.x, l.y, l.z, B.LEAVES);
+      // 枯れた葉からもまれに苗木が落ちる (本家準拠)
+      if (gameMode === "survival" && Math.random() < 0.05) {
+        items.spawn(B.SAPLING, l.x, l.y, l.z);
+      }
       // 隣の葉も連鎖して枯れる
       for (const [ox, oy, oz] of DIRS6) {
         if (leafDecay.length >= LEAF_QUEUE_MAX) break;
@@ -1772,6 +1819,10 @@
     [B.COBBLE, B.STONE],
     [B.STONE, B.SMOOTH_STONE],
     [B.NETHERRACK, B.NETHER_BRICK],
+    // 生肉 → 焼き肉 (本家準拠: 回復量が大きく上がる)
+    [I.RAW_PORK, I.PORK],
+    [I.RAW_BEEF, I.BEEF],
+    [I.RAW_CHICKEN, I.CHICKEN_MEAT],
   ]);
   // 燃料の燃焼時間 (秒)。本家のティック数 (1 ティック=1/20秒) をそのまま秒に換算
   const FUEL_VALUES = new Map([
@@ -1792,6 +1843,9 @@
     [B.STONE, 0.1],
     [B.SMOOTH_STONE, 0.1],
     [B.NETHER_BRICK, 0.1],
+    [I.PORK, 0.35],
+    [I.BEEF, 0.35],
+    [I.CHICKEN_MEAT, 0.35],
   ]);
 
   const furnaces = new Map();   // "x,y,z" -> { input:{id,n}|null, fuel:{id,n}|null, output:{id,n}|null, cookT, burnT, burnTotal }
@@ -2205,6 +2259,9 @@
         items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
       } else if (hit.id === B.GRAVEL && Math.random() < 0.12) {
         items.spawn(I.FLINT, hit.pos[0], hit.pos[1], hit.pos[2]);
+      } else if (hit.id === B.LEAVES && Math.random() < 0.05) {
+        // 葉からまれに苗木 (本家準拠: 約5%)
+        items.spawn(B.SAPLING, hit.pos[0], hit.pos[1], hit.pos[2]);
       }
       // 道具の消耗 (硬いブロックのみ)
       if (tool && block.hardness >= 0.3) damageTool(tool.id);
@@ -2781,6 +2838,24 @@
           showToast("オオカミにホネをあげた…");
           sound.blip(400, 0.1, "sine", 0.15);
         }
+      }
+      return;
+    }
+    // 骨粉: 作物・苗木に使うと成長を早める (本家準拠)
+    if (heldDef && heldDef.id === I.BONE_MEAL) {
+      if (!hitFirst) return;
+      const [tx, ty, tz] = hitFirst.pos;
+      if (hitFirst.id === B.WHEAT_0 || hitFirst.id === B.WHEAT_1) {
+        if (!consumeItem(I.BONE_MEAL)) return;
+        world.setBlock(tx, ty, tz, hitFirst.id + 1); // 1段階成長
+        spawnPuff(tx + 0.5, ty + 0.5, tz + 0.5, [0.75, 0.95, 0.6]);
+        sound.place();
+      } else if (hitFirst.id === B.SAPLING) {
+        if (!consumeItem(I.BONE_MEAL)) return;
+        spawnPuff(tx + 0.5, ty + 0.5, tz + 0.5, [0.75, 0.95, 0.6]);
+        sound.place();
+        // 本家同様に確率で成長 (約45%)。失敗しても骨粉は消費される
+        if (Math.random() < 0.45) growTreeAt(tx, ty, tz);
       }
       return;
     }
@@ -3613,6 +3688,7 @@
     addXp,
     levelFromXp,
     xpForLevel,
+    growTreeAt,
   };
 
   window.addEventListener("beforeunload", () => world.saveEdits());

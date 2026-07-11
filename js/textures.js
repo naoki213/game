@@ -1227,6 +1227,45 @@ function buildTextureAtlas(seed) {
     return px(r, g, b, jitter(1, 0.05));
   });
 
+  // --- 苗木 (細い幹 + 小さな葉のかたまり) ---
+  paintTile(TILE.SAPLING, (x, y) => {
+    // 幹
+    if (x >= 7 && x <= 8 && y >= 9 && y <= 14) return px(110, 80, 45, 1);
+    // 葉: 中心 (7.5, 6) のまるいかたまり
+    const dx = x - 7.5, dy = y - 6;
+    const d = dx * dx + dy * dy * 1.3;
+    if (d < 16 && hash2(x, y, 0x5a1) > 0.15) {
+      const v = 0.8 + hash2(x, y, 0x11f) * 0.4;
+      return px(50 * v, 130 * v, 45 * v, 1);
+    }
+    return [0, 0, 0, 0];
+  });
+
+  // --- 生肉 (焼き肉より赤みが強く, てらつきのハイライト入り) ---
+  const rawMeat = (main, dark) => (x, y) => {
+    const dx = x - 8, dy = y - 8;
+    if (dx * dx * 0.7 + dy * dy < 26) {
+      const edge = dx * dx * 0.7 + dy * dy > 17;
+      const marbling = hash2(x, y, 0xfe11) > 0.85; // 脂身の白い筋
+      if (marbling && !edge) return px(245, 225, 220, 1);
+      return px(edge ? dark[0] : main[0], edge ? dark[1] : main[1], edge ? dark[2] : main[2], jitter(1, 0.06));
+    }
+    return [0, 0, 0, 0];
+  };
+  paintTile(TILE.RAW_PORK, rawMeat([245, 170, 175], [215, 120, 130]));
+  paintTile(TILE.RAW_BEEF, rawMeat([210, 75, 70], [160, 45, 45]));
+  paintTile(TILE.RAW_CHICKEN, rawMeat([240, 205, 185], [205, 160, 140]));
+
+  // --- 骨粉 (小さな山盛りの白い粉) ---
+  paintTile(TILE.BONE_MEAL, (x, y) => {
+    const dx = x - 7.5, dy = y - 10;
+    if (dy > 0 ? (dx * dx + dy * dy * 4 < 30) : (dx * dx + dy * dy * 1.6 < 24)) {
+      const v = 0.88 + hash2(x, y, 0xb0e) * 0.18;
+      return px(235 * v, 232 * v, 218 * v, 1);
+    }
+    return [0, 0, 0, 0];
+  });
+
   // --- モブの模様入りスキン ---
 
   // ゾンビの肌 (緑, まだらな腐敗の斑点)
