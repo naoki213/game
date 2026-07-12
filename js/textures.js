@@ -1340,6 +1340,33 @@ function buildTextureAtlas(seed) {
     return px(220, 195, 120, jitter(scale, 0.07));
   });
 
+  // --- 空島の固有植物 ---
+  // 空草 (雲の上に生える淡い水色の草)
+  {
+    const skyBlades = [];
+    for (let i = 0; i < 16; i++) skyBlades.push(rand() < 0.45 ? 3 + (rand() * 9 | 0) : 0);
+    paintTile(TILE.SKY_GRASS, (x, y) => {
+      if (skyBlades[x] === 0 || y < 16 - skyBlades[x]) return [0, 0, 0, 0];
+      return px(150, 210, 235, jitter(1, 0.15));
+    });
+  }
+  // 星の花 (光る星形の花。夜の空島を淡く照らす)
+  paintTile(TILE.STAR_FLOWER, (x, y) => {
+    const dx = x - 7.5, dy = y - 4.5;
+    const d = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    const spike = Math.pow(Math.abs(Math.cos(ang * 2.5)), 4) * 2.5;
+    if (d < 2 + spike) return px(255, 250, 170, jitter(1, 0.05)); // 星形の花
+    if ((x === 7 || x === 8) && y >= 7) return px(170, 200, 160, jitter(1, 0.1)); // 茎
+    return [0, 0, 0, 0];
+  });
+  // 空葉 (空の木の葉。白に近い淡い桜色)
+  paintTile(TILE.SKY_LEAVES, () => {
+    if (rand() < 0.18) return [0, 0, 0, 0];
+    const v = jitter(1, 0.12);
+    return px(235, 205, 225, v);
+  });
+
   // --- 糸 (くるくる巻いた白い糸玉 + 垂れた端) ---
   paintTile(TILE.STRING, (x, y) => {
     const dx = x - 7.5, dy = y - 6.5;

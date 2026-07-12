@@ -524,6 +524,7 @@
 
     hurtOverlayEl.style.opacity = Math.min(player.hurtFlash * 2.2, 1);
     updateXpHud();
+    updateWhistleBtn();
 
     // 死亡 → 少し置いてリスポーン
     if (player.dead) {
@@ -568,6 +569,7 @@
     B.WHEAT_2, B.ICE, B.PUMPKIN, B.OBSIDIAN, B.BIRCH_LOG, B.DARK_LOG,
     B.FARMLAND, B.SAPLING, B.BIRCH_LEAVES, B.DARK_LEAVES,
     B.JUNGLE_LOG, B.JUNGLE_LEAVES, B.MOSSY_STONE_BRICK,
+    B.SKY_GRASS, B.STAR_FLOWER, B.SKY_LEAVES,
   ]);
   function invCategory(id) {
     if (ITEMS[id]) return "tool";
@@ -1111,6 +1113,9 @@
         lastSpaceTime = now;
         break;
       }
+      case "KeyB":
+        callBird();   // ホイッスル: 仲間の鳥を呼ぶ
+        break;
       case "KeyF":
         if (ridingBird) {   // 鳥に騎乗中は F で降りる
           dismountBird();
@@ -1515,7 +1520,7 @@
   const LEAF_QUEUE_MAX = 400;
   const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   // 樹種が増えたため, 葉/原木の判定は Set で行う
-  const LEAF_IDS = new Set([B.LEAVES, B.BIRCH_LEAVES, B.DARK_LEAVES, B.JUNGLE_LEAVES]);
+  const LEAF_IDS = new Set([B.LEAVES, B.BIRCH_LEAVES, B.DARK_LEAVES, B.JUNGLE_LEAVES, B.SKY_LEAVES]);
   const LOG_IDS = new Set([B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.JUNGLE_LOG]);
 
   function queueLeafDecayAround(x, y, z) {
@@ -2740,7 +2745,8 @@
     if (!nearSkyIsland()) {
       // 神殿 → 空島
       genChunksAround(sx, sz, 64);
-      player.pos = [sx - 11.5, sy + 8.01, sz + 0.5]; // アリーナのポータル前
+      // 広場から離れた西端の雲の桟橋に到着する (ボス広場までは歩く/飛ぶ)
+      player.pos = [sx - SKY_ISLAND.r + 5.5, sy + 2.01, sz + 0.5];
       player.vel = [0, 0, 0];
       if (!skyBlessing) {
         skyBlessing = true;
@@ -2805,6 +2811,35 @@
       });
     }
   }
+
+  // ホイッスル: 仲間の鳥をどこからでも呼び寄せる (左上のボタン / B キー)
+  const whistleBtn = document.getElementById("whistle-btn");
+  function updateWhistleBtn() {
+    whistleBtn.classList.toggle("hidden", !birdTamedSaved);
+  }
+  function callBird() {
+    if (!birdTamedSaved) {
+      showToast("まだ仲間の鳥がいない… (空島のボスを倒すと仲間になる)");
+      return;
+    }
+    if (ridingBird) { showToast("もう鳥に乗っている"); return; }
+    let bird = mobs.mobs.find((m) => m.type === "sky_bird" && m.tamed);
+    if (!bird) {
+      bird = new Mob("sky_bird", player.pos[0], player.pos[1] + 2, player.pos[2]);
+      bird.tamed = true;
+      mobs.mobs.push(bird);
+    }
+    const fwd = player.forward();
+    bird.pos = [player.pos[0] + fwd[0] * 2.5, player.pos[1] + 1.2, player.pos[2] + fwd[2] * 2.5];
+    bird.vel = [0, 0, 0];
+    bird.anchor = [...bird.pos];
+    spawnPuff(bird.pos[0], bird.pos[1], bird.pos[2], [0.7, 0.85, 1.0]);
+    sound.blip(880, 0.12, "sine", 0.2);
+    sound.blip(1180, 0.18, "sine", 0.18);
+    showToast("🕊 ホイッスルで鳥を呼んだ! (右クリックで騎乗)");
+  }
+  whistleBtn.addEventListener("click", (e) => { e.preventDefault(); callBird(); });
+  whistleBtn.addEventListener("touchstart", (e) => { e.preventDefault(); callBird(); });
 
   // 鳥への騎乗: 乗ると鳥がプレイヤーと一体になり, 飛行操作で自由に飛べる
   function mountBird(mob) {
@@ -4053,6 +4088,7 @@
     get ridingBird() { return ridingBird; },
     mountBird,
     dismountBird,
+    callBird,
     updateSkyMobs,
     updateSkyPortalTravel,
     genChunksAround,
