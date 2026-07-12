@@ -788,11 +788,13 @@ class World {
     return chunk;
   }
 
+  // ネザー要塞: 中央の砦 (城塞) + 4方向へ伸びる長い橋 + 橋の途中の門塔。
+  // 本家のネザーフォートレスを意識した, ネザーレンガ造りの大型構造物
   stampNetherFortress(chunk) {
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
     const { x: fx, z: fz, y: fy } = NETHER_FORTRESS;
-    const R = 22;
+    const R = 44;
     if (ox + 15 < fx - R || ox > fx + R || oz + 15 < fz - R || oz > fz + R) return;
 
     const set = (wx, y, wz, id) => {
@@ -805,35 +807,88 @@ class World {
           for (let x = x0; x <= x1; x++) set(x, y, z, id);
     };
 
-    // 橋の上を歩けるよう周囲を空気でくり抜く
-    fill(fx - 20, fy + 1, fz - 20, fx + 20, fy + 6, fz + 20, B.AIR);
+    // --- 通行スペースをくり抜く (橋筋 + 中央広場のみ。全域はくり抜かない) ---
+    fill(fx - 40, fy + 1, fz - 4, fx + 40, fy + 9, fz + 4, B.AIR);   // 東西の橋筋
+    fill(fx - 4, fy + 1, fz - 40, fx + 4, fy + 9, fz + 40, B.AIR);   // 南北の橋筋
+    fill(fx - 8, fy + 1, fz - 8, fx + 8, fy + 10, fz + 8, B.AIR);    // 中央
 
-    // 南北の橋 (床 + 胸壁 + 支柱)
-    fill(fx - 2, fy, fz - 20, fx + 2, fy, fz + 20, B.NETHER_BRICK);
-    for (let z = fz - 20; z <= fz + 20; z++) {
+    // --- 長い橋 (幅5の床 + 胸壁 + 定間隔の支柱) ---
+    fill(fx - 2, fy, fz - 40, fx + 2, fy, fz + 40, B.NETHER_BRICK);  // 南北
+    fill(fx - 40, fy, fz - 2, fx + 40, fy, fz + 2, B.NETHER_BRICK);  // 東西
+    for (let z = fz - 40; z <= fz + 40; z++) {
       if ((z - fz) % 2 === 0) { set(fx - 2, fy + 1, z, B.NETHER_BRICK); set(fx + 2, fy + 1, z, B.NETHER_BRICK); }
     }
-    for (const [px, pz] of [[fx - 2, fz - 20], [fx + 2, fz - 20], [fx - 2, fz + 20], [fx + 2, fz + 20]]) {
-      fill(px, fy - 12, pz, px, fy - 1, pz, B.NETHER_BRICK);
-    }
-
-    // 東西の橋 (床 + 胸壁 + 支柱)
-    fill(fx - 20, fy, fz - 2, fx + 20, fy, fz + 2, B.NETHER_BRICK);
-    for (let x = fx - 20; x <= fx + 20; x++) {
+    for (let x = fx - 40; x <= fx + 40; x++) {
       if ((x - fx) % 2 === 0) { set(x, fy + 1, fz - 2, B.NETHER_BRICK); set(x, fy + 1, fz + 2, B.NETHER_BRICK); }
     }
-    for (const [px, pz] of [[fx - 20, fz - 2], [fx - 20, fz + 2], [fx + 20, fz - 2], [fx + 20, fz + 2]]) {
-      fill(px, fy - 12, pz, px, fy - 1, pz, B.NETHER_BRICK);
+    // 支柱 (10ブロックごとに橋の下へ)
+    for (let off = 10; off <= 40; off += 10) {
+      for (const s of [-1, 1]) {
+        fill(fx - 2, Math.max(2, fy - 18), fz + off * s, fx - 2, fy - 1, fz + off * s, B.NETHER_BRICK);
+        fill(fx + 2, Math.max(2, fy - 18), fz + off * s, fx + 2, fy - 1, fz + off * s, B.NETHER_BRICK);
+        fill(fx + off * s, Math.max(2, fy - 18), fz - 2, fx + off * s, fy - 1, fz - 2, B.NETHER_BRICK);
+        fill(fx + off * s, Math.max(2, fy - 18), fz + 2, fx + off * s, fy - 1, fz + 2, B.NETHER_BRICK);
+      }
     }
 
-    // 交差点の見張り台 (少し高く, 縁取り)
-    fill(fx - 4, fy + 1, fz - 4, fx + 4, fy + 4, fz + 4, B.AIR);
-    fill(fx - 4, fy, fz - 4, fx + 4, fy, fz + 4, B.NETHER_BRICK);
-    for (const [dx, dz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) {
-      fill(fx + dx, fy + 1, fz + dz, fx + dx, fy + 4, fz + dz, B.NETHER_BRICK);
+    // --- 中央の砦 (13x13, 壁 + 屋根 + 狭間窓 + 4方向の門) ---
+    fill(fx - 6, fy, fz - 6, fx + 6, fy, fz + 6, B.NETHER_BRICK);        // 床
+    fill(fx - 5, fy + 1, fz - 5, fx + 5, fy + 5, fz + 5, B.AIR);         // 内部
+    for (let y = fy + 1; y <= fy + 5; y++) {                             // 壁
+      for (let d = -6; d <= 6; d++) {
+        set(fx + d, y, fz - 6, B.NETHER_BRICK); set(fx + d, y, fz + 6, B.NETHER_BRICK);
+        set(fx - 6, y, fz + d, B.NETHER_BRICK); set(fx + 6, y, fz + d, B.NETHER_BRICK);
+      }
     }
-    // 見張り台の中央に宝箱 (中身は main.js 側で初回訪問時に埋める)
+    // 4方向の門 (幅3 x 高さ3, 橋と直結)
+    fill(fx - 1, fy + 1, fz - 6, fx + 1, fy + 3, fz - 6, B.AIR);
+    fill(fx - 1, fy + 1, fz + 6, fx + 1, fy + 3, fz + 6, B.AIR);
+    fill(fx - 6, fy + 1, fz - 1, fx - 6, fy + 3, fz + 1, B.AIR);
+    fill(fx + 6, fy + 1, fz - 1, fx + 6, fy + 3, fz + 1, B.AIR);
+    // 狭間窓 (壁の中段)
+    for (const d of [-3, 3]) {
+      set(fx + d, fy + 3, fz - 6, B.AIR); set(fx + d, fy + 3, fz + 6, B.AIR);
+      set(fx - 6, fy + 3, fz + d, B.AIR); set(fx + 6, fy + 3, fz + d, B.AIR);
+    }
+    fill(fx - 6, fy + 6, fz - 6, fx + 6, fy + 6, fz + 6, B.NETHER_BRICK); // 屋根
+    for (let d = -6; d <= 6; d++) {                                       // 屋上の胸壁
+      if (d % 2 === 0) {
+        set(fx + d, fy + 7, fz - 6, B.NETHER_BRICK); set(fx + d, fy + 7, fz + 6, B.NETHER_BRICK);
+        set(fx - 6, fy + 7, fz + d, B.NETHER_BRICK); set(fx + 6, fy + 7, fz + d, B.NETHER_BRICK);
+      }
+    }
+    // 内部の照明 (天井四隅のグロウストーン)
+    for (const [dx, dz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) {
+      set(fx + dx, fy + 5, fz + dz, B.GLOWSTONE);
+    }
+    // 砦の支柱 (四隅から地面へ)
+    for (const [dx, dz] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) {
+      fill(fx + dx, Math.max(2, fy - 18), fz + dz, fx + dx, fy - 1, fz + dz, B.NETHER_BRICK);
+    }
+    // 宝箱 x3 (中身は main.js 側で初回訪問時に埋める)
     set(fx, fy + 1, fz + 1, B.CHEST);
+    set(fx - 4, fy + 1, fz - 4, B.CHEST);
+    set(fx + 4, fy + 1, fz - 4, B.CHEST);
+
+    // --- 門塔 (各橋の途中 ±16 に, 橋をまたぐアーチ) ---
+    for (const s of [-1, 1]) {
+      const gx = fx + 16 * s;
+      fill(gx - 2, fy + 1, fz - 3, gx + 2, fy + 6, fz + 3, B.NETHER_BRICK); // 東西橋の門塔
+      fill(gx - 2, fy + 1, fz - 1, gx + 2, fy + 3, fz + 1, B.AIR);          // アーチ通路
+      set(gx, fy + 4, fz, B.GLOWSTONE);                                      // 通路の天井照明
+      for (let d = -3; d <= 3; d += 2) {                                     // 屋上の胸壁
+        set(gx - 2, fy + 7, fz + d, B.NETHER_BRICK);
+        set(gx + 2, fy + 7, fz + d, B.NETHER_BRICK);
+      }
+      const gz = fz + 16 * s;
+      fill(fx - 3, fy + 1, gz - 2, fx + 3, fy + 6, gz + 2, B.NETHER_BRICK); // 南北橋の門塔
+      fill(fx - 1, fy + 1, gz - 2, fx + 1, fy + 3, gz + 2, B.AIR);          // アーチ通路
+      set(fx, fy + 4, gz, B.GLOWSTONE);
+      for (let d = -3; d <= 3; d += 2) {
+        set(fx + d, fy + 7, gz - 2, B.NETHER_BRICK);
+        set(fx + d, fy + 7, gz + 2, B.NETHER_BRICK);
+      }
+    }
   }
 
   // ネザーの (nx, y, nz) 付近で安全な (溶岩に埋まっていない, 頭上が開けた) 足場の Y を探す。
