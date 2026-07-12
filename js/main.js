@@ -1646,13 +1646,25 @@
     if (world.getBlock(fx, fy + 1, fz + 1) !== B.CHEST) return;
     fortressLootGiven = true;
     localStorage.setItem("mcjs_fortloot_" + seed, "1");
-    const c = chestAt([fx, fy + 1, fz + 1].join(","));
-    c.set(I.NETHER_QUARTZ, 8);
-    c.set(I.GOLD_INGOT, 4);
-    c.set(I.GUNPOWDER, 6);
-    c.set(I.BLAZE_ROD, 2);
-    c.set(I.FLINT, 4);
-    showToast("🏰 ネザーフォートレスの宝箱を見つけた!");
+    // 砦の中の宝箱 3 つにまとめて宝を詰める
+    const c1 = chestAt([fx, fy + 1, fz + 1].join(","));
+    c1.set(I.NETHER_QUARTZ, 8);
+    c1.set(I.GOLD_INGOT, 4);
+    c1.set(I.GUNPOWDER, 6);
+    c1.set(I.BLAZE_ROD, 2);
+    c1.set(I.FLINT, 4);
+    const c2 = chestAt([fx - 4, fy + 1, fz - 4].join(","));
+    c2.set(I.BLAZE_ROD, 3);
+    c2.set(I.BONE, 4);
+    c2.set(I.GOLD_INGOT, 3);
+    c2.set(B.OBSIDIAN, 4);
+    const c3 = chestAt([fx + 4, fy + 1, fz - 4].join(","));
+    c3.set(I.DIAMOND, 1);
+    c3.set(I.NETHER_QUARTZ, 6);
+    c3.set(I.STRING, 4);
+    c3.set(I.GOLDEN_APPLE, 1);
+    chestsDirty = true;
+    showToast("🏰 ネザー要塞の宝物庫を見つけた! (宝箱 x3)");
   }
 
   // 砂漠の神殿: 宝物庫に踏み込んだら一度だけ宝箱を詰めて隠しトラップを起爆する
@@ -2587,11 +2599,56 @@
 
   // ---------------- ネザーへの行き来 ----------------
 
+  // 帰還座標はワールドごとに保存する (リロード後もネザーから元の場所へ戻れるように)
   let netherReturnPos = null;
+  try {
+    const saved = JSON.parse(localStorage.getItem("mcjs_netherret_" + seed));
+    if (Array.isArray(saved) && saved.length === 3 && saved.every(Number.isFinite)) {
+      netherReturnPos = saved;
+    }
+  } catch (e) { /* ignore */ }
   let netherPortalCooldown = 0;
+
+  // 到着地点の近くに既にポータルがあるか探す (再入場のたびに乱立させない)
+  function findNetherPortalNear(cx, cy, cz, r) {
+    for (let y = Math.max(2, cy - 10); y <= Math.min(CHUNK_H - 2, cy + 10); y++) {
+      for (let z = cz - r; z <= cz + r; z++) {
+        for (let x = cx - r; x <= cx + r; x++) {
+          if (world.getBlock(x, y, z) === B.NETHER_PORTAL) return [x, y, z];
+        }
+      }
+    }
+    return null;
+  }
+
+  // ネザー側に帰り用の黒曜石ポータルを建てる (本家準拠: 行きっぱなしにならない)
+  function buildNetherReturnPortal(nx, sy, nz) {
+    // 足場と空間を確保
+    for (let z = nz - 2; z <= nz + 2; z++) {
+      for (let x = nx - 2; x <= nx + 3; x++) {
+        world.setBlock(x, sy - 1, z, B.NETHERRACK);
+        for (let y = sy; y <= sy + 4; y++) world.setBlock(x, y, z, B.AIR);
+      }
+    }
+    // 黒曜石の枠 (xy 平面) + 起動済みポータル
+    const pz = nz - 2;
+    for (let x = nx - 1; x <= nx + 2; x++) {
+      world.setBlock(x, sy - 1, pz, B.OBSIDIAN);
+      world.setBlock(x, sy + 3, pz, B.OBSIDIAN);
+    }
+    for (let y = sy; y <= sy + 2; y++) {
+      world.setBlock(nx - 1, y, pz, B.OBSIDIAN);
+      world.setBlock(nx + 2, y, pz, B.OBSIDIAN);
+      world.setBlock(nx, y, pz, B.NETHER_PORTAL);
+      world.setBlock(nx + 1, y, pz, B.NETHER_PORTAL);
+    }
+  }
 
   function enterNether() {
     netherReturnPos = [...player.pos];
+    try {
+      localStorage.setItem("mcjs_netherret_" + seed, JSON.stringify(netherReturnPos));
+    } catch (e) { /* ignore */ }
     const [nx, nz] = toNether(player.pos[0], player.pos[2]);
     for (let cz = (nz - 24) >> 4; cz <= (nz + 24) >> 4; cz++) {
       for (let cx = (nx - 24) >> 4; cx <= (nx + 24) >> 4; cx++) {
@@ -2599,10 +2656,13 @@
       }
     }
     const sy = world.findSafeNetherY(nx, nz);
+    // 帰りのポータルが近くに無ければ建てる (これが無いと戻れなくなる)
+    if (!findNetherPortalNear(nx, sy, nz, 12)) buildNetherReturnPortal(nx, sy, nz);
     player.pos = [nx + 0.5, sy, nz + 0.5];
     player.vel = [0, 0, 0];
     player.flying = false;
-    showToast("🔥 ネザーへ渡った…");
+    netherPortalCooldown = 3; // 到着直後に帰りポータルへ触れても即送還されないように
+    showToast("🔥 ネザーへ渡った… (すぐ後ろのポータルで帰れる)");
     sound.blip(150, 0.6, "sawtooth", 0.3);
   }
 
@@ -3721,6 +3781,7 @@
     enterNether,
     exitNether,
     get netherReturnPos() { return netherReturnPos; },
+    findNetherPortalNear,
     chests,
     tryDetectWither,
     spawnWitherBoss,
