@@ -641,7 +641,7 @@
     { out: I.IRON_PICK, outN: 1, in: [[I.IRON_INGOT, 3], [I.STICK, 2]] },
     { out: I.DIAMOND_PICK, outN: 1, in: [[I.DIAMOND, 3], [I.STICK, 2]] },
     { out: I.WOOD_SWORD, outN: 1, in: [[B.PLANK, 2], [I.STICK, 1]] },
-    { out: I.BOW, outN: 1, in: [[I.STICK, 3], [B.WOOL, 3]] },
+    { out: I.BOW, outN: 1, in: [[I.STICK, 3], [I.STRING, 3]] },   // 本家準拠: 棒3 + 糸3
     { out: I.STONE_SWORD, outN: 1, in: [[B.COBBLE, 2], [I.STICK, 1]] },
     { out: I.IRON_SWORD, outN: 1, in: [[I.IRON_INGOT, 2], [I.STICK, 1]] },
     { out: I.DIAMOND_SWORD, outN: 1, in: [[I.DIAMOND, 2], [I.STICK, 1]] },
@@ -656,6 +656,8 @@
     { out: B.PLANK_SLAB, outN: 4, in: [[B.PLANK, 2]] },
     { out: I.BREAD, outN: 1, in: [[I.WHEAT, 3]] },
     { out: I.BONE_MEAL, outN: 3, in: [[I.BONE, 1]] }, // 本家準拠: ホネ1 → 骨粉3
+    { out: B.WOOL, outN: 1, in: [[I.STRING, 4]] },    // 本家準拠: 糸4 → 羊毛1
+    { out: I.GOLDEN_APPLE, outN: 1, in: [[I.GOLD_INGOT, 8], [I.APPLE, 1]] }, // 本家準拠
     { out: B.STONE_BRICK, outN: 4, in: [[B.STONE, 4]] },
     { out: B.SANDSTONE, outN: 1, in: [[B.SAND, 4]] },
     { out: B.BOOKSHELF, outN: 1, in: [[B.PLANK, 6]] },
@@ -793,7 +795,7 @@
     { out: I.GOLD_PICK, outN: 1, in: [[I.GOLD_INGOT, 3], [I.STICK, 2]] },
     { out: I.GOLD_SWORD, outN: 1, in: [[I.GOLD_INGOT, 2], [I.STICK, 1]] },
     { out: I.SHEARS, outN: 1, in: [[I.IRON_INGOT, 2]] },
-    { out: I.FISHING_ROD, outN: 1, in: [[I.STICK, 3], [B.WOOL, 2]] },
+    { out: I.FISHING_ROD, outN: 1, in: [[I.STICK, 3], [I.STRING, 2]] },   // 本家準拠: 棒3 + 糸2
     // エンダードラゴン討伐に向けて: エンダーパール + 火薬 → エンダーアイ
     { out: I.EYE_OF_ENDER, outN: 1, in: [[I.ENDER_PEARL, 1], [I.GUNPOWDER, 1]] },
     // ネザーへ渡るための道具と素材
@@ -1553,9 +1555,12 @@
       if (hasLogNearby(l.x, l.y, l.z)) continue;
       world.setBlock(l.x, l.y, l.z, B.AIR);
       spawnBreakParticles(l.x, l.y, l.z, leafId);
-      // 枯れた葉からもまれに苗木が落ちる (本家準拠)
-      if (gameMode === "survival" && Math.random() < 0.05) {
-        items.spawn(B.SAPLING, l.x, l.y, l.z);
+      // 枯れた葉からもまれに苗木/リンゴが落ちる (本家準拠)
+      if (gameMode === "survival") {
+        if (Math.random() < 0.05) items.spawn(B.SAPLING, l.x, l.y, l.z);
+        if ((leafId === B.LEAVES || leafId === B.DARK_LEAVES) && Math.random() < 0.005) {
+          items.spawn(I.APPLE, l.x, l.y, l.z);
+        }
       }
       // 隣の葉も連鎖して枯れる
       for (const [ox, oy, oz] of DIRS6) {
@@ -2275,9 +2280,13 @@
         items.spawn(I.SEEDS, hit.pos[0], hit.pos[1], hit.pos[2]);
       } else if (hit.id === B.GRAVEL && Math.random() < 0.12) {
         items.spawn(I.FLINT, hit.pos[0], hit.pos[1], hit.pos[2]);
-      } else if (LEAF_IDS.has(hit.id) && Math.random() < 0.05) {
-        // 葉からまれに苗木 (本家準拠: 約5%)
-        items.spawn(B.SAPLING, hit.pos[0], hit.pos[1], hit.pos[2]);
+      } else if (LEAF_IDS.has(hit.id)) {
+        // 葉からまれに苗木 (本家準拠: 約5%)。
+        // オーク/ダークオークの葉からはさらに低確率でリンゴ (本家準拠: 0.5%)
+        if (Math.random() < 0.05) items.spawn(B.SAPLING, hit.pos[0], hit.pos[1], hit.pos[2]);
+        if ((hit.id === B.LEAVES || hit.id === B.DARK_LEAVES) && Math.random() < 0.005) {
+          items.spawn(I.APPLE, hit.pos[0], hit.pos[1], hit.pos[2]);
+        }
       }
       // 道具の消耗 (硬いブロックのみ)
       if (tool && block.hardness >= 0.3) damageTool(tool.id);
@@ -2898,12 +2907,19 @@
     // 食料: 食べる
     if (heldDef && heldDef.food) {
       if (gameMode !== "survival") return;
-      if (player.food >= player.maxFood - 0.5) {
+      // 金のリンゴは満腹でも食べられる (本家準拠)。それ以外は満腹なら食べない
+      if (heldDef.id !== I.GOLDEN_APPLE && player.food >= player.maxFood - 0.5) {
         showToast("お腹がいっぱいだ");
         return;
       }
       if (!consumeItem(heldDef.id)) return;
       player.food = Math.min(player.maxFood, player.food + heldDef.food);
+      // 金のリンゴ: 本家の再生効果の簡易版として体力も即座に回復する
+      if (heldDef.id === I.GOLDEN_APPLE) {
+        player.health = Math.min(player.maxHealth, player.health + 4);
+        spawnPuff(player.pos[0], player.pos[1] + 1.2, player.pos[2], [1, 0.85, 0.3]);
+        showToast("✨ 金のリンゴの力がみなぎる!");
+      }
       sound.eat();
       return;
     }
@@ -3550,7 +3566,7 @@
     streamChunks();
 
     // --- 描画 ---
-    const sprinting = input.sprint && (input.fwd > 0 || player.flying);
+    const sprinting = player.sprinting && (input.fwd > 0 || player.flying);
     fovCurrent = lerp(fovCurrent, baseFov * (sprinting ? 1.12 : 1), Math.min(8 * dt, 1));
     const env = computeEnv(timeOfDay, fovCurrent);
 

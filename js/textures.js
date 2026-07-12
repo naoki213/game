@@ -1277,6 +1277,36 @@ function buildTextureAtlas(seed) {
     return [0, 0, 0, 0];
   });
 
+  // --- 糸 (くるくる巻いた白い糸玉 + 垂れた端) ---
+  paintTile(TILE.STRING, (x, y) => {
+    const dx = x - 7.5, dy = y - 6.5;
+    const d = Math.hypot(dx, dy);
+    if (d < 4.2) {
+      // 渦巻き模様
+      const swirl = Math.sin(Math.atan2(dy, dx) * 3 + d * 2.2) > 0.2;
+      const v = swirl ? 1 : 0.82;
+      return px(235 * v, 233 * v, 226 * v, 1);
+    }
+    if (x >= 10 && x <= 11 && y >= 10 && y <= 14) return px(225, 223, 216, 1); // 垂れた糸
+    return [0, 0, 0, 0];
+  });
+
+  // --- リンゴ (赤い実 + 茶色の軸 + 葉) ---
+  const appleShape = (x, y, main, dark) => {
+    const dx = x - 7.5, dy = y - 9;
+    if (dx * dx + dy * dy * 1.25 < 21) {
+      const edge = dx * dx + dy * dy * 1.25 > 14;
+      const shine = dx < -1 && dy < -1 && !edge; // 左上のハイライト
+      if (shine) return px(Math.min(255, main[0] + 40), main[1] + 40, main[2] + 40, 1);
+      return px(edge ? dark[0] : main[0], edge ? dark[1] : main[1], edge ? dark[2] : main[2], jitter(1, 0.05));
+    }
+    if (x >= 7 && x <= 8 && y >= 2 && y <= 4) return px(95, 65, 35, 1);   // 軸
+    if (x >= 9 && x <= 11 && y >= 3 && y <= 4) return px(70, 140, 50, 1); // 葉
+    return [0, 0, 0, 0];
+  };
+  paintTile(TILE.APPLE, (x, y) => appleShape(x, y, [205, 40, 40], [150, 25, 30]));
+  paintTile(TILE.GOLDEN_APPLE, (x, y) => appleShape(x, y, [235, 190, 40], [180, 140, 25]));
+
   // --- モブの模様入りスキン ---
 
   // ゾンビの肌 (緑, まだらな腐敗の斑点)
