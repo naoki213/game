@@ -109,6 +109,11 @@ const B = {
   // 木の種類 (白樺/ダークオークの葉): 旧 I.SEEDS / I.GUNPOWDER の ID を再利用
   BIRCH_LEAVES: 115,
   DARK_LEAVES: 137,
+  // ジャングル/空島アップデート: 旧 WHEAT/BREAD/ENDER_PEARL/EYE_OF_ENDER の ID を再利用
+  JUNGLE_LOG: 116,
+  JUNGLE_LEAVES: 117,
+  MOSSY_STONE_BRICK: 135,
+  SKY_PORTAL: 136,
   // 壁掛け松明 (N/E/S/W): 旧 I.FLINT / I.NETHER_QUARTZ / I.BLAZE_ROD / I.COMPASS の ID を再利用
   TORCH_WALL_N: 138,
   TORCH_WALL_E: 183,
@@ -219,8 +224,7 @@ const I = {
   BEEF: 113,
   CHICKEN_MEAT: 114,
   // SEEDS (旧115) は白樺の葉ブロック追加のため 256 以上へ退避 (下記参照)
-  WHEAT: 116,
-  BREAD: 117,
+  // WHEAT (旧116) / BREAD (旧117) はジャングルの原木/葉のため 256 以上へ退避
   WOOD_AXE: 118,
   STONE_AXE: 119,
   IRON_AXE: 120,
@@ -238,9 +242,8 @@ const I = {
   SHEARS: 132,
   FISHING_ROD: 133,
   // FISH (旧134) は苗木ブロック追加のため 256 以上へ退避 (下記参照)
-  // エンダードラゴン討伐関連
-  ENDER_PEARL: 135,
-  EYE_OF_ENDER: 136,
+  // ENDER_PEARL (旧135) / EYE_OF_ENDER (旧136) は苔むした石レンガ/スカイポータル
+  // のブロック ID 確保のため 256 以上へ退避 (下記参照)
   // GUNPOWDER (旧137) / FLINT (旧138) / NETHER_QUARTZ (旧183) / BLAZE_ROD (旧184) /
   // COMPASS (旧185) は葉バリエーション・壁掛け松明のブロック ID 確保のため
   // 256 以上へ退避 (下記参照)
@@ -258,7 +261,7 @@ const I = {
   BONE_MEAL: 278,
   FISH: 279,
   // 葉バリエーション (115, 137) と壁掛け松明 (138, 183-185) にブロック ID を
-  // 譲るため 256 以上へ退避したアイテム
+  // 譲るため 256 以上へ退避したアイテム (WHEAT/BREAD/ENDER_PEARL/EYE_OF_ENDER も同様)
   GUNPOWDER: 280,
   FLINT: 281,
   NETHER_QUARTZ: 282,
@@ -269,6 +272,12 @@ const I = {
   STRING: 286,
   APPLE: 287,
   GOLDEN_APPLE: 288,
+  // ジャングル/空島アップデートでブロック ID (116, 117, 135, 136) を譲るため
+  // 256 以上へ退避したアイテム
+  WHEAT: 289,
+  BREAD: 290,
+  ENDER_PEARL: 291,
+  EYE_OF_ENDER: 292,
   // 防具 (アイテムはチャンクに保存されないため 256 以上の ID を使える)
   IRON_HELMET: 260,
   IRON_CHESTPLATE: 261,
@@ -503,6 +512,14 @@ const TILE = {
   STRING: 247,
   APPLE: 248,
   GOLDEN_APPLE: 249,
+  JUNGLE_LOG_SIDE: 250,
+  JUNGLE_LEAVES: 251,
+  MOSSY_STONE_BRICK: 252,
+  SKY_PORTAL: 253,
+  MOB_BIRD_FEATHER: 254,
+  MOB_BIRD_FACE: 255,
+  MOB_GUARDIAN_SKIN: 256,
+  MOB_GUARDIAN_FACE: 257,
 };
 
 // 各ブロックの属性
@@ -560,6 +577,21 @@ defBlock(B.BIRCH_LEAVES, "birch_leaves", "白樺の葉",
 defBlock(B.DARK_LEAVES, "dark_leaves", "ダークオークの葉",
   [TILE.DARK_LEAVES, TILE.DARK_LEAVES, TILE.DARK_LEAVES],
   { opaque: false, hardness: 0.25, drops: null });
+// ジャングル: 高くそびえる木と生い茂った葉 (ジャングル地帯に生成)
+defBlock(B.JUNGLE_LOG, "jungle_log", "ジャングルの原木",
+  [TILE.LOG_TOP, TILE.JUNGLE_LOG_SIDE, TILE.LOG_TOP], { hardness: 1.3 });
+defBlock(B.JUNGLE_LEAVES, "jungle_leaves", "ジャングルの葉",
+  [TILE.JUNGLE_LEAVES, TILE.JUNGLE_LEAVES, TILE.JUNGLE_LEAVES],
+  { opaque: false, hardness: 0.25, drops: null });
+// 苔むした石レンガ: ジャングルの神殿ダンジョンの建材
+defBlock(B.MOSSY_STONE_BRICK, "mossy_stone_brick", "苔むした石レンガ",
+  [TILE.MOSSY_STONE_BRICK, TILE.MOSSY_STONE_BRICK, TILE.MOSSY_STONE_BRICK],
+  { hardness: 2.0, pickable: true, minTier: 1 });
+// スカイポータル: 神殿の最深部と空島を結ぶワープポータル (main.js の
+// updateSkyPortalTravel 参照)。初めて通ると「空の加護」を得て瘴気が無効になる
+defBlock(B.SKY_PORTAL, "sky_portal", "スカイポータル",
+  [TILE.SKY_PORTAL, TILE.SKY_PORTAL, TILE.SKY_PORTAL],
+  { hardness: Infinity, drops: null, solid: false, opaque: false, emissive: true });
 defBlock(B.PLANK, "plank", "木材", [TILE.PLANK, TILE.PLANK, TILE.PLANK], { hardness: 1.2 });
 defBlock(B.GLASS, "glass", "ガラス", [TILE.GLASS, TILE.GLASS, TILE.GLASS],
   { opaque: false, hardness: 0.35, drops: null });
@@ -1118,7 +1150,7 @@ BLOCKS[B.LAVA_BLOCK].fluidLevel = 4;
 BLOCKS[B.LAVA_BLOCK].fluidSource = true;
 
 // 道具の効くブロック分類
-[B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.PLANK, B.BIRCH_PLANK, B.DARK_PLANK,
+[B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.JUNGLE_LOG, B.PLANK, B.BIRCH_PLANK, B.DARK_PLANK,
  B.PLANK_SLAB, B.BOOKSHELF, B.CHEST, B.BED, B.PUMPKIN, B.JACK_O_LANTERN,
  STAIR_ID_BASE + 2 * 4, STAIR_ID_BASE + 2 * 4 + 1, STAIR_ID_BASE + 2 * 4 + 2, STAIR_ID_BASE + 2 * 4 + 3,
  DOOR_ID_BASE, DOOR_ID_BASE + 1, DOOR_ID_BASE + 2, DOOR_ID_BASE + 3,

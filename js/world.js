@@ -40,6 +40,17 @@ function fromNether(nx, nz) {
 // 十字型の橋。ウィザースケルトンが徘徊する探索の目的地
 const NETHER_FORTRESS = { x: NETHER.x + 50, z: NETHER.z + 30, y: 50 };
 
+// ジャングル地帯 (オリジナル要素): スポーンから少し離れた固定ゾーン。
+// 中心に神殿ダンジョンがあり, 最深部のスカイポータルから空島へ渡れる
+const JUNGLE = { x: 420, z: 420, r: 130 };
+const JUNGLE_TEMPLE_Y = 52;   // 神殿の土台の高さ (海面46より上。ゾーン中心は平らに整地)
+
+// 空島 (オリジナル要素): 通常マップ上空の固定座標に浮かぶ島。
+// 「空の加護」(神殿のポータルを通ると得られる) なしで空域 (y>96) に入ると
+// 毒の瘴気でダメージを受ける。島にはボス「空の守護者」と宝, 騎乗できる鳥がいる
+const SKY_ISLAND = { x: -350, z: 480, y: 104, r: 34 };
+const SKY_POISON_Y = 96;      // 瘴気が始まる高さ (空島の空域のみ)
+
 // チャンク内インデックス: idx = (y << 8) | (z << 4) | x
 function blockIndex(x, y, z) {
   return (y << 8) | (z << 4) | x;
@@ -172,6 +183,19 @@ class World {
     else if (moist < -0.32 && h <= WATER_LEVEL + 6) biome = "desert";
     else if (moist > 0.12) biome = "forest";
     else biome = "plains";
+
+    // ジャングル地帯 (固定ゾーン): ゾーン内はジャングルで, 海に沈まないよう
+    // 底上げする。中心部は神殿を置くために平らに整地する
+    const jdx = x - JUNGLE.x, jdz = z - JUNGLE.z;
+    const jd = Math.sqrt(jdx * jdx + jdz * jdz);
+    if (jd < JUNGLE.r) {
+      biome = "jungle";
+      h = Math.max(h, WATER_LEVEL + 3);
+      if (jd < 30) {
+        const t = smoothstep(16, 30, jd); // 中心ほど JUNGLE_TEMPLE_Y に寄せる
+        h = Math.round(JUNGLE_TEMPLE_Y * (1 - t) + h * t);
+      }
+    }
 
     info = { h, biome };
     if (this.heightCache.size > 60000) this.heightCache.clear();
@@ -416,9 +440,35 @@ class World {
         if (h <= WATER_LEVEL) continue;
         if (chunk.get(lx, h, lz) !== B.GRASS) continue;
 
-        const density = biome === "forest" ? 0.022 : biome === "plains" ? 0.004 : 0;
+        const density = biome === "forest" ? 0.022 : biome === "plains" ? 0.004
+          : biome === "jungle" ? 0.03 : 0;
         if (density === 0) continue;
         if (hash2(wx, wz, seed ^ 0xa5a5) >= density) continue;
+
+        // ジャングルの木: 高い幹 (7-11) + 大きな樹冠。太い木は専用処理
+        if (biome === "jungle") {
+          if (lx < 3 || lx > 12 || lz < 3 || lz > 12) continue; // 樹冠半径3がはみ出す位置は諦める
+          const jTrunkH = 7 + ((hash2(wx, wz, seed ^ 0x1234) * 5) | 0);
+          const jTopY = h + jTrunkH;
+          if (jTopY + 2 >= CHUNK_H) continue;
+          for (let y = h + 1; y <= jTopY; y++) chunk.set(lx, y, lz, B.JUNGLE_LOG);
+          chunk.set(lx, h, lz, B.DIRT);
+          for (let dy = -2; dy <= 1; dy++) {
+            const y = jTopY + dy;
+            const r = dy >= 0 ? 2 : 3;
+            for (let dz = -r; dz <= r; dz++) {
+              for (let dx = -r; dx <= r; dx++) {
+                if (dx === 0 && dz === 0 && dy < 0) continue;
+                if (Math.abs(dx) === r && Math.abs(dz) === r &&
+                    hash3(wx + dx, y, wz + dz, seed) < 0.5) continue;
+                const tx = lx + dx, tz = lz + dz;
+                if (chunk.get(tx, y, tz) === B.AIR) chunk.set(tx, y, tz, B.JUNGLE_LEAVES);
+              }
+            }
+          }
+          chunk.set(lx, jTopY + 1, lz, B.JUNGLE_LEAVES);
+          continue;
+        }
 
         // 樹種: オーク (標準) / 白樺 (細く高い) / ダークオーク (低く密な樹冠)
         const tr = hash2(wx, wz, seed ^ 0x7ee5);
@@ -464,13 +514,15 @@ class World {
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         const wx = ox + lx, wz = oz + lz;
         const { h, biome } = this.columnInfo(wx, wz);
-        if (biome !== "plains" && biome !== "forest") continue;
+        if (biome !== "plains" && biome !== "forest" && biome !== "jungle") continue;
         if (h + 1 >= CHUNK_H) continue;
         if (chunk.get(lx, h, lz) !== B.GRASS) continue;
         if (chunk.get(lx, h + 1, lz) !== B.AIR) continue;
 
         const r = hash2(wx, wz, seed ^ 0x77aa11);
-        if (r < 0.09) {
+        if (biome === "jungle" && r < 0.3) {
+          chunk.set(lx, h + 1, lz, B.TALL_GRASS);   // ジャングルは下草が濃い
+        } else if (r < 0.09) {
           chunk.set(lx, h + 1, lz, B.TALL_GRASS);
         } else if (r < 0.102) {
           chunk.set(lx, h + 1, lz,
@@ -489,6 +541,10 @@ class World {
 
     // --- ストロングホールド (エンドポータルの間) を刻印 ---
     this.stampStronghold(chunk);
+
+    // --- ジャングルの神殿ダンジョンと空島を刻印 ---
+    this.stampJungleTemple(chunk);
+    this.stampSkyIsland(chunk);
 
     // --- 保存済みの編集を適用 ---
     const edits = this.edits.get(key);
@@ -887,6 +943,166 @@ class World {
       for (let d = -3; d <= 3; d += 2) {
         set(fx + d, fy + 7, gz - 2, B.NETHER_BRICK);
         set(fx + d, fy + 7, gz + 2, B.NETHER_BRICK);
+      }
+    }
+  }
+
+  // ジャングルの神殿ダンジョン: 苔むした石レンガのピラミッド。地下へ降りる階段の
+  // 先に宝物庫とスカイポータルの間がある (オリジナル要素)
+  stampJungleTemple(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    const tx = JUNGLE.x, tz = JUNGLE.z, ty = JUNGLE_TEMPLE_Y;
+    const R = 28;
+    if (ox + 15 < tx - R || ox > tx + R || oz + 15 < tz - R || oz > tz + R) return;
+
+    const set = (wx, y, wz, id) => {
+      if (wx < ox || wx > ox + 15 || wz < oz || wz > oz + 15 || y < 1 || y >= CHUNK_H) return;
+      chunk.set(wx - ox, y, wz - oz, id);
+    };
+    const fill = (x0, y0, z0, x1, y1, z1, id) => {
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++)
+          for (let x = x0; x <= x1; x++) set(x, y, z, id);
+    };
+    // 苔むした石レンガと普通の石レンガの混合 (遺跡らしい風合い)
+    const brick = (x, y, z) =>
+      hash3(x, y, z, 0x7357) < 0.6 ? B.MOSSY_STONE_BRICK : B.STONE_BRICK;
+    const fillBrick = (x0, y0, z0, x1, y1, z1) => {
+      for (let y = y0; y <= y1; y++)
+        for (let z = z0; z <= z1; z++)
+          for (let x = x0; x <= x1; x++) set(x, y, z, brick(x, y, z));
+    };
+
+    // --- ピラミッド本体 (17x17 の階段状, 7 段) ---
+    fill(tx - 9, ty + 1, tz - 9, tx + 9, ty + 12, tz + 9, B.AIR); // 上空を開ける
+    for (let i = 0; i <= 6; i++) {
+      const half = 8 - i;
+      fillBrick(tx - half, ty + 1 + i, tz - half, tx + half, ty + 1 + i, tz + half);
+    }
+    // 大広間 (内部をくり抜く) + 柱
+    fill(tx - 5, ty + 1, tz - 5, tx + 5, ty + 4, tz + 5, B.AIR);
+    for (const [dx, dz] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) {
+      fillBrick(tx + dx, ty + 1, tz + dz, tx + dx, ty + 4, tz + dz);
+      set(tx + dx, ty + 4, tz + dz, B.GLOWSTONE); // 柱の頂を照らす
+    }
+    // 入口 (南側, 幅3 x 高さ3)
+    fill(tx - 1, ty + 1, tz - 9, tx + 1, ty + 3, tz - 5, B.AIR);
+
+    // --- 地下へ降りる階段 (北へ 1 ずつ下がる) ---
+    for (let k = 0; k <= 8; k++) {
+      const y = ty - k, z = tz + 4 + k;
+      fillBrick(tx - 1, y, z, tx + 1, y, z);           // 踏み面
+      fill(tx - 1, y + 1, z, tx + 1, y + 3, z, B.AIR); // 頭上
+      // 側壁 (自然の土がこぼれないように)
+      set(tx - 2, y + 1, z, brick(tx - 2, y + 1, z));
+      set(tx + 2, y + 1, z, brick(tx + 2, y + 1, z));
+    }
+
+    // --- ポータルの間 (地下の大部屋) ---
+    fillBrick(tx - 5, ty - 9, tz + 12, tx + 5, ty - 3, tz + 24);   // 外殻
+    fill(tx - 4, ty - 8, tz + 13, tx + 4, ty - 4, tz + 23, B.AIR); // 内部
+    fill(tx - 1, ty - 8, tz + 12, tx + 1, ty - 6, tz + 12, B.AIR); // 階段からの入口
+    for (const [dx, dz] of [[-4, 13], [4, 13], [-4, 23], [4, 23]]) {
+      set(tx + dx, ty - 4, tz + dz, B.GLOWSTONE);
+    }
+    // 宝箱 x2 (中身は main.js が初回訪問時に詰める)
+    set(tx - 3, ty - 8, tz + 22, B.CHEST);
+    set(tx + 3, ty - 8, tz + 22, B.CHEST);
+    // スカイポータル (奥の壁際, 2x3 の枠)
+    const pz = tz + 22;
+    for (let x = tx - 1; x <= tx + 2; x++) {
+      set(x, ty - 9, pz, B.MOSSY_STONE_BRICK);
+      set(x, ty - 4, pz, B.MOSSY_STONE_BRICK);
+    }
+    for (let y = ty - 8; y <= ty - 5; y++) {
+      set(tx - 1, y, pz, B.MOSSY_STONE_BRICK);
+      set(tx + 2, y, pz, B.MOSSY_STONE_BRICK);
+      if (y <= ty - 6) { set(tx, y, pz, B.SKY_PORTAL); set(tx + 1, y, pz, B.SKY_PORTAL); }
+    }
+    set(tx, ty - 5, pz, B.SKY_PORTAL); set(tx + 1, ty - 5, pz, B.SKY_PORTAL);
+  }
+
+  // 空島: 上空に浮かぶ楕円形の島。中央はボスアリーナ, 帰りのスカイポータルと
+  // 宝箱, 騎乗できる鳥が待っている (オリジナル要素)
+  stampSkyIsland(chunk) {
+    const ox = chunk.cx * CHUNK_SIZE;
+    const oz = chunk.cz * CHUNK_SIZE;
+    const { x: sx, z: sz, y: sy, r: sr } = SKY_ISLAND;
+    const R = sr + 4;
+    if (ox + 15 < sx - R || ox > sx + R || oz + 15 < sz - R || oz > sz + R) return;
+
+    const set = (wx, y, wz, id) => {
+      if (wx < ox || wx > ox + 15 || wz < oz || wz > oz + 15 || y < 1 || y >= CHUNK_H) return;
+      chunk.set(wx - ox, y, wz - oz, id);
+    };
+
+    // --- 島本体 (上面はゆるいドーム, 下面はすぼまる岩盤) ---
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        const wx = ox + lx, wz = oz + lz;
+        const dx = wx - sx, dz = wz - sz;
+        const d = Math.sqrt(dx * dx + dz * dz) / sr;
+        if (d >= 1) continue;
+        const arena = d < 0.4;
+        const hump = 1 - d * d;
+        const yTop = arena ? sy + 5 : sy + Math.round(hump * 5);
+        const depth = Math.round((1 - d) * 16 * (0.65 + hash2(wx, wz, 0x55c) * 0.5));
+        const yBot = Math.max(2, sy - depth);
+        for (let y = yBot; y <= yTop; y++) {
+          let id = B.STONE;
+          if (arena && y === yTop) id = B.STONE_BRICK;        // アリーナの床
+          else if (y === yTop) id = B.GRASS;
+          else if (y >= yTop - 2) id = B.DIRT;
+          chunk.set(lx, y, lz, id);
+        }
+        // 上空を確実に開けておく (雲/他構造との干渉避け)
+        for (let y = yTop + 1; y <= Math.min(CHUNK_H - 1, sy + 20); y++) {
+          if (chunk.get(lx, y, lz) !== B.AIR) chunk.set(lx, y, lz, B.AIR);
+        }
+      }
+    }
+
+    const floorY = sy + 5; // アリーナの床の高さ
+
+    // --- 帰りのスカイポータル (アリーナ西側) ---
+    const pfx = sx - 10;   // ポータル面の x 中心 (2セル: pfx, pfx+1)
+    for (let x = pfx - 1; x <= pfx + 2; x++) {
+      set(x, floorY + 1 - 1, sz, B.MOSSY_STONE_BRICK); // 土台 (床と面一)
+      set(x, floorY + 4, sz, B.MOSSY_STONE_BRICK);
+    }
+    for (let y = floorY + 1; y <= floorY + 3; y++) {
+      set(pfx - 1, y, sz, B.MOSSY_STONE_BRICK);
+      set(pfx + 2, y, sz, B.MOSSY_STONE_BRICK);
+      set(pfx, y, sz, B.SKY_PORTAL);
+      set(pfx + 1, y, sz, B.SKY_PORTAL);
+    }
+
+    // --- 宝箱 x2 (アリーナ東側) ---
+    set(sx + 7, floorY + 1, sz + 4, B.CHEST);
+    set(sx + 7, floorY + 1, sz - 4, B.CHEST);
+
+    // --- 照明の柱 (アリーナ四隅) ---
+    for (const [dx, dz] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) {
+      set(sx + dx, floorY + 1, sz + dz, B.STONE_BRICK);
+      set(sx + dx, floorY + 2, sz + dz, B.GLOWSTONE);
+    }
+
+    // --- 島の縁の木 (固定位置に数本) ---
+    for (const [tx2, tz2] of [[sx + 16, sz + 10], [sx - 13, sz + 17], [sx + 3, sz - 19]]) {
+      const dx = tx2 - sx, dz = tz2 - sz;
+      const d = Math.sqrt(dx * dx + dz * dz) / sr;
+      if (d >= 0.95) continue;
+      const gy = sy + Math.round((1 - d * d) * 5); // その位置の地表
+      for (let y = gy + 1; y <= gy + 4; y++) set(tx2, y, tz2, B.LOG);
+      for (let dy = 3; dy <= 5; dy++) {
+        const r = dy === 5 ? 1 : 2;
+        for (let ddz = -r; ddz <= r; ddz++) {
+          for (let ddx = -r; ddx <= r; ddx++) {
+            if (ddx === 0 && ddz === 0 && dy < 5) continue;
+            set(tx2 + ddx, gy + dy + 1, tz2 + ddz, B.LEAVES);
+          }
+        }
       }
     }
   }

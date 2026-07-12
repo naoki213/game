@@ -362,6 +362,54 @@ const MOB_TYPES = {
       [0.7, 2.65, 0.28, 0.08, 0.08, 0.03, 0.5, 0.9, 1.0],
     ],
   },
+  // 空の鳥 (オリジナル要素): 空島に住む大きな鳥。小麦か種で手なずけると
+  // ついてきて, 右クリックで騎乗して自由に空を飛べる
+  sky_bird: {
+    speed: 2.2,
+    halfW: 0.45, height: 0.9,
+    health: 24,
+    hostile: false,
+    flying: true,
+    noBurn: true,
+    skyBird: true,      // 空島の周りを旋回する専用 AI (Mob.update 参照)
+    parts: [
+      // 胴体 (ふっくらした羽毛)
+      [-0.4, 0.15, -0.5, 0.8, 0.55, 1.0, 1, 1, 1, TILE.MOB_BIRD_FEATHER],
+      // 頭 + 顔 (くちばし付き)
+      [-0.25, 0.6, 0.42, 0.5, 0.45, 0.42, 1, 1, 1, TILE.MOB_BIRD_FEATHER, TILE.MOB_BIRD_FACE],
+      // 翼 x2 (横に広がる)
+      [-1.05, 0.45, -0.35, 0.65, 0.1, 0.7, 1, 1, 1, TILE.MOB_BIRD_FEATHER],
+      [0.4, 0.45, -0.35, 0.65, 0.1, 0.7, 1, 1, 1, TILE.MOB_BIRD_FEATHER],
+      // 尾羽
+      [-0.15, 0.35, -0.85, 0.3, 0.12, 0.4, 1, 1, 1, TILE.MOB_BIRD_FEATHER],
+    ],
+  },
+  // 空の守護者 (オリジナルボス): 空島のアリーナを守る黄金の巨鳥。
+  // ファイアボールを放ちながら旋回する。倒すと宝と大量の経験値
+  sky_guardian: {
+    speed: 3.0,
+    halfW: 1.0, height: 1.8,
+    health: 120,
+    hostile: true,
+    flying: true,
+    ranged: true,
+    fireball: true,
+    noBurn: true,
+    regen: 0.3,
+    attack: 6,
+    drops: I.GOLDEN_APPLE, dropN: 2,
+    parts: [
+      // 大きな胴体 (黄金の鱗)
+      [-0.9, 0.3, -1.0, 1.8, 1.1, 2.0, 1, 1, 1, TILE.MOB_GUARDIAN_SKIN],
+      // 頭 + 光る目
+      [-0.45, 1.1, 0.85, 0.9, 0.8, 0.75, 1, 1, 1, TILE.MOB_GUARDIAN_SKIN, TILE.MOB_GUARDIAN_FACE],
+      // 巨大な翼 x2
+      [-2.2, 0.8, -0.6, 1.35, 0.15, 1.3, 1, 1, 1, TILE.MOB_GUARDIAN_SKIN],
+      [0.85, 0.8, -0.6, 1.35, 0.15, 1.3, 1, 1, 1, TILE.MOB_GUARDIAN_SKIN],
+      // 尾
+      [-0.25, 0.55, -1.7, 0.5, 0.3, 0.8, 1, 1, 1, TILE.MOB_GUARDIAN_SKIN],
+    ],
+  },
 };
 
 const MOB_NAMES = Object.keys(MOB_TYPES);
@@ -548,7 +596,9 @@ class Mob {
     this.burnAccum = 0;
     this.angered = false;                          // エンダーマン: 殴られるとアグロ
     this.teleportTimer = 4 + Math.random() * 5;
-    this.tamed = false;                            // オオカミ: ホネで手なずけられたか
+    this.tamed = false;                            // オオカミ/鳥: 手なずけられたか
+    this.anchor = [x, y, z];                       // 空の鳥: 旋回の中心 (スポーン地点)
+    this.ridden = false;                           // 空の鳥: プレイヤーが騎乗中か
   }
 
   // 近くの安全な足場を探して瞬間移動する (エンダーマン)
@@ -573,6 +623,13 @@ class Mob {
   update(dt, world, player, daylight, mgr) {
     this.hurt = Math.max(0, this.hurt - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+
+    // --- 騎乗中の鳥: 位置は main.js がプレイヤーに同期させるので物理は行わない ---
+    if (this.ridden) {
+      this.walkPhase += dt * 4;
+      this.bob = Math.sin(this.walkPhase * Math.PI * 2) * 0.5;
+      return;
+    }
 
     // --- ゆっくり体力が回復するボスモブ (ウィザー) ---
     if (this.def.regen && this.health > 0 && this.health < this.def.health) {
@@ -706,8 +763,19 @@ class Mob {
     this.vel[2] = lerp(this.vel[2], tz, Math.min(8 * dt, 1));
 
     if (this.def.flying) {
-      // 飛行モブ (ブレイズ): 重力を受けず, プレイヤーの目線あたりを浮遊する
-      const targetY = player.pos[1] + 2.5 + Math.sin(this.stateTime * 0.6) * 1.5;
+      // 飛行モブ (ブレイズ): 重力を受けず, プレイヤーの目線あたりを浮遊する。
+      // 野生の空の鳥はプレイヤーではなくスポーン地点 (空島) の周りを旋回する
+      let targetY;
+      if (this.def.skyBird && !this.tamed) {
+        const ax = this.anchor[0] - this.pos[0], az = this.anchor[2] - this.pos[2];
+        if (Math.hypot(ax, az) > 14) {           // 島から離れすぎたら戻る
+          this.yaw = Math.atan2(ax, az);
+          this.state = "walk";
+        }
+        targetY = this.anchor[1] + 2 + Math.sin(this.stateTime * 0.8) * 2;
+      } else {
+        targetY = player.pos[1] + 2.5 + Math.sin(this.stateTime * 0.6) * 1.5;
+      }
       this.vel[1] = clamp((targetY - this.pos[1]) * 1.2, -4, 4);
     } else {
       this.vel[1] -= MOB_GRAVITY * dt;
