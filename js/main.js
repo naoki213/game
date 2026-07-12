@@ -2739,8 +2739,8 @@
     const { x: sx, z: sz, y: sy } = SKY_ISLAND;
     if (!nearSkyIsland()) {
       // 神殿 → 空島
-      genChunksAround(sx, sz, 48);
-      player.pos = [sx - 7.5, sy + 6.01, sz + 0.5]; // アリーナのポータル前
+      genChunksAround(sx, sz, 64);
+      player.pos = [sx - 11.5, sy + 8.01, sz + 0.5]; // アリーナのポータル前
       player.vel = [0, 0, 0];
       if (!skyBlessing) {
         skyBlessing = true;
@@ -2752,8 +2752,8 @@
       sound.blip(700, 0.5, "sine", 0.3);
     } else {
       // 空島 → 神殿
-      genChunksAround(JUNGLE.x, JUNGLE.z, 32);
-      player.pos = [JUNGLE.x + 0.5, JUNGLE_TEMPLE_Y - 7.99, JUNGLE.z + 20.5]; // ポータルの間
+      genChunksAround(JUNGLE.x, JUNGLE.z, 48);
+      player.pos = [JUNGLE.x + 0.5, JUNGLE_TEMPLE_Y - 9.99, JUNGLE.z + 32.5]; // ポータルの間
       player.vel = [0, 0, 0];
       showToast("🌿 ジャングルの神殿へ戻った");
       sound.blip(400, 0.5, "sine", 0.3);
@@ -2767,7 +2767,7 @@
     if (world.isInNether(player.pos[0], player.pos[2]) ||
         world.isInEnd(player.pos[0], player.pos[2])) return;
     const dx = player.pos[0] - SKY_ISLAND.x, dz = player.pos[2] - SKY_ISLAND.z;
-    if (dx * dx + dz * dz > 90 * 90 || player.pos[1] <= SKY_POISON_Y) {
+    if (dx * dx + dz * dz > 140 * 140 || player.pos[1] <= SKY_POISON_Y) {
       skyPoisonAccum = 0;
       return;
     }
@@ -2795,10 +2795,14 @@
       sound.blip(90, 1.0, "sawtooth", 0.4);
     }
     if (mobs.countType("sky_bird") === 0) {
-      const m = new Mob("sky_bird", sx + 6.5, sy + 9, sz - 6.5);
-      m.anchor = [sx, sy + 8, sz];
-      if (birdTamedSaved) m.tamed = true; // 一度手なずけた鳥は戻ってくる
-      mobs.mobs.push(m);
+      // 3羽の群れ。一度仲間になった鳥 (手なずけ/ボス討伐) は 1 羽が仲間の状態で戻ってくる
+      const spots = [[sx + 8.5, sy + 12, sz - 8.5], [sx - 10.5, sy + 13, sz + 12.5], [sx + 14.5, sy + 11, sz + 6.5]];
+      spots.forEach(([bx2, by2, bz2], i) => {
+        const m = new Mob("sky_bird", bx2, by2, bz2);
+        m.anchor = [sx, sy + 10, sz];
+        if (i === 0 && birdTamedSaved) m.tamed = true;
+        mobs.mobs.push(m);
+      });
     }
   }
 
@@ -2836,48 +2840,61 @@
     ridingBird.vel = [0, 0, 0];
   }
 
-  // ジャングル神殿の宝物庫 (初回訪問時に宝箱2つへ)
+  // ジャングル神殿の宝物庫 (初回訪問時に宝箱3つへ: 前室1 + ポータルの間2)
   function updateJungleLoot() {
     if (jungleLootGiven) return;
     const tx = JUNGLE.x, tz = JUNGLE.z, ty = JUNGLE_TEMPLE_Y;
-    const dx = player.pos[0] - tx, dz = player.pos[2] - (tz + 18);
-    if (dx * dx + dz * dz > 10 * 10 || Math.abs(player.pos[1] - (ty - 8)) > 6) return;
-    if (world.getBlock(tx - 3, ty - 8, tz + 22) !== B.CHEST) return;
+    const dx = player.pos[0] - tx, dz = player.pos[2] - (tz + 26);
+    if (dx * dx + dz * dz > 14 * 14 || Math.abs(player.pos[1] - (ty - 10)) > 7) return;
+    if (world.getBlock(tx - 4, ty - 10, tz + 34) !== B.CHEST) return;
     jungleLootGiven = true;
     localStorage.setItem("mcjs_jungleloot_" + seed, "1");
-    const c1 = chestAt([tx - 3, ty - 8, tz + 22].join(","));
+    const c1 = chestAt([tx - 4, ty - 10, tz + 34].join(","));
     c1.set(I.DIAMOND, 2);
     c1.set(I.GOLD_INGOT, 5);
     c1.set(I.ENDER_PEARL, 2);
     c1.set(B.TNT, 2);
-    const c2 = chestAt([tx + 3, ty - 8, tz + 22].join(","));
+    const c2 = chestAt([tx + 4, ty - 10, tz + 34].join(","));
     c2.set(I.GOLDEN_APPLE, 1);
     c2.set(I.STRING, 5);
     c2.set(I.BONE, 3);
     c2.set(B.MOSSY_STONE_BRICK, 12);
+    const c3 = chestAt([tx + 5, ty - 10, tz + 24].join(","));
+    c3.set(I.APPLE, 3);
+    c3.set(I.IRON_INGOT, 4);
+    c3.set(B.TORCH, 8);
     chestsDirty = true;
     showToast("🏛 神殿の宝物庫を見つけた!");
   }
 
-  // 空島の宝 (初回訪問時に宝箱2つへ)
+  // 空島の宝 (初回訪問時にアリーナの宝箱3つ + 衛星の小島の宝箱へ)
   function updateSkyLoot() {
     if (skyLootGiven || !nearSkyIsland()) return;
-    const { x: sx, z: sz, y: sy } = SKY_ISLAND;
+    const { x: sx, z: sz, y: sy, r: sr } = SKY_ISLAND;
     const dx = player.pos[0] - sx, dz = player.pos[2] - sz;
-    if (dx * dx + dz * dz > 20 * 20) return;
-    if (world.getBlock(sx + 7, sy + 6, sz + 4) !== B.CHEST) return;
+    if (dx * dx + dz * dz > 26 * 26) return;
+    if (world.getBlock(sx + 12, sy + 8, sz + 5) !== B.CHEST) return;
     skyLootGiven = true;
     localStorage.setItem("mcjs_skyloot_" + seed, "1");
-    const c1 = chestAt([sx + 7, sy + 6, sz + 4].join(","));
+    const c1 = chestAt([sx + 12, sy + 8, sz + 5].join(","));
     c1.set(I.DIAMOND, 3);
     c1.set(B.DIAMOND_BLOCK, 1);
     c1.set(I.GOLDEN_APPLE, 2);
-    const c2 = chestAt([sx + 7, sy + 6, sz - 4].join(","));
+    const c2 = chestAt([sx + 12, sy + 8, sz - 5].join(","));
     c2.set(B.GOLD_BLOCK, 2);
     c2.set(I.BLAZE_ROD, 2);
     c2.set(I.ENDER_PEARL, 3);
+    const c3 = chestAt([sx + 5, sy + 8, sz + 12].join(","));
+    c3.set(I.GOLD_INGOT, 6);
+    c3.set(I.STRING, 6);
+    c3.set(B.GLOWSTONE, 4);
+    // 衛星の小島 (鳥に乗って取りに行くおまけ)
+    const c4 = chestAt([sx + sr + 24, sy + 6, sz - 14].join(","));
+    c4.set(I.DIAMOND, 2);
+    c4.set(I.GOLDEN_APPLE, 1);
+    c4.set(B.COAL_BLOCK, 3);
     chestsDirty = true;
-    showToast("☁ 空島の宝を見つけた!");
+    showToast("☁ 空島の宝を見つけた! (衛星の小島にも宝箱がある)");
   }
 
   // 溶岩に触れるとダメージ (水中と違って燃え続ける)
@@ -3821,7 +3838,7 @@
         }
         // 敵性モブの討伐でXPを獲得 (本家準拠: 通常5, ブレイズ10, ウィザー50)
         if (def.hostile) addXp(MOB_XP[death.type] || 5);
-        // 空の守護者 (空島のボス) を討伐: 記録して宝を落とす
+        // 空の守護者 (空島のボス) を討伐: 記録して宝を落とし, 鳥が仲間になる
         if (death.type === "sky_guardian") {
           skyBossDefeated = true;
           localStorage.setItem("mcjs_skyboss_" + seed, "1");
@@ -3831,6 +3848,17 @@
           items.spawn(B.GOLD_BLOCK, dxp, dyp, dzp, 2);
           showToast("⚔✨ 空の守護者を討伐した! 空島は解放された ✨⚔");
           sound.blip(140, 1.2, "sine", 0.4);
+          // 守護者から解放された鳥が仲間になる (いなければ現れる)
+          let bird = mobs.mobs.find((m2) => m2.type === "sky_bird" && !m2.tamed);
+          if (!bird) {
+            bird = new Mob("sky_bird", death.pos[0], death.pos[1] + 2, death.pos[2]);
+            bird.anchor = [SKY_ISLAND.x, SKY_ISLAND.y + 10, SKY_ISLAND.z];
+            mobs.mobs.push(bird);
+          }
+          bird.tamed = true;
+          birdTamedSaved = true;
+          localStorage.setItem("mcjs_bird_" + seed, "1");
+          setTimeout(() => showToast("🕊 空の鳥が仲間になった! (右クリックで騎乗できる)"), 2600);
         }
       }
       if (mobs.groanRequest) sound.groan();
