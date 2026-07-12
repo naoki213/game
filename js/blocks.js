@@ -114,6 +114,10 @@ const B = {
   JUNGLE_LEAVES: 117,
   MOSSY_STONE_BRICK: 135,
   SKY_PORTAL: 136,
+  // 空島の固有植物: 旧 PORK/BEEF/CHICKEN_MEAT の ID を再利用
+  SKY_GRASS: 112,
+  STAR_FLOWER: 113,
+  SKY_LEAVES: 114,
   // 壁掛け松明 (N/E/S/W): 旧 I.FLINT / I.NETHER_QUARTZ / I.BLAZE_ROD / I.COMPASS の ID を再利用
   TORCH_WALL_N: 138,
   TORCH_WALL_E: 183,
@@ -220,9 +224,8 @@ const I = {
   GOLD_INGOT: 109,
   DIAMOND: 110,
   BOW: 111,
-  PORK: 112,
-  BEEF: 113,
-  CHICKEN_MEAT: 114,
+  // PORK (旧112) / BEEF (旧113) / CHICKEN_MEAT (旧114) は空島の植物ブロックの
+  // ため 256 以上へ退避 (下記参照)
   // SEEDS (旧115) は白樺の葉ブロック追加のため 256 以上へ退避 (下記参照)
   // WHEAT (旧116) / BREAD (旧117) はジャングルの原木/葉のため 256 以上へ退避
   WOOD_AXE: 118,
@@ -278,6 +281,9 @@ const I = {
   BREAD: 290,
   ENDER_PEARL: 291,
   EYE_OF_ENDER: 292,
+  PORK: 293,
+  BEEF: 294,
+  CHICKEN_MEAT: 295,
   // 防具 (アイテムはチャンクに保存されないため 256 以上の ID を使える)
   IRON_HELMET: 260,
   IRON_CHESTPLATE: 261,
@@ -520,6 +526,9 @@ const TILE = {
   MOB_BIRD_FACE: 255,
   MOB_GUARDIAN_SKIN: 256,
   MOB_GUARDIAN_FACE: 257,
+  SKY_GRASS: 258,
+  STAR_FLOWER: 259,
+  SKY_LEAVES: 260,
 };
 
 // 各ブロックの属性
@@ -592,6 +601,17 @@ defBlock(B.MOSSY_STONE_BRICK, "mossy_stone_brick", "苔むした石レンガ",
 defBlock(B.SKY_PORTAL, "sky_portal", "スカイポータル",
   [TILE.SKY_PORTAL, TILE.SKY_PORTAL, TILE.SKY_PORTAL],
   { hardness: Infinity, drops: null, solid: false, opaque: false, emissive: true });
+// 空島の固有植物: 下界とは違う, 雲の上にだけ生える植物たち
+defBlock(B.SKY_GRASS, "sky_grass", "空草",
+  [TILE.SKY_GRASS, TILE.SKY_GRASS, TILE.SKY_GRASS],
+  { opaque: false, solid: false, cross: true, hardness: 0.05, drops: null });
+defBlock(B.STAR_FLOWER, "star_flower", "星の花",
+  [TILE.STAR_FLOWER, TILE.STAR_FLOWER, TILE.STAR_FLOWER],
+  { opaque: false, solid: false, cross: true, hardness: 0.05 });
+BLOCKS[B.STAR_FLOWER].lightLevel = 9;  // ほのかに光る
+defBlock(B.SKY_LEAVES, "sky_leaves", "空葉",
+  [TILE.SKY_LEAVES, TILE.SKY_LEAVES, TILE.SKY_LEAVES],
+  { opaque: false, hardness: 0.25, drops: null });
 defBlock(B.PLANK, "plank", "木材", [TILE.PLANK, TILE.PLANK, TILE.PLANK], { hardness: 1.2 });
 defBlock(B.GLASS, "glass", "ガラス", [TILE.GLASS, TILE.GLASS, TILE.GLASS],
   { opaque: false, hardness: 0.35, drops: null });
