@@ -385,11 +385,14 @@
       name = "エンダードラゴン";
       hp = d.health; max = d.maxHealth;
     } else {
-      // ウィザー戦もボスバー対象 (近くにいるときだけ)
+      // ウィザー戦 / 空の守護者戦もボスバー対象 (近くにいるときだけ)
       for (const m of mobs.mobs) {
-        if (m.type === "wither_boss" && !m.dead) {
+        if ((m.type === "wither_boss" || m.type === "sky_guardian") && !m.dead) {
           const dx = m.pos[0] - player.pos[0], dz = m.pos[2] - player.pos[2];
-          if (dx * dx + dz * dz < 80 * 80) { name = "ウィザー"; hp = m.health; max = m.def.health; }
+          if (dx * dx + dz * dz < 80 * 80) {
+            name = m.type === "wither_boss" ? "ウィザー" : "空の守護者";
+            hp = m.health; max = m.def.health;
+          }
           break;
         }
       }
@@ -564,6 +567,7 @@
     B.TALL_GRASS, B.FLOWER_YELLOW, B.FLOWER_RED, B.WHEAT_0, B.WHEAT_1,
     B.WHEAT_2, B.ICE, B.PUMPKIN, B.OBSIDIAN, B.BIRCH_LOG, B.DARK_LOG,
     B.FARMLAND, B.SAPLING, B.BIRCH_LEAVES, B.DARK_LEAVES,
+    B.JUNGLE_LOG, B.JUNGLE_LEAVES, B.MOSSY_STONE_BRICK,
   ]);
   function invCategory(id) {
     if (ITEMS[id]) return "tool";
@@ -736,6 +740,7 @@
     // 樹種ごとの木材 (本家同様, 原木1 → 木材4)
     { out: B.BIRCH_PLANK, outN: 4, in: [[B.BIRCH_LOG, 1]] },
     { out: B.DARK_PLANK, outN: 4, in: [[B.DARK_LOG, 1]] },
+    { out: B.PLANK, outN: 4, in: [[B.JUNGLE_LOG, 1]] },
     { out: B.JACK_O_LANTERN, outN: 1, in: [[B.PUMPKIN, 1], [B.TORCH, 1]] },
     { out: B.IRON_BLOCK, outN: 1, in: [[I.IRON_INGOT, 4]] },
     { out: B.COAL_BLOCK, outN: 1, in: [[B.COAL_ORE, 2]] },
@@ -1107,6 +1112,10 @@
         break;
       }
       case "KeyF":
+        if (ridingBird) {   // 鳥に騎乗中は F で降りる
+          dismountBird();
+          break;
+        }
         if (gameMode !== "creative") {
           showToast("飛行はクリエイティブモード限定です");
           break;
@@ -1506,8 +1515,8 @@
   const LEAF_QUEUE_MAX = 400;
   const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   // 樹種が増えたため, 葉/原木の判定は Set で行う
-  const LEAF_IDS = new Set([B.LEAVES, B.BIRCH_LEAVES, B.DARK_LEAVES]);
-  const LOG_IDS = new Set([B.LOG, B.BIRCH_LOG, B.DARK_LOG]);
+  const LEAF_IDS = new Set([B.LEAVES, B.BIRCH_LEAVES, B.DARK_LEAVES, B.JUNGLE_LEAVES]);
+  const LOG_IDS = new Set([B.LOG, B.BIRCH_LOG, B.DARK_LOG, B.JUNGLE_LOG]);
 
   function queueLeafDecayAround(x, y, z) {
     for (let dy = -LEAF_SCAN_R; dy <= LEAF_SCAN_R; dy++) {
@@ -1863,6 +1872,7 @@
     [B.PLANK, 15],
     [B.LOG, 15],
     [B.BIRCH_PLANK, 15], [B.DARK_PLANK, 15], [B.BIRCH_LOG, 15], [B.DARK_LOG, 15],
+    [B.JUNGLE_LOG, 15],
     [B.COAL_ORE, 80],       // この世界では石炭鉱石そのものを燃料として使う (本家の石炭相当)
     [B.COAL_BLOCK, 800],
     [I.BLAZE_ROD, 120],
@@ -2692,6 +2702,184 @@
     else exitNether();
   }
 
+  // ---------------- 空島 (オリジナル要素) ----------------
+  // ジャングルの神殿の最深部にあるスカイポータルから, 上空の空島へ渡れる。
+  // 初めてポータルを通ると「空の加護」を得て, 空島の空域の毒 (瘴気) が無効になる
+
+  let skyBlessing = localStorage.getItem("mcjs_skybless_" + seed) === "1";
+  let skyBossDefeated = localStorage.getItem("mcjs_skyboss_" + seed) === "1";
+  let birdTamedSaved = localStorage.getItem("mcjs_bird_" + seed) === "1";
+  let skyLootGiven = localStorage.getItem("mcjs_skyloot_" + seed) === "1";
+  let jungleLootGiven = localStorage.getItem("mcjs_jungleloot_" + seed) === "1";
+  let skyPortalCooldown = 0;
+  let skyPoisonAccum = 0;
+  let skyPoisonToastAt = -99;
+  let ridingBird = null;
+
+  function nearSkyIsland() {
+    const dx = player.pos[0] - SKY_ISLAND.x, dz = player.pos[2] - SKY_ISLAND.z;
+    return dx * dx + dz * dz < 120 * 120;
+  }
+
+  function genChunksAround(wx, wz, r) {
+    for (let cz = (wz - r) >> 4; cz <= (wz + r) >> 4; cz++) {
+      for (let cx = (wx - r) >> 4; cx <= (wx + r) >> 4; cx++) {
+        world.generateChunk(cx, cz);
+      }
+    }
+  }
+
+  function updateSkyPortalTravel(dt) {
+    skyPortalCooldown = Math.max(0, skyPortalCooldown - dt);
+    if (skyPortalCooldown > 0) return;
+    const feet = world.getBlock(
+      Math.floor(player.pos[0]), Math.floor(player.pos[1] + 0.4), Math.floor(player.pos[2]));
+    if (feet !== B.SKY_PORTAL) return;
+    skyPortalCooldown = 3;
+    const { x: sx, z: sz, y: sy } = SKY_ISLAND;
+    if (!nearSkyIsland()) {
+      // 神殿 → 空島
+      genChunksAround(sx, sz, 48);
+      player.pos = [sx - 7.5, sy + 6.01, sz + 0.5]; // アリーナのポータル前
+      player.vel = [0, 0, 0];
+      if (!skyBlessing) {
+        skyBlessing = true;
+        localStorage.setItem("mcjs_skybless_" + seed, "1");
+        showToast("✨ 空の加護を得た! 瘴気がきかなくなった");
+      } else {
+        showToast("☁ 空島へ渡った…");
+      }
+      sound.blip(700, 0.5, "sine", 0.3);
+    } else {
+      // 空島 → 神殿
+      genChunksAround(JUNGLE.x, JUNGLE.z, 32);
+      player.pos = [JUNGLE.x + 0.5, JUNGLE_TEMPLE_Y - 7.99, JUNGLE.z + 20.5]; // ポータルの間
+      player.vel = [0, 0, 0];
+      showToast("🌿 ジャングルの神殿へ戻った");
+      sound.blip(400, 0.5, "sine", 0.3);
+    }
+  }
+
+  // 毒の瘴気: 加護なしで空島の空域 (高度96超) に入るとダメージ。
+  // ブロックを積んで空島へ登ろうとしても加護なしではたどり着けない
+  function updateSkyPoison(dt) {
+    if (skyBlessing || gameMode !== "survival" || player.dead) return;
+    if (world.isInNether(player.pos[0], player.pos[2]) ||
+        world.isInEnd(player.pos[0], player.pos[2])) return;
+    const dx = player.pos[0] - SKY_ISLAND.x, dz = player.pos[2] - SKY_ISLAND.z;
+    if (dx * dx + dz * dz > 90 * 90 || player.pos[1] <= SKY_POISON_Y) {
+      skyPoisonAccum = 0;
+      return;
+    }
+    skyPoisonAccum += dt;
+    if (elapsed - skyPoisonToastAt > 6) {
+      skyPoisonToastAt = elapsed;
+      showToast("☠ 毒の瘴気に侵されている! (神殿のスカイポータルの加護が必要)");
+    }
+    if (skyPoisonAccum >= 1) {
+      skyPoisonAccum -= 1;
+      player.takeDamage(2);
+      sound.blip(160, 0.15, "sawtooth", 0.2);
+    }
+  }
+
+  // 空島のモブ: ボス「空の守護者」(未討伐なら) と, 騎乗できる鳥をスポーンさせる
+  function updateSkyMobs() {
+    if (!nearSkyIsland()) return;
+    const { x: sx, z: sz, y: sy } = SKY_ISLAND;
+    if (!skyBossDefeated && mobs.countType("sky_guardian") === 0) {
+      const m = new Mob("sky_guardian", sx + 0.5, sy + 14, sz + 0.5);
+      m.anchor = [sx, sy + 12, sz];
+      mobs.mobs.push(m);
+      showToast("⚔ 空の守護者が現れた!");
+      sound.blip(90, 1.0, "sawtooth", 0.4);
+    }
+    if (mobs.countType("sky_bird") === 0) {
+      const m = new Mob("sky_bird", sx + 6.5, sy + 9, sz - 6.5);
+      m.anchor = [sx, sy + 8, sz];
+      if (birdTamedSaved) m.tamed = true; // 一度手なずけた鳥は戻ってくる
+      mobs.mobs.push(m);
+    }
+  }
+
+  // 鳥への騎乗: 乗ると鳥がプレイヤーと一体になり, 飛行操作で自由に飛べる
+  function mountBird(mob) {
+    ridingBird = mob;
+    mob.ridden = true;
+    player.flying = true;
+    player.vel = [0, 0, 0];
+    showToast("🕊 鳥に乗った! (移動キーで飛行, F で降りる)");
+    sound.blip(650, 0.2, "sine", 0.2);
+  }
+
+  function dismountBird() {
+    if (!ridingBird) return;
+    ridingBird.ridden = false;
+    ridingBird.pos = [player.pos[0], player.pos[1] + 0.5, player.pos[2]];
+    ridingBird = null;
+    player.flying = false;
+    showToast("鳥から降りた");
+  }
+
+  // 騎乗中: 鳥をプレイヤーの足元に同期させる (毎フレーム)
+  function updateRiding() {
+    if (!ridingBird) return;
+    if (ridingBird.health <= 0 || player.dead) {
+      dismountBird();
+      return;
+    }
+    player.flying = true; // サバイバルでも騎乗中は飛べる
+    ridingBird.pos[0] = player.pos[0];
+    ridingBird.pos[1] = player.pos[1] - 0.75;
+    ridingBird.pos[2] = player.pos[2];
+    ridingBird.yaw = player.yaw + Math.PI; // モブの +Z 正面をプレイヤーの向きに合わせる
+    ridingBird.vel = [0, 0, 0];
+  }
+
+  // ジャングル神殿の宝物庫 (初回訪問時に宝箱2つへ)
+  function updateJungleLoot() {
+    if (jungleLootGiven) return;
+    const tx = JUNGLE.x, tz = JUNGLE.z, ty = JUNGLE_TEMPLE_Y;
+    const dx = player.pos[0] - tx, dz = player.pos[2] - (tz + 18);
+    if (dx * dx + dz * dz > 10 * 10 || Math.abs(player.pos[1] - (ty - 8)) > 6) return;
+    if (world.getBlock(tx - 3, ty - 8, tz + 22) !== B.CHEST) return;
+    jungleLootGiven = true;
+    localStorage.setItem("mcjs_jungleloot_" + seed, "1");
+    const c1 = chestAt([tx - 3, ty - 8, tz + 22].join(","));
+    c1.set(I.DIAMOND, 2);
+    c1.set(I.GOLD_INGOT, 5);
+    c1.set(I.ENDER_PEARL, 2);
+    c1.set(B.TNT, 2);
+    const c2 = chestAt([tx + 3, ty - 8, tz + 22].join(","));
+    c2.set(I.GOLDEN_APPLE, 1);
+    c2.set(I.STRING, 5);
+    c2.set(I.BONE, 3);
+    c2.set(B.MOSSY_STONE_BRICK, 12);
+    chestsDirty = true;
+    showToast("🏛 神殿の宝物庫を見つけた!");
+  }
+
+  // 空島の宝 (初回訪問時に宝箱2つへ)
+  function updateSkyLoot() {
+    if (skyLootGiven || !nearSkyIsland()) return;
+    const { x: sx, z: sz, y: sy } = SKY_ISLAND;
+    const dx = player.pos[0] - sx, dz = player.pos[2] - sz;
+    if (dx * dx + dz * dz > 20 * 20) return;
+    if (world.getBlock(sx + 7, sy + 6, sz + 4) !== B.CHEST) return;
+    skyLootGiven = true;
+    localStorage.setItem("mcjs_skyloot_" + seed, "1");
+    const c1 = chestAt([sx + 7, sy + 6, sz + 4].join(","));
+    c1.set(I.DIAMOND, 3);
+    c1.set(B.DIAMOND_BLOCK, 1);
+    c1.set(I.GOLDEN_APPLE, 2);
+    const c2 = chestAt([sx + 7, sy + 6, sz - 4].join(","));
+    c2.set(B.GOLD_BLOCK, 2);
+    c2.set(I.BLAZE_ROD, 2);
+    c2.set(I.ENDER_PEARL, 3);
+    chestsDirty = true;
+    showToast("☁ 空島の宝を見つけた!");
+  }
+
   // 溶岩に触れるとダメージ (水中と違って燃え続ける)
   let lavaBurnAccum = 0;
   function updateLavaDamage(dt) {
@@ -2875,6 +3063,34 @@
       if (hitFirst.id === B.FURNACE || hitFirst.id === B.FURNACE_LIT) { openFurnace(hitFirst.pos); return; }
       if (hitFirst.id === B.BED || BLOCKS[hitFirst.id].bed) { trySleep(hitFirst.pos); return; }
       if (BLOCKS[hitFirst.id].door) { toggleDoor(hitFirst.pos, hitFirst.id); return; }
+    }
+    // 空の鳥: 小麦か種で手なずけ, 手なずけた鳥は右クリックで騎乗して空を飛べる
+    {
+      const preHit = hitFirst;
+      const birdMob = mobs.pick(player.eyePos(), player.forward(), preHit ? preHit.t : REACH);
+      if (birdMob && birdMob.type === "sky_bird" && !ridingBird) {
+        const heldId = HOTBAR_BLOCKS[selectedSlot];
+        if (!birdMob.tamed && (heldId === I.WHEAT || heldId === I.SEEDS)) {
+          if (!consumeItem(heldId)) return;
+          if (Math.random() < 0.5) {
+            birdMob.tamed = true;
+            birdTamedSaved = true;
+            localStorage.setItem("mcjs_bird_" + seed, "1");
+            showToast("🕊 鳥を手なずけた! (右クリックで騎乗できる)");
+            sound.blip(750, 0.2, "sine", 0.2);
+          } else {
+            showToast("鳥はエサをつついている…");
+            sound.blip(500, 0.1, "sine", 0.15);
+          }
+          return;
+        }
+        if (birdMob.tamed) {
+          mountBird(birdMob);
+          return;
+        }
+        showToast("鳥は警戒している… (小麦か種で手なずけよう)");
+        return;
+      }
     }
     // エンダーアイ: フレームに埋め込むか, 使ってストロングホールドの方角を知る
     const heldDef = getDef(HOTBAR_BLOCKS[selectedSlot]);
@@ -3209,6 +3425,11 @@
     btnDown.addEventListener("touchend", () => { virt.sneak = false; });
     btnFly.addEventListener("touchstart", (e) => {
       e.preventDefault();
+      if (ridingBird) {   // 鳥に騎乗中は降りるボタンとして働く
+        dismountBird();
+        btnDown.classList.add("hidden");
+        return;
+      }
       if (gameMode !== "creative") {
         showToast("飛行はクリエイティブモード限定です");
         return;
@@ -3563,9 +3784,15 @@
       updateWeather(dt);
       updateEndPortalTravel(dt);
       updateNetherPortalTravel(dt);
+      updateSkyPortalTravel(dt);
+      updateSkyPoison(dt);
+      updateSkyMobs();
+      updateRiding();
       updateLavaDamage(dt);
       updateMagmaDamage(dt);
       updateFortressLoot();
+      updateJungleLoot();
+      updateSkyLoot();
       updateDesertTempleLoot();
       updateEndCityLoot();
       updateVillageChestLoot();
@@ -3594,6 +3821,17 @@
         }
         // 敵性モブの討伐でXPを獲得 (本家準拠: 通常5, ブレイズ10, ウィザー50)
         if (def.hostile) addXp(MOB_XP[death.type] || 5);
+        // 空の守護者 (空島のボス) を討伐: 記録して宝を落とす
+        if (death.type === "sky_guardian") {
+          skyBossDefeated = true;
+          localStorage.setItem("mcjs_skyboss_" + seed, "1");
+          addXp(300);
+          const [dxp, dyp, dzp] = [Math.floor(death.pos[0]), Math.floor(death.pos[1]), Math.floor(death.pos[2])];
+          items.spawn(I.DIAMOND, dxp, dyp, dzp, 3);
+          items.spawn(B.GOLD_BLOCK, dxp, dyp, dzp, 2);
+          showToast("⚔✨ 空の守護者を討伐した! 空島は解放された ✨⚔");
+          sound.blip(140, 1.2, "sine", 0.4);
+        }
       }
       if (mobs.groanRequest) sound.groan();
       if (mobs.hissRequest) sound.hiss();
@@ -3782,6 +4020,14 @@
     exitNether,
     get netherReturnPos() { return netherReturnPos; },
     findNetherPortalNear,
+    get skyBlessing() { return skyBlessing; },
+    get skyBossDefeated() { return skyBossDefeated; },
+    get ridingBird() { return ridingBird; },
+    mountBird,
+    dismountBird,
+    updateSkyMobs,
+    updateSkyPortalTravel,
+    genChunksAround,
     chests,
     tryDetectWither,
     spawnWitherBoss,

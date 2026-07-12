@@ -6,7 +6,7 @@
 
 const TILE_PX = 16;
 const ATLAS_COLS = 8;
-const ATLAS_ROWS = 32;   // 128x512 (POT)
+const ATLAS_ROWS = 64;   // 128x1024 (POT)。タイル 256 枚超に対応するため拡張
 
 // 各タイルの平均色 [r,g,b] (0..1) — 破壊パーティクルの色に使う
 const TILE_AVG_COLORS = [];
@@ -1275,6 +1275,69 @@ function buildTextureAtlas(seed) {
       return px(235 * v, 232 * v, 218 * v, 1);
     }
     return [0, 0, 0, 0];
+  });
+
+  // --- ジャングル (原木: 苔の筋が入った幹 / 葉: 濃い緑) ---
+  paintTile(TILE.JUNGLE_LOG_SIDE, (x, y) => {
+    const stripe = (x % 4 === 0) ? 0.8 : 1;
+    const mossy = hash2(x, y, 0x9a2) > 0.82;
+    if (mossy) return px(80, 120, 50, jitter(1, 0.1));
+    return px(120, 95, 60, jitter(stripe, 0.08));
+  });
+  paintTile(TILE.JUNGLE_LEAVES, () => {
+    if (rand() < 0.16) return [0, 0, 0, 0];
+    const v = jitter(1, 0.22);
+    return px(38, 118, 38, v);
+  });
+
+  // --- 苔むした石レンガ (神殿ダンジョンの建材) ---
+  paintTile(TILE.MOSSY_STONE_BRICK, (x, y) => {
+    const row = Math.floor(y / 8);
+    const mortarY = y % 8 === 7;
+    const shift = (row % 2) * 4;
+    const mortarX = (x + shift) % 8 === 7;
+    const moss = hash2(x, y, 0x50c) > 0.68;
+    if (mortarY || mortarX) return moss ? px(70, 105, 60, 1) : px(90, 90, 92, jitter(1, 0.05));
+    if (moss) return px(95, 125, 75, jitter(1, 0.08));
+    return px(125, 128, 122, jitter(1, 0.07));
+  });
+
+  // --- スカイポータル (渦を巻く水色の光) ---
+  paintTile(TILE.SKY_PORTAL, (x, y) => {
+    const dx = x - 7.5, dy = y - 7.5;
+    const d = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    const swirl = Math.sin(ang * 3 + d * 0.9) * 0.5 + 0.5;
+    const core = Math.max(0, 1 - d / 9);
+    return px(120 + swirl * 60, 200 + core * 40, 255, jitter(1, 0.05));
+  });
+
+  // --- 空の鳥 (水色の羽毛 + 顔) ---
+  paintTile(TILE.MOB_BIRD_FEATHER, (x, y) => {
+    const streak = (x + y * 2) % 5 === 0 ? 0.85 : 1;
+    return px(125, 185, 235, jitter(streak, 0.08));
+  });
+  paintTile(TILE.MOB_BIRD_FACE, (x, y) => {
+    // 目 (左右)
+    if ((x === 4 || x === 11) && y === 6) return px(20, 20, 30, 1);
+    // くちばし (中央下)
+    if (y >= 8 && y <= 10 && x >= 7 && x <= 8) return px(240, 180, 60, 1);
+    const streak = (x + y * 2) % 5 === 0 ? 0.85 : 1;
+    return px(125, 185, 235, jitter(streak, 0.08));
+  });
+
+  // --- 空の守護者 (黄金の体 + 光る目) ---
+  paintTile(TILE.MOB_GUARDIAN_SKIN, (x, y) => {
+    const scale = (x % 4 < 2) !== (y % 4 < 2) ? 0.88 : 1;
+    return px(220, 195, 120, jitter(scale, 0.07));
+  });
+  paintTile(TILE.MOB_GUARDIAN_FACE, (x, y) => {
+    if ((x >= 3 && x <= 5 || x >= 10 && x <= 12) && y >= 5 && y <= 7) {
+      return px(120, 240, 255, 1); // 光る目
+    }
+    if (y >= 10 && y <= 11 && x >= 6 && x <= 9) return px(80, 60, 30, 1); // 口
+    const scale = (x % 4 < 2) !== (y % 4 < 2) ? 0.88 : 1;
+    return px(220, 195, 120, jitter(scale, 0.07));
   });
 
   // --- 糸 (くるくる巻いた白い糸玉 + 垂れた端) ---
