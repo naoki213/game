@@ -2166,6 +2166,7 @@
           const id = world.getBlock(bx, by, bz);
           if (id === B.AIR || id === B.WATER || id === B.BEDROCK) continue;
           if (!isFinite(BLOCKS[id].hardness)) continue;
+          if (isTempleProtected(bx, by, bz)) continue; // 神殿は爆発でも壊れない
           // TNT は誘爆する (少し遅れて連鎖)
           if (id === B.TNT) {
             igniteTNT(bx, by, bz, 0.3 + Math.random() * 0.5);
@@ -2278,6 +2279,11 @@
   function breakBlockAt(hit) {
     const block = BLOCKS[hit.id];
     if (!isFinite(block.hardness)) return;
+    // サバイバルでは神殿のブロックは壊せない
+    if (gameMode === "survival" && isTempleProtected(hit.pos[0], hit.pos[1], hit.pos[2])) {
+      templeProtectMsg();
+      return;
+    }
     const tool = heldTool();
     if (!world.setBlock(hit.pos[0], hit.pos[1], hit.pos[2], B.AIR)) return;
     spawnBreakParticles(hit.pos[0], hit.pos[1], hit.pos[2], hit.id);
@@ -2707,6 +2713,92 @@
     else exitNether();
   }
 
+  // ---------------- ジャングル神殿の保護とトラップ ----------------
+
+  // サバイバルでは神殿のブロックは壊せない (古代の魔法で守られている)。
+  // ピラミッド本体 + 地下 (迷路/衛兵の間/ポータルの間) を覆う範囲
+  function isTempleProtected(x, y, z) {
+    const tx = JUNGLE.x, tz = JUNGLE.z, ty = JUNGLE_TEMPLE_Y;
+    return x >= tx - 15 && x <= tx + 15 &&
+           z >= tz - 15 && z <= tz + 66 &&
+           y >= ty - 12 && y <= ty + 17;
+  }
+  let templeProtectToastAt = -99;
+  function templeProtectMsg() {
+    if (elapsed - templeProtectToastAt < 3) return;
+    templeProtectToastAt = elapsed;
+    showToast("🏛 神殿のブロックは古代の魔法で守られている…");
+    sound.blip(220, 0.12, "square", 0.15);
+  }
+
+  // 迷路のトラップ: 矢が飛んでくるセルと, 爆風が吹き上がるセル (床がひび割れている)
+  const templeTrapCooldown = new Map();   // "i,j" -> 次に作動できる時刻
+  const templeBoomPending = [];           // {t, x, y, z}
+  function updateTempleTraps(dt) {
+    // 予約済みの爆発を処理 (ブロックは壊さず, ダメージとノックバックのみ)
+    for (let i = templeBoomPending.length - 1; i >= 0; i--) {
+      const b = templeBoomPending[i];
+      b.t -= dt;
+      if (b.t > 0) continue;
+      templeBoomPending.splice(i, 1);
+      spawnPuff(b.x, b.y + 0.5, b.z, [0.75, 0.6, 0.3]);
+      spawnPuff(b.x, b.y + 1, b.z, [0.35, 0.33, 0.3]);
+      sound.explosion();
+      const pdx = player.pos[0] - b.x, pdy = player.pos[1] + 0.9 - b.y, pdz = player.pos[2] - b.z;
+      const pd = Math.hypot(pdx, pdy, pdz);
+      if (pd < 4.5) {
+        player.takeDamage(Math.ceil((1 - pd / 4.5) * 9));
+        const k = ((1 - pd / 4.5) * 10) / (pd || 1);
+        player.vel[0] += pdx * k;
+        player.vel[1] += Math.abs(pdy * k) * 0.5 + 5;
+        player.vel[2] += pdz * k;
+      }
+    }
+    if (gameMode !== "survival" || player.dead) return;
+    const ty = JUNGLE_TEMPLE_Y;
+    // 迷路の階層にいるときだけ判定
+    if (player.pos[1] < ty - 11 || player.pos[1] > ty - 7) return;
+    const px = player.pos[0], pzp = player.pos[2];
+    const near = (cx, cz) => Math.abs(px - cx) < 1.6 && Math.abs(pzp - cz) < 1.6;
+    // 矢のトラップ: 壁のすき間から毒矢が飛んでくる
+    for (const [i, j] of TEMPLE_MAZE.arrowTraps) {
+      const key = i + "," + j;
+      if ((templeTrapCooldown.get(key) || 0) > elapsed) continue;
+      const [cx0, cz0] = TEMPLE_MAZE.cellOrigin(i, j);
+      const cx = cx0 + 1.5, cz = cz0 + 1.5;
+      if (!near(cx, cz)) continue;
+      templeTrapCooldown.set(key, elapsed + 5);
+      sound.bow();
+      showToast("⚠ 矢のトラップだ!");
+      // セルの四隅から中心 (プレイヤー) へ向けて矢を放つ
+      for (const [ox, oz] of [[-1.4, -1.4], [1.4, 1.4], [-1.4, 1.4], [1.4, -1.4]]) {
+        const from = [cx + ox, ty - 9 + 0.6, cz + oz];
+        const dx = player.pos[0] - from[0];
+        const dy = player.pos[1] + 0.9 - from[1];
+        const dz = player.pos[2] - from[2];
+        const len = Math.hypot(dx, dy, dz) || 1;
+        mobs.arrows.push({
+          pos: from,
+          vel: [(dx / len) * 15, (dy / len) * 15, (dz / len) * 15],
+          life: 2,
+          dmg: 3,
+        });
+      }
+    }
+    // 爆発のトラップ: カチッ…と鳴ってから爆発する (床のひび割れが目印)
+    for (const [i, j] of TEMPLE_MAZE.boomTraps) {
+      const key = "b" + i + "," + j;
+      if ((templeTrapCooldown.get(key) || 0) > elapsed) continue;
+      const [cx0, cz0] = TEMPLE_MAZE.cellOrigin(i, j);
+      const cx = cx0 + 1.5, cz = cz0 + 1.5;
+      if (!near(cx, cz)) continue;
+      templeTrapCooldown.set(key, elapsed + 8);
+      sound.blip(1300, 0.08, "square", 0.25); // カチッ
+      showToast("カチッ… 何かを踏んだ!");
+      templeBoomPending.push({ t: 1.0, x: cx, y: ty - 10, z: cz });
+    }
+  }
+
   // ---------------- 空島 (オリジナル要素) ----------------
   // ジャングルの神殿の最深部にあるスカイポータルから, 上空の空島へ渡れる。
   // 初めてポータルを通ると「空の加護」を得て, 空島の空域の毒 (瘴気) が無効になる
@@ -2758,8 +2850,8 @@
       sound.blip(700, 0.5, "sine", 0.3);
     } else {
       // 空島 → 神殿
-      genChunksAround(JUNGLE.x, JUNGLE.z, 48);
-      player.pos = [JUNGLE.x + 0.5, JUNGLE_TEMPLE_Y - 9.99, JUNGLE.z + 32.5]; // ポータルの間
+      genChunksAround(JUNGLE.x, JUNGLE.z, 80);
+      player.pos = [JUNGLE.x + 0.5, JUNGLE_TEMPLE_Y - 9.99, JUNGLE.z + 61.5]; // ポータルの間
       player.vel = [0, 0, 0];
       showToast("🌿 ジャングルの神殿へ戻った");
       sound.blip(400, 0.5, "sine", 0.3);
@@ -2879,22 +2971,22 @@
   function updateJungleLoot() {
     if (jungleLootGiven) return;
     const tx = JUNGLE.x, tz = JUNGLE.z, ty = JUNGLE_TEMPLE_Y;
-    const dx = player.pos[0] - tx, dz = player.pos[2] - (tz + 26);
-    if (dx * dx + dz * dz > 14 * 14 || Math.abs(player.pos[1] - (ty - 10)) > 7) return;
-    if (world.getBlock(tx - 4, ty - 10, tz + 34) !== B.CHEST) return;
+    const dx = player.pos[0] - tx, dz = player.pos[2] - (tz + 55);
+    if (dx * dx + dz * dz > 16 * 16 || Math.abs(player.pos[1] - (ty - 10)) > 7) return;
+    if (world.getBlock(tx - 4, ty - 10, tz + 63) !== B.CHEST) return;
     jungleLootGiven = true;
     localStorage.setItem("mcjs_jungleloot_" + seed, "1");
-    const c1 = chestAt([tx - 4, ty - 10, tz + 34].join(","));
+    const c1 = chestAt([tx - 4, ty - 10, tz + 63].join(","));
     c1.set(I.DIAMOND, 2);
     c1.set(I.GOLD_INGOT, 5);
     c1.set(I.ENDER_PEARL, 2);
     c1.set(B.TNT, 2);
-    const c2 = chestAt([tx + 4, ty - 10, tz + 34].join(","));
+    const c2 = chestAt([tx + 4, ty - 10, tz + 63].join(","));
     c2.set(I.GOLDEN_APPLE, 1);
     c2.set(I.STRING, 5);
     c2.set(I.BONE, 3);
     c2.set(B.MOSSY_STONE_BRICK, 12);
-    const c3 = chestAt([tx + 5, ty - 10, tz + 24].join(","));
+    const c3 = chestAt([tx + 5, ty - 10, tz + 53].join(","));
     c3.set(I.APPLE, 3);
     c3.set(I.IRON_INGOT, 4);
     c3.set(B.TORCH, 8);
@@ -3410,6 +3502,14 @@
       return;
     }
 
+    // サバイバル: 神殿のブロックはひび割れすら入らない (古代の魔法の保護)
+    if (isTempleProtected(hit.pos[0], hit.pos[1], hit.pos[2])) {
+      templeProtectMsg();
+      breakTargetKey = null;
+      breakProgress = 0;
+      return;
+    }
+
     // サバイバル: 硬さと道具に応じて掘り進める
     const key = hit.pos.join(",");
     if (key !== breakTargetKey) {
@@ -3838,6 +3938,7 @@
       updateNetherPortalTravel(dt);
       updateSkyPortalTravel(dt);
       updateSkyPoison(dt);
+      updateTempleTraps(dt);
       updateSkyMobs();
       updateRiding();
       updateLavaDamage(dt);
@@ -4089,6 +4190,7 @@
     mountBird,
     dismountBird,
     callBird,
+    isTempleProtected,
     updateSkyMobs,
     updateSkyPortalTravel,
     genChunksAround,

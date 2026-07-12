@@ -45,6 +45,53 @@ const NETHER_FORTRESS = { x: NETHER.x + 50, z: NETHER.z + 30, y: 50 };
 const JUNGLE = { x: 420, z: 420, r: 130 };
 const JUNGLE_TEMPLE_Y = 52;   // 神殿の土台の高さ (海面46より上。ゾーン中心は平らに整地)
 
+// 神殿の地下迷路のレイアウト (決定的に生成されるので, どのチャンクから
+// 刻印しても・main.js のトラップ処理からも同じ迷路が得られる)。
+// 7x7 セル, 通路幅 3 + 壁 1 → 29x29 ブロック。再帰的バックトラッカーで生成
+const TEMPLE_MAZE = (() => {
+  const CW = 7, CH = 7;
+  let s = 0xC0FFEE;   // 固定シードの LCG (全ワールド共通の迷路)
+  const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  // wallE[i][j] = セル(i,j)と(i+1,j)の間の壁 / wallS = (i,j)と(i,j+1)の間
+  const wallE = Array.from({ length: CW }, () => new Array(CH).fill(true));
+  const wallS = Array.from({ length: CW }, () => new Array(CH).fill(true));
+  const visited = Array.from({ length: CW }, () => new Array(CH).fill(false));
+  const stack = [[3, 0]];
+  visited[3][0] = true;
+  while (stack.length) {
+    const [ci, cj] = stack[stack.length - 1];
+    const options = [];
+    if (ci > 0 && !visited[ci - 1][cj]) options.push([-1, 0]);
+    if (ci < CW - 1 && !visited[ci + 1][cj]) options.push([1, 0]);
+    if (cj > 0 && !visited[ci][cj - 1]) options.push([0, -1]);
+    if (cj < CH - 1 && !visited[ci][cj + 1]) options.push([0, 1]);
+    if (options.length === 0) { stack.pop(); continue; }
+    const [di, dj] = options[(rnd() * options.length) | 0];
+    if (di === 1) wallE[ci][cj] = false;
+    else if (di === -1) wallE[ci - 1][cj] = false;
+    else if (dj === 1) wallS[ci][cj] = false;
+    else wallS[ci][cj - 1] = false;
+    visited[ci + di][cj + dj] = true;
+    stack.push([ci + di, cj + dj]);
+  }
+  // トラップとあかりの配置 (入口 (3,0) と出口 (3,6) は除外)
+  const cells = [];
+  for (let j = 0; j < CH; j++)
+    for (let i = 0; i < CW; i++)
+      if (!(i === 3 && j === 0) && !(i === 3 && j === CH - 1)) cells.push([i, j]);
+  // シャッフルして先頭から割当
+  for (let k = cells.length - 1; k > 0; k--) {
+    const m = (rnd() * (k + 1)) | 0;
+    [cells[k], cells[m]] = [cells[m], cells[k]];
+  }
+  const arrowTraps = cells.slice(0, 7);   // 矢のトラップ
+  const boomTraps = cells.slice(7, 10);   // 爆発のトラップ (床がひび割れている)
+  const lights = cells.slice(10, 26);     // 天井のグロウストーン
+  // セル (i,j) の通路の最小コーナー (ワールド座標)。x0/z0 は迷路の南西角
+  const cellOrigin = (i, j) => [JUNGLE.x - 14 + i * 4 + 1, JUNGLE.z + 15 + j * 4 + 1];
+  return { CW, CH, wallE, wallS, arrowTraps, boomTraps, lights, cellOrigin };
+})();
+
 // 空島 (オリジナル要素): 通常マップ上空の固定座標に浮かぶ島。
 // 「空の加護」(神殿のポータルを通ると得られる) なしで空域 (y>96) に入ると
 // 毒の瘴気でダメージを受ける。島にはボス「空の守護者」と宝, 騎乗できる鳥がいる
@@ -953,7 +1000,7 @@ class World {
     const ox = chunk.cx * CHUNK_SIZE;
     const oz = chunk.cz * CHUNK_SIZE;
     const tx = JUNGLE.x, tz = JUNGLE.z, ty = JUNGLE_TEMPLE_Y;
-    const R = 42;
+    const R = 70;
     if (ox + 15 < tx - R || ox > tx + R || oz + 15 < tz - R || oz > tz + R) return;
 
     const set = (wx, y, wz, id) => {
@@ -1004,28 +1051,60 @@ class World {
       set(tx + 2, y + 1, z, brick(tx + 2, y + 1, z));
     }
 
-    // --- 衛兵の間 (階段を降りた先の前室) ---
-    fillBrick(tx - 7, ty - 11, tz + 15, tx + 7, ty - 4, tz + 25);   // 外殻
-    fill(tx - 6, ty - 10, tz + 16, tx + 6, ty - 5, tz + 24, B.AIR); // 内部
-    fill(tx - 1, ty - 10, tz + 15, tx + 1, ty - 8, tz + 15, B.AIR); // 階段からの入口
-    for (const [dx, dz] of [[-4, 18], [4, 18], [-4, 22], [4, 22]]) {
+    // --- 地下迷路 (階段の先, 29x29。トラップと宝の眠る石の迷宮) ---
+    const mz0 = tz + 15;                       // 迷路の南端 (壁)
+    fillBrick(tx - 14, ty - 11, mz0, tx + 14, ty - 7, mz0 + 28); // 全体を石で満たす
+    const { CW, CH, wallE, wallS, cellOrigin } = TEMPLE_MAZE;
+    for (let j = 0; j < CH; j++) {
+      for (let i = 0; i < CW; i++) {
+        const [cx0, cz0] = cellOrigin(i, j);
+        fill(cx0, ty - 10, cz0, cx0 + 2, ty - 8, cz0 + 2, B.AIR);       // セルの通路
+        if (i < CW - 1 && !wallE[i][j]) {                                 // 東への接続
+          fill(cx0 + 3, ty - 10, cz0, cx0 + 3, ty - 8, cz0 + 2, B.AIR);
+        }
+        if (j < CH - 1 && !wallS[i][j]) {                                 // 北への接続
+          fill(cx0, ty - 10, cz0 + 3, cx0 + 2, ty - 8, cz0 + 3, B.AIR);
+        }
+      }
+    }
+    // 入口 (南, 階段から) と出口 (北, 衛兵の間へ)
+    fill(tx - 1, ty - 10, mz0, tx + 1, ty - 8, mz0, B.AIR);
+    fill(tx - 1, ty - 10, mz0 + 28, tx + 1, ty - 8, mz0 + 28, B.AIR);
+    // 天井のあかり (迷路が真っ暗にならないように)
+    for (const [li, lj] of TEMPLE_MAZE.lights) {
+      const [cx0, cz0] = cellOrigin(li, lj);
+      set(cx0 + 1, ty - 7, cz0 + 1, B.GLOWSTONE);
+    }
+    // 爆発トラップのセルは床がひび割れている (注意深い冒険者へのヒント)
+    for (const [bi, bj] of TEMPLE_MAZE.boomTraps) {
+      const [cx0, cz0] = cellOrigin(bi, bj);
+      for (let dz = 0; dz <= 2; dz++)
+        for (let dx = 0; dx <= 2; dx++)
+          set(cx0 + dx, ty - 11, cz0 + dz, B.CRACKED_STONE_BRICK);
+    }
+
+    // --- 衛兵の間 (迷路を抜けた先の前室) ---
+    fillBrick(tx - 7, ty - 11, tz + 44, tx + 7, ty - 4, tz + 54);   // 外殻
+    fill(tx - 6, ty - 10, tz + 45, tx + 6, ty - 5, tz + 53, B.AIR); // 内部
+    fill(tx - 1, ty - 10, tz + 44, tx + 1, ty - 8, tz + 44, B.AIR); // 迷路からの入口
+    for (const [dx, dz] of [[-4, 47], [4, 47], [-4, 51], [4, 51]]) {
       fillBrick(tx + dx, ty - 10, tz + dz, tx + dx, ty - 5, tz + dz); // 列柱
       set(tx + dx, ty - 5, tz + dz, B.GLOWSTONE);
     }
-    set(tx + 5, ty - 10, tz + 24, B.CHEST); // 前室の宝箱
+    set(tx + 5, ty - 10, tz + 53, B.CHEST); // 前室の宝箱
 
     // --- ポータルの間 (最深部の大部屋) ---
-    fillBrick(tx - 6, ty - 11, tz + 26, tx + 6, ty - 4, tz + 36);   // 外殻
-    fill(tx - 5, ty - 10, tz + 27, tx + 5, ty - 5, tz + 35, B.AIR); // 内部
-    fill(tx - 1, ty - 10, tz + 25, tx + 1, ty - 8, tz + 26, B.AIR); // 前室からの通路
-    for (const [dx, dz] of [[-5, 27], [5, 27], [-5, 35], [5, 35]]) {
+    fillBrick(tx - 6, ty - 11, tz + 55, tx + 6, ty - 4, tz + 65);   // 外殻
+    fill(tx - 5, ty - 10, tz + 56, tx + 5, ty - 5, tz + 64, B.AIR); // 内部
+    fill(tx - 1, ty - 10, tz + 54, tx + 1, ty - 8, tz + 55, B.AIR); // 前室からの通路
+    for (const [dx, dz] of [[-5, 56], [5, 56], [-5, 64], [5, 64]]) {
       set(tx + dx, ty - 5, tz + dz, B.GLOWSTONE);
     }
     // 宝箱 x2 (中身は main.js が初回訪問時に埋める)
-    set(tx - 4, ty - 10, tz + 34, B.CHEST);
-    set(tx + 4, ty - 10, tz + 34, B.CHEST);
+    set(tx - 4, ty - 10, tz + 63, B.CHEST);
+    set(tx + 4, ty - 10, tz + 63, B.CHEST);
     // スカイポータル (奥の壁際, 2x4 の枠)
-    const pz = tz + 34;
+    const pz = tz + 63;
     for (let x = tx - 1; x <= tx + 2; x++) {
       set(x, ty - 11, pz, B.MOSSY_STONE_BRICK);
       set(x, ty - 6, pz, B.MOSSY_STONE_BRICK);
