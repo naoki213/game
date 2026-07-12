@@ -117,8 +117,11 @@ class Player {
     const len = Math.hypot(dx, dz);
     if (len > 1) { dx /= len; dz /= len; }
 
-    let speed = input.sprint ? SPRINT_SPEED : WALK_SPEED;
-    if (this.flying) speed = input.sprint ? FLY_SPEED * 2 : FLY_SPEED;
+    // ダッシュは満腹度 6 より上でないとできない (本家準拠。クリエイティブは無制限)
+    const canSprint = input.sprint && (this.creative || this.food > 6);
+    this.sprinting = canSprint;   // FOV 演出などの参照用 (main.js)
+    let speed = canSprint ? SPRINT_SPEED : WALK_SPEED;
+    if (this.flying) speed = canSprint ? FLY_SPEED * 2 : FLY_SPEED;
     else if (this.inWater) speed = SWIM_SPEED;
 
     // スニーク: 減速 + 端から落ちない
@@ -193,8 +196,8 @@ class Player {
     // --- 満腹度の消費と飢餓 ---
     if (!this.creative) {
       const moving = Math.hypot(this.vel[0], this.vel[2]) > 0.5;
-      let drain = 0.012;                        // 基礎代謝
-      if (input.sprint && moving) drain += 0.05; // ダッシュは腹が減る
+      let drain = 0.012;                          // 基礎代謝
+      if (canSprint && moving) drain += 0.05;     // 実際にダッシュしている間だけ腹が減る
       this.food = Math.max(0, this.food - drain * dt);
       if (this.food <= 0) {
         this.starveTimer += dt;

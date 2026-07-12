@@ -37,6 +37,7 @@ const MOB_TYPES = {
     noBurn: true,
     dayNeutral: true,       // 昼は襲ってこない
     attack: 2,
+    drops: I.STRING, dropN: 2,   // 糸 (本家準拠: 弓/釣竿/羊毛の材料)
     parts: [
       // 平たい胴体 (毛羽立った質感)
       [-0.5, 0.22, -0.55, 1.0, 0.45, 0.9, 1, 1, 1, TILE.MOB_SPIDER_FUR],

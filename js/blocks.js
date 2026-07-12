@@ -265,6 +265,10 @@ const I = {
   BLAZE_ROD: 283,
   COMPASS: 284,
   SEEDS: 285,
+  // 糸 (クモのドロップ, 弓/釣竿/羊毛の材料) とリンゴ (オークの葉のレアドロップ)
+  STRING: 286,
+  APPLE: 287,
+  GOLDEN_APPLE: 288,
   // 防具 (アイテムはチャンクに保存されないため 256 以上の ID を使える)
   IRON_HELMET: 260,
   IRON_CHESTPLATE: 261,
@@ -496,6 +500,9 @@ const TILE = {
   BONE_MEAL: 244,
   BIRCH_LEAVES: 245,
   DARK_LEAVES: 246,
+  STRING: 247,
+  APPLE: 248,
+  GOLDEN_APPLE: 249,
 };
 
 // 各ブロックの属性
@@ -758,6 +765,13 @@ defItem(I.RAW_BEEF, "raw_beef", "生の牛肉", TILE.RAW_BEEF, null, 3);
 defItem(I.RAW_CHICKEN, "raw_chicken", "生の鶏肉", TILE.RAW_CHICKEN, null, 2);
 // 骨粉: ホネからクラフトし, 作物や苗木に使うと成長を早める (本家準拠)
 defItem(I.BONE_MEAL, "bone_meal", "骨粉", TILE.BONE_MEAL);
+// 糸: クモのドロップ。弓・釣竿・羊毛の材料 (本家準拠)
+defItem(I.STRING, "string", "糸", TILE.STRING);
+// リンゴ: オーク/ダークオークの葉のレアドロップ (本家準拠: 回復4)
+defItem(I.APPLE, "apple", "リンゴ", TILE.APPLE, null, 4);
+// 金のリンゴ: 金インゴット8 + リンゴ。食べると満腹度に加えて体力も回復する
+// (本家の再生効果の簡易版。main.js の食事処理で特別扱い)
+defItem(I.GOLDEN_APPLE, "golden_apple", "金のリンゴ", TILE.GOLDEN_APPLE, null, 4);
 defItem(I.SEEDS, "seeds", "小麦の種", TILE.SEEDS);
 ITEMS[I.SEEDS].seeds = true;   // 土 / 草 / 農地の上に植えられる
 defItem(I.WHEAT, "wheat", "小麦", TILE.WHEAT_ITEM);
