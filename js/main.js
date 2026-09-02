@@ -16,6 +16,40 @@
     localStorage.setItem("mcjs_seed", String(seed));
   }
 
+  // ---------------- セーブデータのマイグレーション ----------------
+  // アップデートでアイテム ID を 256 以上へ退避した際, 旧バージョンのセーブに
+  // 残った古い ID がそのままだと別のブロックに化けてしまう (チェストのパンが
+  // ジャングルの葉になる等)。バージョン未記録のセーブは一度だけ旧→新 ID へ
+  // 変換し, 以後はバージョンを記録して二重変換を防ぐ
+  const SAVE_VERSION = "2";
+  const OLD_ID_MAP = new Map([
+    [139, 273],  // FLINT_AND_STEEL (旧 ID は今 B.FURNACE)
+    [188, 274],  // BONE            (→ B.FURNACE_LIT)
+    [134, 279],  // FISH            (→ B.SAPLING)
+    [115, 285],  // SEEDS           (→ B.BIRCH_LEAVES)
+    [137, 280],  // GUNPOWDER       (→ B.DARK_LEAVES)
+    [138, 281],  // FLINT           (→ B.TORCH_WALL_N)
+    [183, 282],  // NETHER_QUARTZ   (→ B.TORCH_WALL_E)
+    [184, 283],  // BLAZE_ROD       (→ B.TORCH_WALL_S)
+    [185, 284],  // COMPASS         (→ B.TORCH_WALL_W)
+    [116, 289],  // WHEAT           (→ B.JUNGLE_LOG)
+    [117, 290],  // BREAD           (→ B.JUNGLE_LEAVES)
+    [135, 291],  // ENDER_PEARL     (→ B.MOSSY_STONE_BRICK)
+    [136, 292],  // EYE_OF_ENDER    (→ B.SKY_PORTAL)
+    [112, 293],  // PORK            (→ B.SKY_GRASS)
+    [113, 294],  // BEEF            (→ B.STAR_FLOWER)
+    [114, 295],  // CHICKEN_MEAT    (→ B.SKY_LEAVES)
+  ]);
+  const needsMigration = localStorage.getItem("mcjs_savever_" + seed) !== SAVE_VERSION;
+  localStorage.setItem("mcjs_savever_" + seed, SAVE_VERSION);
+  const migrateId = (id) => (needsMigration && OLD_ID_MAP.has(id) ? OLD_ID_MAP.get(id) : id);
+  // ホットバーはワールドをまたいで共有されるため, 専用のバージョンフラグで
+  // 一度だけ変換する (別ワールドを開いた際の二重変換を防ぐ)
+  const hotbarNeedsMigration = localStorage.getItem("mcjs_hotbar_ver") !== SAVE_VERSION;
+  localStorage.setItem("mcjs_hotbar_ver", SAVE_VERSION);
+  const migrateHotbarId = (id) =>
+    (hotbarNeedsMigration && OLD_ID_MAP.has(id) ? OLD_ID_MAP.get(id) : id);
+
   const canvas = document.getElementById("game");
   const atlas = buildTextureAtlas(seed);
   const renderer = new Renderer(canvas, atlas);
@@ -36,8 +70,13 @@
   try {
     const saved = JSON.parse(localStorage.getItem("mcjs_inv_" + seed));
     if (Array.isArray(saved)) {
-      for (const [id, n] of saved) {
-        if (getDef(id) && n > 0) invCounts.set(id, n); // 道具・防具などのアイテムも復元する
+      for (const [rawId, n] of saved) {
+        const id = migrateId(rawId);   // 道具・防具などのアイテムも復元する
+        if (getDef(id) && n > 0) invCounts.set(id, (invCounts.get(id) || 0) + n);
+      }
+      // 変換した内容はすぐ書き戻す (直後に閉じても移行が失われないように)
+      if (needsMigration) {
+        localStorage.setItem("mcjs_inv_" + seed, JSON.stringify([...invCounts]));
       }
     }
   } catch (e) { /* 壊れたデータは無視 */ }
@@ -46,7 +85,10 @@
   const toolDur = new Map();
   try {
     const saved = JSON.parse(localStorage.getItem("mcjs_tooldur_" + seed));
-    if (Array.isArray(saved)) for (const [id, d] of saved) toolDur.set(id, d);
+    if (Array.isArray(saved)) for (const [id, d] of saved) toolDur.set(migrateId(id), d);
+    if (needsMigration) {
+      localStorage.setItem("mcjs_tooldur_" + seed, JSON.stringify([...toolDur]));
+    }
   } catch (e) { /* ignore */ }
 
   function heldTool() {
@@ -210,9 +252,12 @@
   // 保存されたホットバー構成を復元
   try {
     const savedBar = JSON.parse(localStorage.getItem("mcjs_hotbar"));
-    if (Array.isArray(savedBar) && savedBar.length === HOTBAR_BLOCKS.length &&
-        savedBar.every((id) => getDef(id) && id !== B.AIR)) {
-      savedBar.forEach((id, i) => { HOTBAR_BLOCKS[i] = id; });
+    if (Array.isArray(savedBar) && savedBar.length === HOTBAR_BLOCKS.length) {
+      const bar = savedBar.map(migrateHotbarId);
+      if (bar.every((id) => getDef(id) && id !== B.AIR)) {
+        bar.forEach((id, i) => { HOTBAR_BLOCKS[i] = id; });
+        if (hotbarNeedsMigration) localStorage.setItem("mcjs_hotbar", JSON.stringify(HOTBAR_BLOCKS));
+      }
     }
   } catch (e) { /* 壊れたデータは無視 */ }
   HOTBAR_BLOCKS.forEach((blockId, i) => {
@@ -1630,10 +1675,19 @@
     if (saved && typeof saved === "object") {
       for (const key of Object.keys(saved)) {
         const m = new Map();
-        for (const [id, n] of saved[key]) {
-          if (getDef(id) && n > 0) m.set(id, n);
+        for (const [rawId, n] of saved[key]) {
+          const id = migrateId(rawId);
+          if (getDef(id) && n > 0) m.set(id, (m.get(id) || 0) + n);
         }
         chests.set(key, m);
+      }
+      if (needsMigration) {
+        const obj = {};
+        for (const [key, m] of chests) {
+          const arr = [...m].filter(([, n]) => n > 0);
+          if (arr.length > 0) obj[key] = arr;
+        }
+        localStorage.setItem("mcjs_chests_" + seed, JSON.stringify(obj));
       }
     }
   } catch (e) { /* ignore */ }
@@ -1903,7 +1957,19 @@
     if (saved && typeof saved === "object") {
       for (const key of Object.keys(saved)) {
         const f = saved[key];
-        if (f && typeof f === "object") furnaces.set(key, f);
+        if (f && typeof f === "object") {
+          for (const slot of ["input", "fuel", "output"]) {
+            if (f[slot] && typeof f[slot].id === "number") f[slot].id = migrateId(f[slot].id);
+          }
+          furnaces.set(key, f);
+        }
+      }
+      if (needsMigration) {
+        const obj = {};
+        for (const [key, f] of furnaces) {
+          if (f.input || f.fuel || f.output) obj[key] = f;
+        }
+        localStorage.setItem("mcjs_furnaces_" + seed, JSON.stringify(obj));
       }
     }
   } catch (e) { /* ignore */ }
