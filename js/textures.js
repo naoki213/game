@@ -1432,6 +1432,7 @@ function buildTextureAtlas(seed) {
   // パレット: 0=深緑 1=緑 2=明るい緑 3=淡い黄緑 4=灰白のパッチ
   const CREEPER_PAL = [
     [26, 96, 32], [48, 150, 44], [96, 190, 70], [162, 210, 146], [150, 162, 152],
+    [30, 62, 23], [14, 16, 12],   // 5=足元の暗い緑 6=足元のほぼ黒
   ];
   const creeperPx = (ch) => {
     if (ch === "#") return px(12, 12, 12, 1);          // 顔の黒いパーツ
@@ -1460,6 +1461,19 @@ function buildTextureAtlas(seed) {
   paintTile(TILE.MOB_CREEPER_SKIN, (x, y) => {
     const ch = CREEPER_SKIN_ART[y][x];
     return creeperPx(ch === "#" ? "0" : ch);   // 迷彩には黒を使わない
+  });
+  // 脚: 上側は胴と同じ迷彩, 下 1/3 はデザイン画どおり暗い緑とほぼ黒の足元
+  const CREEPER_FOOT_ART = [
+    "6556655565566556",
+    "5665565655655665",
+    "6556656556566565",
+    "5665565665655656",
+    "6565655656566565",
+  ];
+  paintTile(TILE.MOB_CREEPER_LEG, (x, y) => {
+    if (y >= 11) return creeperPx(CREEPER_FOOT_ART[y - 11][x]);
+    const ch = CREEPER_SKIN_ART[y][x];
+    return creeperPx(ch === "#" ? "0" : ch);
   });
 
   // 牛の毛皮 (茶色と白のまだら模様)

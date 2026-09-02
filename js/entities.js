@@ -135,11 +135,11 @@ const MOB_TYPES = {
     noBurn: true,
     drops: I.GUNPOWDER, dropN: 2,
     parts: [
-      // 脚 x4 (低い, 迷彩模様)
-      [-0.25, 0, -0.28, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
-      [0.03, 0, -0.28, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
-      [-0.25, 0, 0.06, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
-      [0.03, 0, 0.06, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
+      // 脚 x4 (低い, 足元が暗い専用の模様)
+      [-0.25, 0, -0.28, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_LEG],
+      [0.03, 0, -0.28, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_LEG],
+      [-0.25, 0, 0.06, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_LEG],
+      [0.03, 0, 0.06, 0.22, 0.4, 0.24, 1, 1, 1, TILE.MOB_CREEPER_LEG],
       // 縦長の胴体 (迷彩模様)
       [-0.2, 0.4, -0.15, 0.4, 0.85, 0.3, 1, 1, 1, TILE.MOB_CREEPER_SKIN],
       // 頭 (迷彩模様)
