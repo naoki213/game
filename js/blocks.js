@@ -529,6 +529,7 @@ const TILE = {
   SKY_GRASS: 258,
   STAR_FLOWER: 259,
   SKY_LEAVES: 260,
+  MOB_CREEPER_LEG: 261,
 };
 
 // 各ブロックの属性
